@@ -106,6 +106,39 @@ It walks you through building a complete ETL pipeline from scratch. You'll learn
 - Convert HDF5 data to ML-optimized Zarr format
 - Configure and run parallel processing pipelines
 
+### Working with Your CFD Data
+
+Have CFD simulation data from a solver like Fluent?
+PhysicsNeMo-Curator can process your data through the following approaches:
+
+#### Option 1: Convert to Supported Formats (Recommended)
+
+**Currently Supported Formats:**
+
+- **VTK formats**: VTU (volume mesh data), VTP (surface mesh data)
+- **STL**: Geometry files
+
+**Next Steps:**
+
+1. Organize your converted data according to one of the [supported dataset formats](./physicsnemo_curator/examples/external_aerodynamics/domino/DoMINO_Data_Processing_Reference.md#input-data-structure)
+2. Use the built-in [DoMINO pipeline](./physicsnemo_curator/examples/external_aerodynamics/domino/README.md)
+to convert your data to an AI model training ready format
+
+#### Option 2: Extend the Framework for Custom Formats
+
+If your data is in a format not directly supported (VTU/VTP/STL), you can extend the framework:
+
+1. **Follow the Tutorial**: The [Tutorial](./TUTORIAL.md) demonstrates creating a complete pipeline for HDF5 data
+2. **Implement Custom DataSource**: Create a DataSource class to read your format
+3. **Add Transformations**: Convert your data to ML-optimized formats like Zarr
+4. **Leverage Existing ETL framework**: Use the built-in parallel processing capabilities of the existing framework
+
+#### Getting Help
+
+- **Domain-Specific Examples**: Check if your use case matches our [automotive aerodynamics pipeline](./physicsnemo_curator/examples/external_aerodynamics/domino/README.md)
+- **Architecture Questions**: See the [Tutorial](./TUTORIAL.md) for framework concepts
+- **Format Questions**: Check our [Data Processing Reference](./physicsnemo_curator/examples/external_aerodynamics/domino/DoMINO_Data_Processing_Reference.md)
+
 ### Domain-Specific Examples
 
 For domain-specific use cases, we provide ready-to-use pipelines:
