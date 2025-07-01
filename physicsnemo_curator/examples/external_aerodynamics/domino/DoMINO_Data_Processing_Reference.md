@@ -31,7 +31,7 @@ run_1/
 └── boundary_1.vtp                 # Surface mesh data
 ```
 
-### 3. Ahmed Body ML Format
+### 3. AhmedML Format
 
 The dataset should contain at least the following files.
 

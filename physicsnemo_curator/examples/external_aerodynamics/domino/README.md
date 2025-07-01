@@ -41,7 +41,7 @@ physicsnemo-curator-etl                         \
     etl.common.model_type=surface
 ```
 
-To run on Ahmed Body ML dataset:
+To run on AhmedML dataset:
 
 ```bash
 physicsnemo-curator-etl                     \
@@ -62,3 +62,45 @@ physicsnemo-curator-etl                     \
 
 Please refer to the [config file](../../../config/domino_etl.yaml) for more
 options.
+
+### Mesh Decimation Options
+
+PhysicsNeMo-Curator supports mesh decimation with the following options:
+
+- **Algorithms**:
+  - `decimate_pro` (recommended): Advanced decimation algorithm that preserves mesh features and quality.
+  Based on [PyVista's decimate_pro](https://docs.pyvista.org/api/core/_autosummary/pyvista.polydatafilters.decimate_pro).
+  - `decimate`: Basic [decimation](https://docs.pyvista.org/api/core/_autosummary/pyvista.polydatafilters.decimate)
+  algorithm. Note: May hang on meshes larger than 400K triangles.
+
+- **Target Reduction**: Specify reduction ratio between 0 and 1 (a value of 0.9 will leave 10% of the original number of vertices).
+
+Each algorithm provides an additional set of parameters that control features specific to the algorithm.
+For example, `decimate_pro` supports the following parameters:
+
+- **Additional Parameters**:
+  - `preserve_topology`: Controls topology preservation. If enabled, mesh splitting and hole elimination will not occur.
+  - `feature_angle`: Angle used to define what an edge is.
+  - and others.
+
+See the algorithm documentation for more information.
+
+Example configuration:
+
+```yaml
+etl:
+  source:
+    decimation:
+        algo: decimate_pro
+        reduction: 0.5
+        preserve_topology: true
+```
+
+For more details on the decimation algorithms and their parameters, refer to:
+
+- [PyVista decimate_pro documentation](https://docs.pyvista.org/api/core/_autosummary/pyvista.polydatafilters.decimate_pro)
+- [PyVista decimate documentation](https://docs.pyvista.org/api/core/_autosummary/pyvista.polydatafilters.decimate)
+
+> **Note**: Currently, only surface meshes are supported for decimation.
+Volume meshes are not supported, and in case of `combined` model type,
+only the surface part will be decimated.
