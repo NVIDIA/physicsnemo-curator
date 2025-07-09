@@ -96,28 +96,28 @@ def create_hdf5_file(run_number, output_dir="tutorial_data"):
     filename = f"run_{run_number:03d}.h5"
     filepath = os.path.join(output_dir, filename)
 
-    with h5py.File(filepath, "w") as f:
+    with h5py.File(filepath, 'w') as f:
         # Create groups
-        fields_group = f.create_group("fields")
-        geometry_group = f.create_group("geometry")
-        metadata_group = f.create_group("metadata")
-        sim_params_group = metadata_group.create_group("simulation_params")
+        fields_group = f.create_group('fields')
+        geometry_group = f.create_group('geometry')
+        metadata_group = f.create_group('metadata')
+        sim_params_group = metadata_group.create_group('simulation_params')
 
         # Store field data
-        fields_group.create_dataset("temperature", data=temperature)
-        fields_group.create_dataset("velocity", data=velocity)
+        fields_group.create_dataset('temperature', data=temperature)
+        fields_group.create_dataset('velocity', data=velocity)
 
         # Store geometry data
-        geometry_group.create_dataset("coordinates", data=coordinates)
+        geometry_group.create_dataset('coordinates', data=coordinates)
 
         # Store metadata attributes
-        metadata_group.attrs["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        metadata_group.attrs["num_points"] = num_points
-        metadata_group.attrs["temperature_units"] = "Kelvin"
-        metadata_group.attrs["velocity_units"] = "m/s"
+        metadata_group.attrs['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        metadata_group.attrs['num_points'] = num_points
+        metadata_group.attrs['temperature_units'] = 'Kelvin'
+        metadata_group.attrs['velocity_units'] = 'm/s'
 
         # Store simulation parameters
-        sim_params_group.attrs["total_time"] = np.random.uniform(1.0, 10.0)
+        sim_params_group.attrs['total_time'] = np.random.uniform(1.0, 10.0)  # Random simulation time
 
     print(f"Created {filepath} with {num_points} data points")
 
@@ -130,7 +130,7 @@ def main():
         create_hdf5_file(run_num)
 
     print(f"\nDataset generation complete!")
-    print(f"Created 5 HDF5 files in the "tutorial_data/" directory")
+    print(f"Created 5 HDF5 files in the 'tutorial_data/' directory")
     print(f"Each file contains ~1000 data points with temperature and velocity fields")
 
 if __name__ == "__main__":
@@ -194,11 +194,7 @@ import h5py
 from pathlib import Path
 from typing import List
 
-from physicsnemo_curator.etl.dataset_validators import (
-    DatasetValidator,
-    ValidationError,
-    ValidationLevel
-)
+from physicsnemo_curator.etl.dataset_validators import DatasetValidator, ValidationError, ValidationLevel
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 
@@ -218,15 +214,15 @@ class TutorialValidator(DatasetValidator):
         self.validation_level = ValidationLevel(validation_level)
 
         # Define our expected schema
-        self.required_groups = ["/fields", "/geometry", "/metadata", "/metadata/simulation_params"]
+        self.required_groups = ['/fields', '/geometry', '/metadata', '/metadata/simulation_params']
         self.required_datasets = {
-            "/fields/temperature": {"shape_dims": 1, "dtype": "float"},
-            "/fields/velocity": {"shape_dims": 2, "expected_cols": 3, "dtype": "float"},
-            "/geometry/coordinates": {"shape_dims": 2, "expected_cols": 3, "dtype": "float"}
+            '/fields/temperature': {'shape_dims': 1, 'dtype': 'float'},
+            '/fields/velocity': {'shape_dims': 2, 'expected_cols': 3, 'dtype': 'float'},
+            '/geometry/coordinates': {'shape_dims': 2, 'expected_cols': 3, 'dtype': 'float'}
         }
         self.required_attributes = {
-            "/metadata": ["timestamp", "num_points", "temperature_units", "velocity_units"],
-            "/metadata/simulation_params": ["total_time"]
+            '/metadata': ['timestamp', 'num_points', 'temperature_units', 'velocity_units'],
+            '/metadata/simulation_params': ['total_time']
         }
 
     def validate(self) -> List[ValidationError]:
@@ -276,7 +272,7 @@ class TutorialValidator(DatasetValidator):
         errors = []
 
         try:
-            with h5py.File(item, "r") as f:
+            with h5py.File(item, 'r') as f:
                 # Structure validation
                 errors.extend(self._validate_structure(f, item))
 
@@ -319,21 +315,22 @@ class TutorialValidator(DatasetValidator):
             dataset = f[dataset_path]
 
             # Check dimensions
-            if len(dataset.shape) != requirements["shape_dims"]:
+            if len(dataset.shape) != requirements['shape_dims']:
                 errors.append(ValidationError(
                     path=file_path,
-                    message=f"Dataset {dataset_path} has wrong dimensions: expected {requirements["shape_dims"]}D, got {len(dataset.shape)}D",
+                    message=f"Dataset {dataset_path} has wrong dimensions: expected {requirements['shape_dims']}D, got {len(dataset.shape)}D",
                     level=self.validation_level
                 ))
 
             # Check column count for 2D arrays
-            if "expected_cols" in requirements and len(dataset.shape) >= 2:
-                if dataset.shape[1] != requirements["expected_cols"]:
+            if 'expected_cols' in requirements and len(dataset.shape) >= 2:
+                if dataset.shape[1] != requirements['expected_cols']:
+                    expected_cols = requirements['expected_cols']
+                    actual_cols = dataset.shape[1]
+                    message = f"Dataset {dataset_path} has wrong number of columns: expected {expected_cols}, got {actual_cols}"
                     errors.append(ValidationError(
                         path=file_path,
-                        message=f"Dataset {dataset_path} has wrong number of columns: expected {requirements[
-                            "expected_cols"
-                        ]}, got {dataset.shape[1]}",
+                        message=message,
                         level=self.validation_level
                     ))
 
@@ -356,9 +353,9 @@ class TutorialValidator(DatasetValidator):
         errors = []
 
         # Check that datasets have consistent sizes
-        if "/fields/temperature" in f and "/geometry/coordinates" in f:
-            temp_size = f["/fields/temperature"].shape[0]
-            coord_size = f["/geometry/coordinates"].shape[0]
+        if '/fields/temperature' in f and '/geometry/coordinates' in f:
+            temp_size = f['/fields/temperature'].shape[0]
+            coord_size = f['/geometry/coordinates'].shape[0]
 
             if temp_size != coord_size:
                 errors.append(ValidationError(
@@ -368,8 +365,8 @@ class TutorialValidator(DatasetValidator):
                 ))
 
         # Check for reasonable data ranges
-        if "/fields/temperature" in f:
-            temp_data = f["/fields/temperature"][:]
+        if '/fields/temperature' in f:
+            temp_data = f['/fields/temperature'][:]
             if temp_data.min() < 0 or temp_data.max() > 10000:  # Kelvin range check
                 errors.append(ValidationError(
                     path=file_path,
@@ -429,7 +426,7 @@ class H5DataSource(DataSource):
             List of filenames (without extension) to process
         """
         h5_files = list(self.input_dir.glob("*.h5"))
-        filenames = [f.stem for f in h5_files]
+        filenames = [f.stem for f in h5_files]  # Remove .h5 extension
 
         self.logger.info(f"Found {len(filenames)} HDF5 files to process")
         return sorted(filenames)
@@ -444,31 +441,30 @@ class H5DataSource(DataSource):
             Dictionary containing extracted data and metadata
         """
         filepath = self.input_dir / f"{filename}.h5"
-
         if not filepath.exists():
             raise FileNotFoundError(f"File not found: {filepath}")
 
-        self.logger.info(f"Reading {filepath}")
+        self.logger.warning(f"Reading {filepath}")
 
         data = {}
 
-        with h5py.File(filepath, "r") as f:
+        with h5py.File(filepath, 'r') as f:
             # Read field data
-            data["temperature"] = np.array(f["fields/temperature"])
-            data["velocity"] = np.array(f["fields/velocity"])
+            data['temperature'] = np.array(f['fields/temperature'])
+            data['velocity'] = np.array(f['fields/velocity'])
 
             # Read geometry data
-            data["coordinates"] = np.array(f["geometry/coordinates"])
+            data['coordinates'] = np.array(f['geometry/coordinates'])
 
             # Read metadata
             metadata = {}
-            for key, value in f["metadata"].attrs.items():
+            for key, value in f['metadata'].attrs.items():
                 metadata[key] = value
 
-            data["metadata"] = metadata
-            data["filename"] = filename
+            data['metadata'] = metadata
+            data['filename'] = filename
 
-        self.logger.info(f"Loaded data with {len(data["temperature"])} points")
+        self.logger.warning(f"Loaded data with {len(data['temperature'])} points")
         return data
 
     def write(self, data: Dict[str, Any], filename: str) -> None:
@@ -515,7 +511,7 @@ class H5ToZarrTransformation(DataTransformation):
 
         # Set up compression
         self.compressor = Blosc(
-            cname="zstd",  # zstd compression algorithm
+            cname='zstd',  # zstd compression algorithm
             clevel=compression_level,
             shuffle=Blosc.SHUFFLE
         )
@@ -529,72 +525,70 @@ class H5ToZarrTransformation(DataTransformation):
         Returns:
             Dictionary with Zarr-optimized arrays and metadata
         """
-        self.logger.info(f"Transforming {data["filename"]} for Zarr storage")
+        self.logger.info(f"Transforming {data['filename']} for Zarr storage")
 
         # Get the number of points to determine chunking
-        num_points = len(data["temperature"])
+        num_points = len(data['temperature'])
 
         # Calculate optimal chunks (don't exceed chunk_size)
         chunk_points = min(self.chunk_size, num_points)
 
         # Prepare arrays that will be written to Zarr stores
         zarr_data = {
-            "filename": data["filename"],
-            "temperature": {},
-            "velocity": {},
-            "coordinates": {},
-            "velocity_magnitude": {},
+            'temperature': {},
+            'velocity': {},
+            'coordinates': {},
+            'velocity_magnitude': {},
         }
 
         # Temperature field (1D array)
-        zarr_data["temperature"] = {
-            "data": data["temperature"].astype(np.float32),
-            "chunks": (chunk_points,),
-            "compressor": self.compressor,
-            "dtype": np.float32
+        zarr_data['temperature'] = {
+            'data': data['temperature'].astype(np.float32),
+            'chunks': (chunk_points,),
+            'compressor': self.compressor,
+            'dtype': np.float32
         }
 
         # Velocity field (2D array: points x 3 components)
-        zarr_data["velocity"] = {
-            "data": data["velocity"].astype(np.float32),
-            "chunks": (chunk_points, 3),
-            "compressor": self.compressor,
-            "dtype": np.float32
+        zarr_data['velocity'] = {
+            'data': data['velocity'].astype(np.float32),
+            'chunks': (chunk_points, 3),
+            'compressor': self.compressor,
+            'dtype': np.float32
         }
 
         # Coordinates (2D array: points x 3 dimensions)
-        zarr_data["coordinates"] = {
-            "data": data["coordinates"].astype(np.float32),
-            "chunks": (chunk_points, 3),
-            "compressor": self.compressor,
-            "dtype": np.float32
+        zarr_data['coordinates'] = {
+            'data': data['coordinates'].astype(np.float32),
+            'chunks': (chunk_points, 3),
+            'compressor': self.compressor,
+            'dtype': np.float32
         }
 
         # Add some computed metadata useful for Zarr to existing metadata
-        metadata = data["metadata"]
-        metadata["num_points"] = num_points
-        metadata["chunk_size"] = chunk_points
-        metadata["compression"] = "zstd"
-        metadata["compression_level"] = self.compression_level
+        metadata = data['metadata']
+        metadata['num_points'] = num_points
+        metadata['chunk_size'] = chunk_points
+        metadata['compression'] = 'zstd'
+        metadata['compression_level'] = self.compression_level
 
         # Also add some simple derived fields
         # Temperature statistics
-        metadata["temperature_min"] = float(np.min(data["temperature"]))
-        metadata["temperature_max"] = float(np.max(data["temperature"]))
-        metadata["temperature_mean"] = float(np.mean(data["temperature"]))
+        metadata['temperature_min'] = float(np.min(data['temperature']))
+        metadata['temperature_max'] = float(np.max(data['temperature']))
+        metadata['temperature_mean'] = float(np.mean(data['temperature']))
 
         # Velocity magnitude
-        velocity_magnitude = np.linalg.norm(data["velocity"], axis=1)
-        zarr_data["velocity_magnitude"] = {
-            "data": velocity_magnitude.astype(np.float32),
-            "chunks": (chunk_points,),
-            "compressor": self.compressor,
-            "dtype": np.float32
+        velocity_magnitude = np.linalg.norm(data['velocity'], axis=1)
+        zarr_data['velocity_magnitude'] = {
+            'data': velocity_magnitude.astype(np.float32),
+            'chunks': (chunk_points,),
+            'compressor': self.compressor,
+            'dtype': np.float32
         }
-        metadata["velocity_max"] = float(np.max(velocity_magnitude))
-        zarr_data["metadata"] = metadata
+        metadata['velocity_max'] = float(np.max(velocity_magnitude))
+        zarr_data['metadata'] = metadata
 
-        self.logger.info(f"Prepared {len(zarr_data["arrays"])} arrays for Zarr storage")
         return zarr_data
 ```
 
@@ -631,17 +625,15 @@ from physicsnemo_curator.etl.processing_config import ProcessingConfig
 class ZarrDataSource(DataSource):
     """DataSource for writing to Zarr stores."""
 
-    def __init__(self, cfg: ProcessingConfig, output_dir: str, overwrite: bool = True):
+    def __init__(self, cfg: ProcessingConfig, output_dir: str):
         """Initialize the Zarr data source.
 
         Args:
             cfg: Processing configuration
             output_dir: Directory to write Zarr stores
-            overwrite: Whether to overwrite existing stores
         """
         super().__init__(cfg)
         self.output_dir = Path(output_dir)
-        self.overwrite = overwrite
 
         # Create output directory if it doesn't exist
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -663,31 +655,14 @@ class ZarrDataSource(DataSource):
         """
         store_path = self.output_dir / f"{filename}.zarr"
 
-        # Remove existing store if overwrite is enabled
         if store_path.exists():
-            if self.overwrite:
-                self.logger.info(f"Overwriting existing store: {store_path}")
-                shutil.rmtree(store_path)
-            else:
-                self.logger.info(f"Skipping {filename} - store already exists")
-                return
-
-        self.logger.info(f"Creating Zarr store: {store_path}")
+            self.logger.info(f"Skipping {filename} - Zarr store already exists")
+            return
 
         # Create Zarr store
+        self.logger.info(f"Creating Zarr store: {store_path}")
         store = zarr.DirectoryStore(store_path)
         root = zarr.group(store=store)
-
-        # Write all arrays from the transformation
-        for array_name, array_info in data["arrays"].items():
-            self.logger.debug(f"Writing array: {array_name}")
-            root.create_dataset(
-                array_name,
-                data=array_info["data"],
-                chunks=array_info["chunks"],
-                compressor=array_info["compressor"],
-                dtype=array_info["dtype"]
-            )
 
         # Store metadata as root attributes
         if "metadata" in data:
@@ -696,12 +671,27 @@ class ZarrDataSource(DataSource):
                 if hasattr(value, "item"):  # numpy scalar
                     value = value.item()
                 root.attrs[key] = value
+            data.pop("metadata")
+
+        # Write all arrays from the transformation
+        for array_name, array_info in data.items():
+            root.create_dataset(
+                array_name,
+                data=array_info["data"],
+                chunks=array_info["chunks"],
+                compressor=array_info["compressor"],
+                dtype=array_info["dtype"]
+            )
 
         # Add some store-level metadata
         root.attrs["zarr_format"] = 2
         root.attrs["created_by"] = "physicsnemo-curator-tutorial"
 
-        self.logger.info(f"Successfully created Zarr store with {len(data["arrays"])} arrays")
+        # Something weird is happening here.
+        # If this error occurs, the stores are created and we move to the next one.
+        # If this error does NOT occur, we seem to skip all the remaining files.
+        # Debug with Alexey.
+        self.logger.info(f"Successfully created Zarr store")
 
     def should_skip(self, filename: str) -> bool:
         """Check if we should skip writing this store.
@@ -710,12 +700,12 @@ class ZarrDataSource(DataSource):
             filename: Base filename to check
 
         Returns:
-            True if store should be skipped (already exists and overwrite=False)
+            True if store should be skipped (already exists)
         """
         store_path = self.output_dir / f"{filename}.zarr"
         exists = store_path.exists()
 
-        if exists and not self.overwrite:
+        if exists:
             self.logger.info(f"Skipping {filename} - Zarr store already exists")
             return True
 
