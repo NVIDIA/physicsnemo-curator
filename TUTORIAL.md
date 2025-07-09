@@ -444,7 +444,7 @@ class H5DataSource(DataSource):
         if not filepath.exists():
             raise FileNotFoundError(f"File not found: {filepath}")
 
-        self.logger.warning(f"Reading {filepath}")
+        self.logger.info(f"Reading {filepath}")
 
         data = {}
 
@@ -464,7 +464,7 @@ class H5DataSource(DataSource):
             data['metadata'] = metadata
             data['filename'] = filename
 
-        self.logger.warning(f"Loaded data with {len(data['temperature'])} points")
+        self.logger.info(f"Loaded data with {len(data['temperature'])} points")
         return data
 
     def write(self, data: Dict[str, Any], filename: str) -> None:
