@@ -26,8 +26,6 @@ etl:
 
   processing:
     num_processes: 12
-    serialization_method: zarr
-    compression:
     args: {}
 
   validator:

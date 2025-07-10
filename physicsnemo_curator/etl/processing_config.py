@@ -15,7 +15,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Optional
+from typing import Any
 
 
 @dataclass
@@ -23,8 +23,6 @@ class ProcessingConfig:
     """Base configuration for data processing."""
 
     num_processes: int
-    serialization_method: Literal["numpy", "zarr"] = "numpy"
-    compression: Optional[dict[str, Any]] = None
     args: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -33,22 +31,3 @@ class ProcessingConfig:
             raise ValueError(
                 f"num_processes must be positive, got {self.num_processes}"
             )
-
-        if self.compression is not None and self.serialization_method != "zarr":
-            raise ValueError("Compression is only supported with zarr serialization")
-
-        if self.compression is not None:
-            required_keys = {"method", "level"}
-            missing_keys = required_keys - set(self.compression.keys())
-            if missing_keys:
-                raise ValueError(
-                    f"Compression config missing required keys: {missing_keys}"
-                )
-
-            if not isinstance(self.compression["level"], int) or not (
-                1 <= self.compression["level"] <= 9
-            ):
-                raise ValueError("Compression level must be an integer between 1 and 9")
-
-        if self.serialization_method not in ["numpy", "zarr"]:
-            raise ValueError("Serialization method must be either 'numpy' or 'zarr'")

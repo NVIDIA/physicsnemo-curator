@@ -59,6 +59,9 @@ physicsnemo-curator-etl                     \
 - `etl.common.model_type`: can be `surface` (default) or `volume` or `combined`.
     This option is used to specify the type of model that will be trained on the
     dataset.
+- **Output format**: To switch from Zarr (default) to NumPy, make two changes for consistency:
+  1. In `etl.transformations`: uncomment the `numpy` section and comment out the `zarr` section
+  2. In `etl.sink`: set `serialization_method` to `"numpy"`
 
 Please refer to the [config file](../../../config/domino_etl.yaml) for more
 options.

@@ -736,8 +736,6 @@ etl:
   # Processing settings
   processing:
     num_processes: 2  # Use 2 processes for this small tutorial dataset
-    serialization_method: zarr
-    compression: null
     args: {}
 
   # Validation (runs first)

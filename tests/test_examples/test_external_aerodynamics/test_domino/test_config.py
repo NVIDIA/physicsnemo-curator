@@ -57,8 +57,6 @@ def test_domino_etl_config():
 
         # Test processing settings
         assert cfg.etl.processing.num_processes == 12
-        assert cfg.etl.processing.serialization_method == "zarr"
-        assert not cfg.etl.processing.compression
         assert cfg.etl.processing.args == {}
 
         # Test that we can actually create the validator
@@ -104,7 +102,6 @@ def test_domino_etl_config():
             instantiate(cfg.etl.sink)
             assert m.call_count == 1
         assert cfg.etl.sink.kind == "drivaerml"
-        assert cfg.etl.sink.serialization_method == "zarr"
         assert cfg.etl.sink.overwrite_existing is True
 
 
@@ -120,10 +117,6 @@ def test_config_validation():
 
         # Test that model_type is a valid ModelType
         assert cfg.etl.common.model_type in [m.value for m in ModelType]
-
-        # Test that serialization_method is valid
-        assert cfg.etl.processing.serialization_method in ["numpy", "zarr"]
-        assert cfg.etl.sink.serialization_method in ["numpy", "zarr"]
 
         # Test that validation_level is valid
         assert cfg.etl.validator.validation_level in ["structure", "fields"]

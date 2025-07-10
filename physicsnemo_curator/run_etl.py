@@ -96,7 +96,6 @@ def main(cfg: DictConfig) -> None:
 
         wall_clock_time = time.time() - wall_clock_start
         logger.info("\nProcessing Summary:")
-        logger.info(f"Serialization method: {processing_config.serialization_method}")
         logger.info(f"Number of processes: {processing_config.num_processes}")
         logger.info(f"Total wall clock time: {wall_clock_time:.2f} seconds")
 

@@ -109,9 +109,7 @@ class TestDoMINOZarrTransformation:
 
     def test_initialization(self):
         """Test initialization of Zarr transformation."""
-        config = ProcessingConfig(
-            num_processes=1, args={"compression_method": "zstd", "compression_level": 5}
-        )
+        config = ProcessingConfig(num_processes=1)
         transform = DoMINOZarrTransformation(config)
         assert transform.config == config
         assert transform.compressor.cname == "zstd"
@@ -121,8 +119,6 @@ class TestDoMINOZarrTransformation:
         """Test Zarr transformation of DoMINO data."""
         config = ProcessingConfig(
             num_processes=1,
-            serialization_method="zarr",
-            args={"compression_method": "zstd", "compression_level": 5},
         )
         transform = DoMINOZarrTransformation(config)
 
@@ -160,11 +156,7 @@ class TestDoMINOZarrTransformation:
 
     def test_prepare_array(self):
         """Test array preparation for Zarr storage."""
-        config = ProcessingConfig(
-            num_processes=1,
-            serialization_method="zarr",
-            args={"compression_method": "zstd", "compression_level": 5},
-        )
+        config = ProcessingConfig(num_processes=1)
         transform = DoMINOZarrTransformation(config)
 
         # Test 1D array
@@ -195,11 +187,7 @@ class TestDoMINOZarrTransformation:
     )
     def test_chunk_size_warnings(self, chunk_size_mb, should_warn):
         """Test warnings for different chunk sizes."""
-        config = ProcessingConfig(
-            num_processes=1,
-            serialization_method="zarr",
-            args={"compression_method": "zstd", "compression_level": 5},
-        )
+        config = ProcessingConfig(num_processes=1)
 
         with warnings.catch_warnings(record=True) as w:
             # Cause all warnings to always be triggered
@@ -235,11 +223,7 @@ class TestDoMINOZarrTransformation:
             volume_fields=sample_data.volume_fields,
         )
 
-        config = ProcessingConfig(
-            num_processes=1,
-            serialization_method="zarr",
-            args={"compression_method": "zstd", "compression_level": 5},
-        )
+        config = ProcessingConfig(num_processes=1)
 
         # Create transformations with different chunk sizes
         transform_small = DoMINOZarrTransformation(config, chunk_size_mb=1.0)
