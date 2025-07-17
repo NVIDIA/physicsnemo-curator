@@ -21,15 +21,15 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from physicsnemo_curator.etl.dataset_validators import ValidationLevel
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
-from physicsnemo_curator.examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.domino.constants import (
     DatasetKind,
     ModelType,
 )
-from physicsnemo_curator.examples.external_aerodynamics.domino.dataset_validator import (
+from examples.external_aerodynamics.domino.dataset_validator import (
     DoMINODatasetValidator,
 )
+from physicsnemo_curator.etl.dataset_validators import ValidationLevel
+from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 
 @pytest.fixture
@@ -188,12 +188,8 @@ def test_validation_logging(mock_input_dir, basic_config, caplog):
     assert "Validation completed successfully" in caplog.text
 
 
-@patch(
-    "physicsnemo_curator.examples.external_aerodynamics.domino.dataset_validator.ProcessPoolExecutor"
-)
-@patch(
-    "physicsnemo_curator.examples.external_aerodynamics.domino.dataset_validator.as_completed"
-)
+@patch("examples.external_aerodynamics.domino.dataset_validator.ProcessPoolExecutor")
+@patch("examples.external_aerodynamics.domino.dataset_validator.as_completed")
 def test_parallel_validation(
     mock_as_completed, mock_executor, mock_input_dir, basic_config
 ):

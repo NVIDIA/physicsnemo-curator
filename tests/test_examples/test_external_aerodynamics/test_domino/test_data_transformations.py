@@ -19,21 +19,21 @@ import warnings
 import numpy as np
 import pytest
 
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
-from physicsnemo_curator.examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.domino.constants import (
     ModelType,
 )
-from physicsnemo_curator.examples.external_aerodynamics.domino.data_transformations import (
+from examples.external_aerodynamics.domino.data_transformations import (
     DoMINONumpyTransformation,
     DoMINOZarrTransformation,
 )
-from physicsnemo_curator.examples.external_aerodynamics.domino.schemas import (
+from examples.external_aerodynamics.domino.schemas import (
     DoMINOExtractedDataInMemory,
     DoMINOMetadata,
     DoMINONumpyDataInMemory,
     DoMINOZarrDataInMemory,
     PreparedZarrArrayInfo,
 )
+from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 
 @pytest.fixture
