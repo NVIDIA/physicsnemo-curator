@@ -26,17 +26,16 @@ from physicsnemo_curator.etl.processing_config import ProcessingConfig
 from physicsnemo_curator.utils import utils as curator_utils
 
 
-@hydra.main(version_base="1.3", config_path="config")
+@hydra.main(version_base="1.3")
 def main(cfg: DictConfig) -> None:
     """Main ETL pipeline execution.
 
-    Can be run either:
-    1. With a specific config: python run_etl.py --config-name domino_etl
-    2. With a custom config file: python run_etl.py --config-path /path/to/custom_config.yaml
+    Can be run with a config dir and a config name:
+    python run_etl.py --config-dir /path/to/config/dir --config-name name-of-config
 
     Users can also override any config parameters by passing them on the command line.
     For example:
-    python run_etl.py --config-name domino_etl etl.processing.num_processes=16
+    python run_etl.py --config-dir /path/to/config/dir --config-name name-of-config etl.processing.num_processes=16
     """
 
     try:
@@ -50,7 +49,7 @@ def main(cfg: DictConfig) -> None:
 
     if not cfg:  # Check for None or empty config
         logger.error("No configuration provided or empty configuration")
-        logger.error("Please run with --config-name or --config-path")
+        logger.error("Please run with --config-dir and --config-name")
         return
 
     logger.info(f"Config summary:\n{OmegaConf.to_yaml(cfg, sort_keys=True)}")
