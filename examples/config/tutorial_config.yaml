@@ -1,0 +1,35 @@
+# Tutorial ETL Pipeline Configuration
+# This demonstrates the complete H5 -> Zarr processing pipeline
+
+etl:
+  # Processing settings
+  processing:
+    num_processes: 1  # Use 1 process for this small tutorial dataset
+    args: {}
+
+  # Validation (runs first)
+  validator:
+    _target_: physicsnemo_curator.tutorial_validator.TutorialValidator
+    _convert_: all
+    input_dir: physicsnemo_curator/tutorial_data/
+    validation_level: "fields"  # Full validation including data content
+
+  # Source (reads HDF5 files)
+  source:
+    _target_: physicsnemo_curator.h5_data_source.H5DataSource
+    _convert_: all
+    input_dir: physicsnemo_curator/tutorial_data/
+
+  # Transformations (convert to Zarr format)
+  transformations:
+    h5_to_zarr:
+      _target_: physicsnemo_curator.h5_to_zarr_transformation.H5ToZarrTransformation
+      _convert_: all
+      chunk_size: 500
+      compression_level: 3
+
+  # Sink (writes Zarr stores)
+  sink:
+    _target_: physicsnemo_curator.zarr_data_source.ZarrDataSource
+    _convert_: all
+    output_dir: physicsnemo_curator/tutorial_output/
