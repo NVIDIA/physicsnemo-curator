@@ -29,13 +29,13 @@ etl:
     args: {}
 
   validator:
-    _target_: physicsnemo_curator.examples.external_aerodynamics.domino.dataset_validator.DoMINODatasetValidator
+    _target_: examples.external_aerodynamics.domino.dataset_validator.DoMINODatasetValidator
     _convert_: all
 
     validation_level: "fields"  # One of "structure" or "fields"
 
   source:
-    _target_: physicsnemo_curator.examples.external_aerodynamics.domino.data_sources.DoMINODataSource
+    _target_: examples.external_aerodynamics.domino.data_sources.DoMINODataSource
     _convert_: all
 
     input_dir: ???  # Path to input dataset directory (required)
@@ -52,17 +52,17 @@ etl:
     # DoMINOZarrTransformation or DoMINONumpyTransformation.
     # NOTE: This should match the Sink class' serialization method.
     zarr:
-      _target_: physicsnemo_curator.examples.external_aerodynamics.domino.data_transformations.DoMINOZarrTransformation
+      _target_: examples.external_aerodynamics.domino.data_transformations.DoMINOZarrTransformation
       _convert_: all
       compression_method: "zstd"
       compression_level: 5
       chunk_size_mb: 1.0
     # numpy:
-    #   _target_: physicsnemo_curator.examples.external_aerodynamics.domino.data_transformations.DoMINONumpyTransformation
+    #   _target_: examples.external_aerodynamics.domino.data_transformations.DoMINONumpyTransformation
     #   _convert_: all
 
   sink:
-    _target_: physicsnemo_curator.examples.external_aerodynamics.domino.data_sources.DoMINODataSource
+    _target_: examples.external_aerodynamics.domino.data_sources.DoMINODataSource
     _convert_: all
 
     output_dir: ???  # Path to output directory (required)

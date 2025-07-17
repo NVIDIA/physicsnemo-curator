@@ -30,18 +30,18 @@ def mock_config():
             "etl": {
                 "processing": {"num_processes": 2},
                 "source": {
-                    "_target_": "physicsnemo_curator.examples.external_aerodynamics.domino.data_sources.DoMINODataSource",
+                    "_target_": "examples.external_aerodynamics.domino.data_sources.DoMINODataSource",
                     "input_dir": "/test/input",
                     "kind": "DRIVESIM",
                 },
                 "transformations": {
                     "numpy": {
-                        "_target_": "physicsnemo_curator.examples.external_aerodynamics.domino.transformations.DoMINONumpyTransformation",
+                        "_target_": "examples.external_aerodynamics.domino.transformations.DoMINONumpyTransformation",
                         "model_type": "SURFACE",
                     }
                 },
                 "sink": {
-                    "_target_": "physicsnemo_curator.examples.external_aerodynamics.domino.data_sources.DoMINODataSource",
+                    "_target_": "examples.external_aerodynamics.domino.data_sources.DoMINODataSource",
                     "output_dir": "/test/output",
                     "serialization_method": "numpy",
                 },

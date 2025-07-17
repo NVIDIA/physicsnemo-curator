@@ -20,7 +20,7 @@ It accelerates data curation by leveraging GPUs.
 
 This includes customizable interfaces and pipelines for extracting, transforming
 and loading data in supported formats and schema.
-Please refer to the [DoMINO ETL example](./physicsnemo_curator/examples/external_aerodynamics/domino/README.md)
+Please refer to the [DoMINO ETL example](examples/external_aerodynamics/domino/README.md)
 that illustrates the concept.
 
 This package is intended to be used as part of the PhysicsNeMo [framework](https://github.com/NVIDIA/physicsnemo/blob/main/README.md).
@@ -79,8 +79,8 @@ PhysicsNeMo-Curator can process your data through the following approaches:
 
 **Next Steps:**
 
-1. Organize your converted data according to one of the [supported dataset formats](./physicsnemo_curator/examples/external_aerodynamics/domino/DoMINO_Data_Processing_Reference.md#input-data-structure)
-2. Use the built-in [DoMINO pipeline](./physicsnemo_curator/examples/external_aerodynamics/domino/README.md)
+1. Organize your converted data according to one of the [supported dataset formats](examples/external_aerodynamics/domino/DoMINO_Data_Processing_Reference.md#input-data-structure)
+2. Use the built-in [DoMINO pipeline](examples/external_aerodynamics/domino/README.md)
 to convert your data to an AI model training ready format
 
 #### Option 2: Extend the Framework for Custom Formats

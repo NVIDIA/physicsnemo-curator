@@ -24,19 +24,18 @@ import pytest
 import vtk
 from numcodecs import Blosc
 
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
-from physicsnemo_curator.examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.domino.constants import (
     DatasetKind,
     ModelType,
 )
-from physicsnemo_curator.examples.external_aerodynamics.domino.data_sources import (
+from examples.external_aerodynamics.domino.data_sources import (
     DoMINODataSource,
 )
-from physicsnemo_curator.examples.external_aerodynamics.domino.paths import (
+from examples.external_aerodynamics.domino.paths import (
     DrivAerMLPaths,
     DriveSimPaths,
 )
-from physicsnemo_curator.examples.external_aerodynamics.domino.schemas import (
+from examples.external_aerodynamics.domino.schemas import (
     DoMINOExtractedDataInMemory,
     DoMINOMetadata,
     DoMINONumpyDataInMemory,
@@ -44,6 +43,7 @@ from physicsnemo_curator.examples.external_aerodynamics.domino.schemas import (
     DoMINOZarrDataInMemory,
     PreparedZarrArrayInfo,
 )
+from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 
 @pytest.fixture

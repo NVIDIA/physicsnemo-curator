@@ -23,16 +23,16 @@ from typing import Optional
 
 import vtk
 
+from examples.external_aerodynamics.domino.constants import (
+    DatasetKind,
+    ModelType,
+)
 from physicsnemo_curator.etl.dataset_validators import (
     DatasetValidator,
     ValidationError,
     ValidationLevel,
 )
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
-from physicsnemo_curator.examples.external_aerodynamics.domino.constants import (
-    DatasetKind,
-    ModelType,
-)
 
 from .paths import get_path_getter
 

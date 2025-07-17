@@ -21,12 +21,12 @@ from unittest.mock import patch
 from hydra import compose, initialize
 from hydra.utils import instantiate
 
-from physicsnemo_curator.examples.external_aerodynamics.domino import (
+from examples.external_aerodynamics.domino import (
     data_sources,
     data_transformations,
     dataset_validator,
 )
-from physicsnemo_curator.examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.domino.constants import (
     DatasetKind,
     ModelType,
 )

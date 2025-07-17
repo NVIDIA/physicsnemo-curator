@@ -19,7 +19,7 @@ import dataclasses
 
 import pytest
 
-from physicsnemo_curator.examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.domino.constants import (
     DatasetKind,
     ModelType,
     PhysicsConstants,
