@@ -27,71 +27,30 @@ This package is intended to be used as part of the PhysicsNeMo [framework](https
 
 ## Installation and Usage
 
-There are several ways to install PhysicsNeMo-Curator in an isolated environment:
+The recommended way of using `PhysicsNeMo-Curator` is to leverage the `PhysicsNeMo` docker image.
+This can be pulled from the
+[NVIDIA Container Registry](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/physicsnemo/containers/physicsnemo).
 
-Requirements:
+Current limitations:
 
-- Python 3.10 or higher
-- pip
-- venv or conda (for environment management)
+- Currently only `linux/amd64` platform is supported
+- Currently we don't provide a PyPi wheel, and support installing from source
 
-Currently only `linux/amd64` platform is supported.
+### PhysicsNeMo Container (Recommended)
 
-### Virtual Environment (Recommended)
-
-```bash
-# Clone the repository
-git clone https://github.com/NVIDIA/physicsnemo-curator.git
-cd physicsnemo-curator
-
-# Create a virtual environment
-# Use python3 to automatically select the latest available Python 3.x version
-python3 -m venv venv
-
-# Activate the virtual environment
-# On Linux/Mac:
-source venv/bin/activate
-
-# Verify Python version
-python --version  # Should be 3.10 or higher
-
-# Install the package in editable mode with development dependencies
-pip install -e ".[dev]"
-
-# Install pre-commit hooks
-pre-commit install
-```
-
-### Conda Environment
-
-```bash
-# Clone the repository
-git clone https://github.com/NVIDIA/physicsnemo-curator.git
-cd physicsnemo-curator
-
-# Create a conda environment
-conda create -n physicsnemo python=3.10
-conda activate physicsnemo
-
-# Install the package in editable mode with development dependencies
-pip install -e ".[dev]"
-
-# Install pre-commit hooks
-pre-commit install
-```
-
-### Container
-
-The recommended PhysicsNeMo docker image can be pulled from the
-[NVIDIA Container Registry](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/physicsnemo/containers/physicsnemo):
+The instructions to get started with `PhysicsNeMo-Curator` within the `PhysicsNeMo` docker container are shown below.
 
 ```bash
 docker pull nvcr.io/nvidia/physicsnemo/physicsnemo:25.06
 
+# Install from source
 git clone git@github.com:NVIDIA/physicsnemo-curator.git && cd physicsnemo-curator
 
 pip install --upgrade pip
-pip install .
+pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
 ```
 
 ## Getting Started
@@ -126,40 +85,16 @@ to convert your data to an AI model training ready format
 
 #### Option 2: Extend the Framework for Custom Formats
 
-If your data is in a format not directly supported (VTU/VTP/STL), you can extend the framework:
-
-1. **Follow the Tutorial**: The [Tutorial](./TUTORIAL.md) demonstrates creating a complete pipeline for HDF5 data
-2. **Implement Custom DataSource**: Create a DataSource class to read your format
-3. **Add Transformations**: Convert your data to ML-optimized formats like Zarr
-4. **Leverage Existing ETL framework**: Use the built-in parallel processing capabilities of the existing framework
+If your data is in a format not directly supported (VTU/VTP/STL), you can extend the framework.
+The [Tutorial](./TUTORIAL.md) demonstrates creating a complete pipeline that reads in HDF5 data and converts it to Zarr data.
 
 #### Getting Help
 
-- **Domain-Specific Examples**: Check if your use case matches our [automotive aerodynamics pipeline](./physicsnemo_curator/examples/external_aerodynamics/domino/README.md)
-- **Architecture Questions**: See the [Tutorial](./TUTORIAL.md) for framework concepts
-- **Format Questions**: Check our [Data Processing Reference](./physicsnemo_curator/examples/external_aerodynamics/domino/DoMINO_Data_Processing_Reference.md)
-
-### Domain-Specific Examples
-
-For domain-specific use cases, we provide ready-to-use pipelines:
-
-**External Aerodynamics (DoMINO)**: Use the built-in ETL pipeline for training DoMINO models for automotive aerodynamics.
-Please refer to the [DoMINO training recipe](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/domino)
-first.
-
-```bash
-physicsnemo-curator-etl --config-name domino_etl
-```
-
-Configuration is handled through Hydra. Key parameters can be set in
-`config/domino_etl.yaml` or overridden via command line:
-
-```bash
-physicsnemo-curator-etl --config-name domino_etl etl.processing.num_processes=4
-```
-
-For a complete reference about supported data formats, output structures, and field variables,
-see the [DoMINO Data Processing Reference](./physicsnemo_curator/examples/external_aerodynamics/domino/DoMINO_Data_Processing_Reference.md).
+- **Domain-Specific Examples**: Check if your use case matches our [automotive aerodynamics pipeline](./physicsnemo_curator/examples/external_aerodynamics/domino/README.md).
+This provides an example ETL pipeline for training DoMINO models for automotive aerodynamics applications.
+For more questions about the formats, please refer to [Data Processing Reference](./physicsnemo_curator/examples/external_aerodynamics/domino/DoMINO_Data_Processing_Reference.md)
+- **Architecture Questions**: See the [Tutorial](./TUTORIAL.md) for framework concepts, and to understand how to extend the pipeline
+- **Anything else**: Please open a GitHub issue and we'll engage with you to answer the questions!
 
 ## Contributing to PhysicsNeMo-Curator
 
