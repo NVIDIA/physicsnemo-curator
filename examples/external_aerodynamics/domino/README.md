@@ -63,7 +63,7 @@ physicsnemo-curator-etl                     \
   1. In `etl.transformations`: uncomment the `numpy` section and comment out the `zarr` section
   2. In `etl.sink`: set `serialization_method` to `"numpy"`
 
-Please refer to the [config file](../../../config/domino_etl.yaml) for more
+Please refer to the [config file](../../../examples/config/domino_etl.yaml) for more
 options.
 
 ### Mesh Decimation Options

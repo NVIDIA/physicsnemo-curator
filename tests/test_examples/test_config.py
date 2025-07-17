@@ -35,7 +35,7 @@ from examples.external_aerodynamics.domino.constants import (
 def get_config_path() -> Path:
     """Get the path to the config directory."""
     # Hydra requires a relative path.
-    return Path("../../../../physicsnemo_curator/config")
+    return Path("../../examples/config")
 
 
 def test_domino_etl_config():

@@ -147,7 +147,7 @@ Fields are non-dimensionalized as follows:
 
 Note: The exact fields processed depend on the `surface_variables` and
 `volume_variables` configurations provided to the data source.
-See `config/domino_etl.yaml` and `config/variables/*.yaml` files for examples.
+See `examples/config/domino_etl.yaml` and `examples/config/variables/*.yaml` files for examples.
 
 ### Reference Values
 
