@@ -1,6 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES.
-# SPDX-FileCopyrightText: All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2025, NVIDIA CORPORATION.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,10 +15,8 @@
 # A workflow to trigger ci on hybrid infra (github + self hosted runner)
 name: Blossom-CI
 on:
-  # CI job triggers here
   issue_comment:
     types: [created]
-  
   workflow_dispatch:
       inputs:
           platform:
@@ -37,13 +33,8 @@ jobs:
       args: ${{ env.args }}
       
     # This job only runs for pull request comments
-    # Comment must be `/blossom-ci`
-    if: >
-         (github.event.comment.body == '/blossom-ci' || github.event.comment.body == '/multi-gpu-ci') &&
-         (
-           github.actor == 'saikrishnanc-nv' ||
-           github.actor == 'Alexey-Kamenev'
-         )
+    if: |
+         github.event.comment.body == '/build' && (github.actor == 'saikrishnanc-nv' || github.actor == 'Alexey-Kamenev')
     steps:
       - name: Check if comment is issued by authorized person
         run: blossom-ci
