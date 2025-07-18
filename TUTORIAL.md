@@ -775,7 +775,9 @@ Now you can run the complete pipeline using the physicsnemo-curator CLI:
 # IMPORTANT: Make sure your tutorial files are importable (and that the paths are correct)
 
 # Run the ETL pipeline
-physicsnemo-curator-etl --config-name tutorial_config \
+export PYTHONPATH=$PYTHONPATH:<path-to-tutorial-files-and-config> &&
+physicsnemo-curator-etl --config-dir <path-to-tutorial-config-dir> \
+  --config-name tutorial_config \
   etl.validator.input_dir=tutorial_data \
   etl.source.input_dir=tutorial_data \
   etl.sink.output_dir=output_zarr
