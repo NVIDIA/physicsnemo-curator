@@ -45,7 +45,7 @@ include = ["physicsnemo_curator", "physicsnemo_curator.*"]
 [tool.ruff]
 lint.select = ["E", "F", "S", "I", "PERF"]
 lint.fixable = ["I"]
-lint.ignore = ["E501", "S311"]
+lint.ignore = ["E501", "S311", "S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
