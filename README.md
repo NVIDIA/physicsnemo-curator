@@ -57,7 +57,7 @@ pre-commit install
 
 ### New to PhysicsNeMo-Curator?
 
-If you're new to the framework, start with our comprehensive [**Tutorial**](./TUTORIAL.md).
+If you're new to the framework, start with our comprehensive [**Tutorial**](./examples/tutorials/etl_hdf5_to_zarr/hdf5_to_zarr.ipynb).
 It walks you through building a complete ETL pipeline from scratch. You'll learn how to:
 
 - Define data schemas
