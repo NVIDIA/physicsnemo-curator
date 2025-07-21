@@ -31,6 +31,7 @@ doctest:
 	echo "Not implemented"
 
 pytest:
+	pip install -e ".[dev]" && \
 	pytest
 
 coverage:
