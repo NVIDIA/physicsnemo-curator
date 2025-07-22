@@ -94,8 +94,8 @@ export PYTHONPATH=$PYTHONPATH:examples &&
 physicsnemo-curator-etl                    \
     --config-dir=examples/config           \
     --config-name=domino_etl_ahmedml      \
-    etl.source.input_dir=/data/ahmed_ml/   \
-    etl.sink.output_dir=/data/ahmed_ml.processed.surface \
+    etl.source.input_dir=/data/ahmedml/   \
+    etl.sink.output_dir=/data/ahmedml.processed.surface \
     etl.common.model_type=surface
 ```
 
