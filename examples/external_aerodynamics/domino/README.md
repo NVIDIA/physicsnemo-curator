@@ -2,18 +2,18 @@
 
 This document describes the DoMINO data processing pipeline in PhysicsNeMo Curator.
 
-## What this pipeline does
+## Overview
 
 The DoMINO ETL pipeline processes automotive aerodynamics simulation data for machine learning training. It:
 
-**Reads:** CFD simulation data in multiple formats (DriveSim, DrivAerML, AhmedML)
+**Reads:** CFD simulation data in multiple schemas (DriveSim, DrivAerML, AhmedML)
 
 - Geometry files (STL format)
 - Volume mesh data (VTU format)
 - Surface mesh data (VTP format)
 - Flow field variables (pressure, velocity, turbulence)
 
-**Transforms:** Raw simulation data into ML-optimized format
+**Transforms:** Raw simulation data into ML-optimized format (Zarr or NumPy)
 
 - Extracts and normalizes field variables (pressure coefficients, wall shear stress)
 - Processes geometry data (coordinates, face connectivity, areas)
@@ -28,6 +28,19 @@ The DoMINO ETL pipeline processes automotive aerodynamics simulation data for ma
 
 This pipeline handles the complex data engineering required to convert raw CFD outputs into
 datasets suitable for training AI models for external aerodynamics applications.
+
+## Download DrivAerML Dataset
+
+Here, we're providing an example on how to download one of the supported datasets.
+[DrivAerML](https://caemldatasets.org/drivaerml/) is the dataset that the DoMINO model was trained on.
+
+This high-fidelity, open-source (CC-BY-SA) public dataset is specifically designed for automotive aerodynamics research.
+It comprises 500 parametrically morphed variants of the widely utilized DrivAer notchback generic vehicle.
+For more technical details about this dataset, please refer to their [paper](https://arxiv.org/pdf/2408.11969).
+
+**NOTE** Before running the below script, please follow these instructions on [Getting Started with the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html).
+
+Download the DrivAer ML dataset using the provided [download_aws_dataset.sh](./download_aws_dataset.sh) script.
 
 ## Running the Curator
 
@@ -49,7 +62,7 @@ To run on AhmedML dataset:
 export PYTHONPATH=$PYTHONPATH:examples &&
 physicsnemo-curator-etl                    \
     --config-dir=examples/config           \
-    --config-name=domino_etl_ahmed_ml      \
+    --config-name=domino_etl_ahmedml      \
     etl.source.input_dir=/data/ahmed_ml/   \
     etl.sink.output_dir=/data/ahmed_ml.processed.surface \
     etl.common.model_type=surface
@@ -111,3 +124,7 @@ For more details on the decimation algorithms and their parameters, refer to:
 > **Note**: Currently, only surface meshes are supported for decimation.
 Volume meshes are not supported, and in case of `combined` model type,
 only the surface part will be decimated.
+
+### Model Training
+
+Train your DoMINO Model on your own data by following the [example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/domino)!

@@ -4,9 +4,9 @@ This is a reference for the entire data processing pipeline for the DoMINO model
 
 ## Input Data Structure
 
-The module supports three dataset formats:
+The module supports three datasets (formats + schema combinations):
 
-### 1. DriveSim Format
+### 1. DriveSim Dataset
 
 The dataset should contain at least the following files.
 
@@ -20,7 +20,7 @@ run_001/
             └── aero_suv.vtp       # Surface mesh data
 ```
 
-### 2. DrivAerML Format
+### 2. DrivAerML Dataset
 
 The dataset should contain at least the following files.
 
@@ -31,7 +31,7 @@ run_1/
 └── boundary_1.vtp                 # Surface mesh data
 ```
 
-### 3. AhmedML Format
+### 3. AhmedML Dataset
 
 The dataset should contain at least the following files.
 
