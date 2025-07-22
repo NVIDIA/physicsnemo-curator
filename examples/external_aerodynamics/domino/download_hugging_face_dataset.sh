@@ -16,10 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This Bash script downloads the AWS DrivAer files from the Amazon S3 bucket to a local directory.
-# Only the volume files (.vtu), STL files (.stl), and VTP files (.vtp) are downloaded.
-# It uses a function, download_run_files, to check for the existence of three specific files (".vtu", ".stl", ".vtp") in a run directory.
-# If a file doesn't exist, it's downloaded from the S3 bucket. If it does exist, the download is skipped.
+# This Bash script downloads the DrivAer files from the Hugging Face dataset to a local directory.
+# Only the volume files (.vtu), STL files (.stl), VTP files (.vtp), and force_mom files (force_mom_i.csv) are downloaded.
+# It uses a function, download_run_files, to check for the existence of four specific files (".vtu", ".stl", ".vtp", "force_mom_i.csv") in a run directory.
+# If a file doesn't exist, it's downloaded from the Hugging Face dataset. If it does exist, the download is skipped.
 # The script runs multiple downloads in parallel, both within a single run and across multiple runs.
 # It also includes checks to prevent overloading the system by limiting the number of parallel downloads.
 
@@ -27,18 +27,18 @@
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -d, --local-dir DIR     Local directory to download files (default: ./drivaer_data_full)"
+    echo "  -d, --local-dir DIR     Local directory to download files (default: ./drivaer_data)"
     echo "  -s, --run-start NUM     Starting run number (default: 1)"
     echo "  -e, --run-end NUM       Ending run number (default: 5, max: 500)"
     echo "  -h, --help              Display this help message"
     echo ""
     echo "Example:"
-    echo "  $0 -d ./my_data -s 1 -e 10"
+    echo "  $0 -d ./my_data -s 10 -e 100"
     exit 1
 }
 
 # Default values
-LOCAL_DIR="./drivaer_data_full"
+LOCAL_DIR="./drivaer_data"
 RUN_START=1
 RUN_END=5
 
@@ -83,9 +83,9 @@ if [ "$RUN_END" -gt 500 ]; then
     exit 1
 fi
 
-# Set the S3 bucket and prefix
-S3_BUCKET="caemldatasets"
-S3_PREFIX="drivaer/dataset"
+# Set the path and prefix
+HF_OWNER="neashton"
+HF_PREFIX="drivaerml"
 
 # Create the local directory if it doesn't exist
 mkdir -p "$LOCAL_DIR"
@@ -99,28 +99,41 @@ download_run_files() {
     # Create the run directory if it doesn't exist
     mkdir -p "$RUN_LOCAL_DIR"
 
-    # Check if the .vtu file exists before downloading
-    if [ ! -f "$RUN_LOCAL_DIR/volume_$i.vtu" ]; then
-        aws s3 cp --no-sign-request "s3://$S3_BUCKET/$S3_PREFIX/$RUN_DIR/volume_$i.vtu" "$RUN_LOCAL_DIR/" &
-    else
-        echo "File volume_$i.vtu already exists, skipping download."
-    fi
-
-    # Check if the .stl file exists before downloading
+    # Download the drivaer_i.stl file
     if [ ! -f "$RUN_LOCAL_DIR/drivaer_$i.stl" ]; then
-        aws s3 cp --no-sign-request "s3://$S3_BUCKET/$S3_PREFIX/$RUN_DIR/drivaer_$i.stl" "$RUN_LOCAL_DIR/" &
+        wget "https://huggingface.co/datasets/${HF_OWNER}/${HF_PREFIX}/resolve/main/$RUN_DIR/drivaer_$i.stl" -O "$RUN_LOCAL_DIR/drivaer_$i.stl"
     else
         echo "File drivaer_$i.stl already exists, skipping download."
     fi
 
-    # Check if the .vtp file exists before downloading
+    # Download the boundary_i.vtp file
     if [ ! -f "$RUN_LOCAL_DIR/boundary_$i.vtp" ]; then
-        aws s3 cp --no-sign-request "s3://$S3_BUCKET/$S3_PREFIX/$RUN_DIR/boundary_$i.vtp" "$RUN_LOCAL_DIR/" &
+        wget "https://huggingface.co/datasets/${HF_OWNER}/${HF_PREFIX}/resolve/main/$RUN_DIR/boundary_$i.vtp" -O "$RUN_LOCAL_DIR/boundary_$i.vtp"
     else
         echo "File boundary_$i.vtp already exists, skipping download."
     fi
 
-    wait # Ensure that both files for this run are downloaded before moving to the next run
+    # Download the volume_i.vtu files
+    # Check if the .vtu file exists before downloading
+    if [ ! -f "$RUN_LOCAL_DIR/volume_$i.vtu" ]; then
+        wget "https://huggingface.co/datasets/${HF_OWNER}/${HF_PREFIX}/resolve/main/$RUN_DIR/volume_$i.vtu.00.part" -O "$RUN_LOCAL_DIR/volume_$i.vtu.00.part"
+        wget "https://huggingface.co/datasets/${HF_OWNER}/${HF_PREFIX}/resolve/main/$RUN_DIR/volume_$i.vtu.01.part" -O "$RUN_LOCAL_DIR/volume_$i.vtu.01.part"
+        # Concatenate the volume files
+        cat "$RUN_LOCAL_DIR/volume_$i.vtu.00.part" "$RUN_LOCAL_DIR/volume_$i.vtu.01.part" > "$RUN_LOCAL_DIR/volume_$i.vtu"
+        # Remove the part files
+        rm "$RUN_LOCAL_DIR/volume_$i.vtu.00.part" "$RUN_LOCAL_DIR/volume_$i.vtu.01.part"
+    else
+        echo "File volume_$i.vtu already exists, skipping download."
+    fi
+
+    # Download the force_mom_i.csv file
+    if [ ! -f "$RUN_LOCAL_DIR/force_mom_$i.csv" ]; then
+        wget "https://huggingface.co/datasets/${HF_OWNER}/${HF_PREFIX}/resolve/main/$RUN_DIR/force_mom_$i.csv" -O "$RUN_LOCAL_DIR/force_mom_$i.csv"
+    else
+        echo "File force_mom_$i.csv already exists, skipping download."
+    fi
+
+    wait # Ensure that all files for this run are downloaded before moving to the next run
 }
 
 echo "Starting download from run $RUN_START to run $RUN_END to directory: $LOCAL_DIR"
