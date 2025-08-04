@@ -47,8 +47,8 @@ class DoMINOMetadata:
     z_bound: Optional[tuple[float, float]] = None  # zmin, zmax
 
     # Mesh statistics
-    num_points: int = None
-    num_faces: int = None
+    num_points: Optional[int] = None
+    num_faces: Optional[int] = None
 
     # Processing parameters
     decimation_reduction: Optional[float] = None
