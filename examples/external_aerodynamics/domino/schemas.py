@@ -42,9 +42,9 @@ class DoMINOMetadata:
     air_density: Optional[float] = None
 
     # Geometry bounds
-    x_bound: tuple[float, float] = None  # xmin, xmax
-    y_bound: tuple[float, float] = None  # ymin, ymax
-    z_bound: tuple[float, float] = None  # zmin, zmax
+    x_bound: Optional[tuple[float, float]] = None  # xmin, xmax
+    y_bound: Optional[tuple[float, float]] = None  # ymin, ymax
+    z_bound: Optional[tuple[float, float]] = None  # zmin, zmax
 
     # Mesh statistics
     num_points: int = None
