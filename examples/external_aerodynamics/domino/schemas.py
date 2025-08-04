@@ -74,10 +74,10 @@ class DoMINOExtractedDataInMemory:
     volume_unstructured_grid: Optional[vtk.vtkUnstructuredGrid] = None
 
     # Processed geometry data
-    stl_coordinates: np.ndarray = None
-    stl_centers: np.ndarray = None
-    stl_faces: np.ndarray = None
-    stl_areas: np.ndarray = None
+    stl_coordinates: Optional[np.ndarray] = None
+    stl_centers: Optional[np.ndarray] = None
+    stl_faces: Optional[np.ndarray] = None
+    stl_areas: Optional[np.ndarray] = None
 
     # Processed surface data
     surface_mesh_centers: Optional[np.ndarray] = None
