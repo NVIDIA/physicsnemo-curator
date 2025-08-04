@@ -156,6 +156,18 @@ For more details on the decimation algorithms and their parameters, refer to:
 Volume meshes are not supported, and in case of `combined` model type,
 only the surface part will be decimated.
 
+### Custom Transformations
+
+This ETL pipeline is intended to be configurable. As such, you can extend it in the following ways:
+
+- Create your own transformation (use [data_transformations.py](./data_transformations.py) as a template)
+- Stack multiple transformations on top of each other.
+This is already demonstrated in [domino_etl.yaml](../../../examples/config/domino_etl.yaml),
+where `DoMINOPreprocessingTransformation` is applied followed by `DoMINOZarrTransformation`.
+
+Please use these guidelines to create your own ETL pipeline to train a DoMINO model
+on a different dataset or on a non external aerdoynamics application!
+
 ### Model Training
 
 Train your DoMINO Model on your own data by following the [example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/domino)!
