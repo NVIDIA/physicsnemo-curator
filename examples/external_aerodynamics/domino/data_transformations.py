@@ -96,17 +96,18 @@ class DoMINOPreprocessingTransformation(DataTransformation):
         self.decimation_algo = None
         self.target_reduction = None
         if decimation is not None:
-            self.decimation_algo = decimation.pop("algo")
+            self.decimation_algo = decimation.get("algo")
             if self.decimation_algo not in self.DECIMATION_ALGOS:
                 raise ValueError(
                     f"Unsupported decimation algo {self.decimation_algo}, must be one of {', '.join(self.DECIMATION_ALGOS)}"
                 )
-            self.target_reduction = decimation.pop("reduction", 0.0)
+            self.target_reduction = decimation.get("reduction", 0.0)
             if not 0 <= self.target_reduction < 1.0:
                 raise ValueError(
                     f"Expected value in [0, 1), got {self.target_reduction}"
                 )
-            self.decimation_kwargs = dict(decimation)
+            # Copy decimation dict, excluding 'algo' and 'reduction'
+            self.decimation_kwargs = {k: v for k, v in decimation.items() if k not in ("algo", "reduction")}
 
         self.constants = PhysicsConstants()
 

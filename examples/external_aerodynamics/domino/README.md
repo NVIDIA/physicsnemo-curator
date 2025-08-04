@@ -166,7 +166,7 @@ This is already demonstrated in [domino_etl.yaml](../../../examples/config/domin
 where `DoMINOPreprocessingTransformation` is applied followed by `DoMINOZarrTransformation`.
 
 Please use these guidelines to create your own ETL pipeline to train a DoMINO model
-on a different dataset or on a non external aerdoynamics application!
+on a different dataset or on a non external aerodynamics application!
 
 ### Model Training
 
