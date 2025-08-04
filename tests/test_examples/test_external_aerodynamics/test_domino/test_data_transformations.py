@@ -360,7 +360,7 @@ class TestDoMINOPreprocessingTransformation:
     def test_initialization_invalid_reduction(self):
         """Test initialization with invalid reduction value."""
         config = ProcessingConfig(num_processes=1)
-        with pytest.raises(ValueError, match="Expected value in \\[0, 1\\)"):
+        with pytest.raises(ValueError, match="Expected value in \[0, 1\)"):
             DoMINOPreprocessingTransformation(
                 config,
                 decimation={"algo": "decimate_pro", "reduction": 1.5},
