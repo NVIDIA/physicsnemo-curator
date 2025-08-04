@@ -19,11 +19,13 @@ from typing import Optional
 
 import numcodecs
 import numpy as np
+import pyvista as pv
+import vtk
 
 from .constants import ModelType
 
 
-@dataclass(frozen=True)
+@dataclass
 class DoMINOMetadata:
     """Metadata for DoMINO simulation data.
 
@@ -36,48 +38,54 @@ class DoMINOMetadata:
     dataset_type: ModelType
 
     # Physical parameters
-    stream_velocity: float
-    air_density: float
+    stream_velocity: Optional[float] = None
+    air_density: Optional[float] = None
 
     # Geometry bounds
-    x_bound: tuple[float, float]
-    y_bound: tuple[float, float]
-    z_bound: tuple[float, float]
+    x_bound: tuple[float, float] = None  # xmin, xmax
+    y_bound: tuple[float, float] = None  # ymin, ymax
+    z_bound: tuple[float, float] = None  # zmin, zmax
 
     # Mesh statistics
-    num_points: int
-    num_faces: int
+    num_points: int = None
+    num_faces: int = None
 
     # Processing parameters
     decimation_reduction: Optional[float] = None
     decimation_algo: Optional[str] = None
 
 
-@dataclass(frozen=True)
+@dataclass
 class DoMINOExtractedDataInMemory:
     """Container for DoMINO data and metadata extracted from the simulation.
     This is the in memory data structure.
 
     Version history:
     - 1.0: Initial version of data for training DoMINO.
+    - 2.0: This can contain raw data and processed data.
     """
 
     # Metadata
     metadata: DoMINOMetadata
 
-    # Geometry data
-    stl_coordinates: np.ndarray
-    stl_centers: np.ndarray
-    stl_faces: np.ndarray
-    stl_areas: np.ndarray
+    # Raw data
+    stl_polydata: Optional[pv.PolyData] = None
+    surface_polydata: Optional[pv.PolyData] = None
+    volume_unstructured_grid: Optional[vtk.vtkUnstructuredGrid] = None
 
-    # Surface data
+    # Processed geometry data
+    stl_coordinates: np.ndarray = None
+    stl_centers: np.ndarray = None
+    stl_faces: np.ndarray = None
+    stl_areas: np.ndarray = None
+
+    # Processed surface data
     surface_mesh_centers: Optional[np.ndarray] = None
     surface_normals: Optional[np.ndarray] = None
     surface_areas: Optional[np.ndarray] = None
     surface_fields: Optional[np.ndarray] = None
 
-    # Volume data
+    # Processed volume data
     volume_mesh_centers: Optional[np.ndarray] = None
     volume_fields: Optional[np.ndarray] = None
 

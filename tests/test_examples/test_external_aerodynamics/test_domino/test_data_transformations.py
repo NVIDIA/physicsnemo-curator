@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import shutil
+import tempfile
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -22,8 +25,13 @@ import pytest
 from examples.external_aerodynamics.domino.constants import (
     ModelType,
 )
+from examples.external_aerodynamics.domino.data_sources import (
+    DatasetKind,
+    DoMINODataSource,
+)
 from examples.external_aerodynamics.domino.data_transformations import (
     DoMINONumpyTransformation,
+    DoMINOPreprocessingTransformation,
     DoMINOZarrTransformation,
 )
 from examples.external_aerodynamics.domino.schemas import (
@@ -35,10 +43,51 @@ from examples.external_aerodynamics.domino.schemas import (
 )
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
+from .utils import create_mock_stl, create_mock_surface_vtk, create_mock_volume_vtk
+
 
 @pytest.fixture
-def sample_data():
-    """Create sample DoMINO data for testing."""
+def temp_dir():
+    """Create a temporary directory for test data."""
+    temp_dir = tempfile.mkdtemp()
+    yield Path(temp_dir)
+    shutil.rmtree(temp_dir)
+
+
+@pytest.fixture
+def sample_data_raw(temp_dir):
+    """Create sample Raw DrivAerML data for testing."""
+
+    case_dir = temp_dir / "run_001"
+    case_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create STL file with correct name and path
+    stl_path = case_dir / "drivaer_001.stl"
+    stl_path.parent.mkdir(parents=True, exist_ok=True)
+    create_mock_stl(stl_path)
+
+    # Create VTK files with correct paths
+    vtk_path = case_dir
+    vtk_path.mkdir(parents=True, exist_ok=True)
+    create_mock_surface_vtk(vtk_path / "boundary_001.vtp")  # Updated surface file name
+    create_mock_volume_vtk(vtk_path / "volume_001.vtu")  # Updated volume file name
+
+    config = ProcessingConfig(num_processes=1)
+    source = DoMINODataSource(
+        config,
+        input_dir=case_dir.parent,
+        kind=DatasetKind.DRIVAERML,
+        model_type=ModelType.COMBINED,
+    )
+
+    data = source.read_file("run_001")
+
+    return data
+
+
+@pytest.fixture
+def sample_data_processed():
+    """Create sample processed DoMINO data for testing."""
     return DoMINOExtractedDataInMemory(
         metadata=DoMINOMetadata(
             filename="run_1234",
@@ -75,33 +124,35 @@ class TestDoMINONumpyTransformation:
         transform = DoMINONumpyTransformation(config)
         assert transform.config == config
 
-    def test_transform(self, sample_data):
+    def test_transform(self, sample_data_processed):
         """Test NumPy transformation of DoMINO data."""
         config = ProcessingConfig(num_processes=1)
         transform = DoMINONumpyTransformation(config)
 
-        result = transform.transform(sample_data)
+        result = transform.transform(sample_data_processed)
         assert isinstance(result, DoMINONumpyDataInMemory)
 
         # Check a couple of STL fields
         np.testing.assert_array_equal(
-            result.stl_coordinates, sample_data.stl_coordinates
+            result.stl_coordinates, sample_data_processed.stl_coordinates
         )
-        np.testing.assert_array_equal(result.stl_areas, sample_data.stl_areas)
+        np.testing.assert_array_equal(result.stl_areas, sample_data_processed.stl_areas)
 
         # Check a couple of surface fields
         np.testing.assert_array_equal(
-            result.surface_mesh_centers, sample_data.surface_mesh_centers
+            result.surface_mesh_centers, sample_data_processed.surface_mesh_centers
         )
         np.testing.assert_array_equal(
-            result.surface_normals, sample_data.surface_normals
+            result.surface_normals, sample_data_processed.surface_normals
         )
 
         # Check a couple of volume fields
         np.testing.assert_array_equal(
-            result.volume_mesh_centers, sample_data.volume_mesh_centers
+            result.volume_mesh_centers, sample_data_processed.volume_mesh_centers
         )
-        np.testing.assert_array_equal(result.volume_fields, sample_data.volume_fields)
+        np.testing.assert_array_equal(
+            result.volume_fields, sample_data_processed.volume_fields
+        )
 
 
 class TestDoMINOZarrTransformation:
@@ -115,25 +166,25 @@ class TestDoMINOZarrTransformation:
         assert transform.compressor.cname == "zstd"
         assert transform.compressor.clevel == 5
 
-    def test_transform(self, sample_data):
+    def test_transform(self, sample_data_processed):
         """Test Zarr transformation of DoMINO data."""
         config = ProcessingConfig(
             num_processes=1,
         )
         transform = DoMINOZarrTransformation(config)
 
-        result = transform.transform(sample_data)
+        result = transform.transform(sample_data_processed)
 
         # Check overall structure
         assert isinstance(result, DoMINOZarrDataInMemory)
 
         # Check metadata
-        assert result.metadata == sample_data.metadata
+        assert result.metadata == sample_data_processed.metadata
 
         # Check one STL field
         assert isinstance(result.stl_coordinates, PreparedZarrArrayInfo)
         np.testing.assert_array_equal(
-            result.stl_coordinates.data, sample_data.stl_coordinates
+            result.stl_coordinates.data, sample_data_processed.stl_coordinates
         )
         assert result.stl_coordinates.chunks == (2, 3)
         assert result.stl_coordinates.compressor == transform.compressor
@@ -141,7 +192,7 @@ class TestDoMINOZarrTransformation:
         # Check one surface field
         assert isinstance(result.surface_mesh_centers, PreparedZarrArrayInfo)
         np.testing.assert_array_equal(
-            result.surface_mesh_centers.data, sample_data.surface_mesh_centers
+            result.surface_mesh_centers.data, sample_data_processed.surface_mesh_centers
         )
         assert result.surface_mesh_centers.chunks == (1, 3)
         assert result.surface_mesh_centers.compressor == transform.compressor
@@ -149,7 +200,7 @@ class TestDoMINOZarrTransformation:
         # Check one volume field
         assert isinstance(result.volume_mesh_centers, PreparedZarrArrayInfo)
         np.testing.assert_array_equal(
-            result.volume_mesh_centers.data, sample_data.volume_mesh_centers
+            result.volume_mesh_centers.data, sample_data_processed.volume_mesh_centers
         )
         assert result.volume_mesh_centers.chunks == (1, 3)
         assert result.volume_mesh_centers.compressor == transform.compressor
@@ -206,21 +257,21 @@ class TestDoMINOZarrTransformation:
             else:
                 assert len(w) == 0
 
-    def test_chunk_size_effect(self, sample_data):
+    def test_chunk_size_effect(self, sample_data_processed):
         """Test that different chunk sizes result in different chunking."""
         # Create larger test data for meaningful chunk size testing
         large_data = DoMINOExtractedDataInMemory(
-            metadata=sample_data.metadata,
+            metadata=sample_data_processed.metadata,
             stl_coordinates=np.random.rand(100000, 3),  # Roughly 2.4 MB
-            stl_centers=sample_data.stl_centers,
-            stl_faces=sample_data.stl_faces,
-            stl_areas=sample_data.stl_areas,
-            surface_mesh_centers=sample_data.surface_mesh_centers,
-            surface_normals=sample_data.surface_normals,
-            surface_areas=sample_data.surface_areas,
+            stl_centers=sample_data_processed.stl_centers,
+            stl_faces=sample_data_processed.stl_faces,
+            stl_areas=sample_data_processed.stl_areas,
+            surface_mesh_centers=sample_data_processed.surface_mesh_centers,
+            surface_normals=sample_data_processed.surface_normals,
+            surface_areas=sample_data_processed.surface_areas,
             surface_fields=np.random.rand(100000, 3),  # Roughly 2.4 MB
-            volume_mesh_centers=sample_data.volume_mesh_centers,
-            volume_fields=sample_data.volume_fields,
+            volume_mesh_centers=sample_data_processed.volume_mesh_centers,
+            volume_fields=sample_data_processed.volume_fields,
         )
 
         config = ProcessingConfig(num_processes=1)
@@ -254,3 +305,193 @@ class TestDoMINOZarrTransformation:
         # 1 chunk; (2.4 MB array size / 10.0 MB chunk size)
         large_data_num_chunks = np.ceil(100000 / large_data_elements_per_chunk)
         assert large_data_num_chunks == 1
+
+
+class TestDoMINOPreprocessingTransformation:
+    """Test the DoMINOPreprocessingTransformation class."""
+
+    def test_initialization(self):
+        """Test initialization of preprocessing transformation."""
+        config = ProcessingConfig(num_processes=1)
+        transform = DoMINOPreprocessingTransformation(
+            config,
+            surface_variables={
+                "pMeanTrim": "scalar",
+                "wallShearStressMeanTrim": "vector",
+            },
+            volume_variables={
+                "UMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+        )
+        assert transform.config == config
+        assert transform.surface_variables == {
+            "pMeanTrim": "scalar",
+            "wallShearStressMeanTrim": "vector",
+        }
+        assert transform.volume_variables == {
+            "UMeanTrim": "vector",
+            "pMeanTrim": "scalar",
+        }
+        assert transform.decimation_algo is None
+        assert transform.target_reduction is None
+
+    def test_initialization_with_decimation(self):
+        """Test initialization with decimation parameters."""
+        config = ProcessingConfig(num_processes=1)
+        transform = DoMINOPreprocessingTransformation(
+            config,
+            surface_variables={"pMeanTrim": "scalar"},
+            volume_variables={"UMeanTrim": "vector"},
+            decimation={"algo": "decimate_pro", "reduction": 0.5},
+        )
+        assert transform.decimation_algo == "decimate_pro"
+        assert transform.target_reduction == 0.5
+
+    def test_initialization_invalid_decimation_algo(self):
+        """Test initialization with invalid decimation algorithm."""
+        config = ProcessingConfig(num_processes=1)
+        with pytest.raises(ValueError, match="Unsupported decimation algo"):
+            DoMINOPreprocessingTransformation(
+                config,
+                decimation={"algo": "invalid_algo", "reduction": 0.5},
+            )
+
+    def test_initialization_invalid_reduction(self):
+        """Test initialization with invalid reduction value."""
+        config = ProcessingConfig(num_processes=1)
+        with pytest.raises(ValueError, match="Expected value in \\[0, 1\\)"):
+            DoMINOPreprocessingTransformation(
+                config,
+                decimation={"algo": "decimate_pro", "reduction": 1.5},
+            )
+
+    def test_transform_basic(self, sample_data_raw):
+        """Test basic preprocessing transformation of DoMINO data."""
+        config = ProcessingConfig(num_processes=1)
+        transform = DoMINOPreprocessingTransformation(
+            config,
+            surface_variables={
+                "pMeanTrim": "scalar",
+                "wallShearStressMeanTrim": "vector",
+            },
+            volume_variables={
+                "UMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+        )
+
+        result = transform.transform(sample_data_raw)
+        assert isinstance(result, DoMINOExtractedDataInMemory)
+
+        # Check that raw data is cleaned up
+        assert result.stl_polydata is None
+        assert result.surface_polydata is None
+        assert result.volume_unstructured_grid is None
+
+        # Check that processed data is updated and converted to float32
+        assert result.stl_coordinates.dtype == np.float32
+        assert result.stl_centers.dtype == np.float32
+        assert result.stl_faces.dtype == np.float32
+        assert result.stl_areas.dtype == np.float32
+
+        # Check metadata updates
+        assert result.metadata.stream_velocity == 30.0  # From PhysicsConstants
+        assert result.metadata.air_density == 1.205  # From PhysicsConstants
+        assert result.metadata.num_points == 3  # From the test mesh
+        assert result.metadata.num_faces == 3  # From the test mesh
+
+    def test_transform_with_surface_data(self, sample_data_raw):
+        """Test preprocessing transformation with surface data."""
+        config = ProcessingConfig(num_processes=1)
+        transform = DoMINOPreprocessingTransformation(
+            config,
+            surface_variables={
+                "pMeanTrim": "scalar",
+                "wallShearStressMeanTrim": "vector",
+            },
+            volume_variables={
+                "UMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+        )
+
+        # Set volume data to None since this is a surface data transformation only test.
+        sample_data_raw.volume_unstructured_grid = None
+        result = transform.transform(sample_data_raw)
+
+        # Check surface data processing
+        assert result.surface_mesh_centers.dtype == np.float32
+        assert result.surface_normals.dtype == np.float32
+        assert result.surface_areas.dtype == np.float32
+        assert result.surface_fields.dtype == np.float32
+
+        # Check that surface fields are non-dimensionalized
+        # The normalization factor should be (air_density * stream_velocity^2)
+        normalization_factor = 1.205 * 30.0**2
+        np.testing.assert_array_almost_equal(
+            result.surface_fields,
+            np.array(
+                [[1.0 / normalization_factor, 1.0 / normalization_factor, 0.0, 0.0]]
+            ),
+        )
+
+        # Check that normals are normalized
+        norms = np.linalg.norm(result.surface_normals, axis=1)
+        np.testing.assert_array_almost_equal(norms, np.ones_like(norms))
+
+    def test_transform_with_volume_data(self, sample_data_raw):
+        """Test preprocessing transformation with volume data."""
+        config = ProcessingConfig(num_processes=1)
+        transform = DoMINOPreprocessingTransformation(
+            config,
+            volume_variables={
+                "UMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+        )
+
+        # Set surface data to None since this is a volume data transformation only test.
+        sample_data_raw.surface_polydata = None
+        result = transform.transform(sample_data_raw)
+
+        # Check volume data processing
+        assert result.volume_mesh_centers.dtype == np.float32
+        assert result.volume_fields.dtype == np.float32
+        assert result.volume_fields is not None
+
+    def test_transform_no_surface_data(self, sample_data_raw):
+        """Test preprocessing transformation without surface data."""
+        config = ProcessingConfig(num_processes=1)
+        transform = DoMINOPreprocessingTransformation(
+            config,
+            volume_variables={"UMeanTrim": "vector"},
+        )
+
+        # Set surface data to None.
+        sample_data_raw.surface_polydata = None
+
+        result = transform.transform(sample_data_raw)
+
+        # Check that surface data is None
+        assert result.surface_mesh_centers is None
+        assert result.surface_normals is None
+        assert result.surface_areas is None
+        assert result.surface_fields is None
+
+    def test_transform_no_volume_data(self, sample_data_raw):
+        """Test preprocessing transformation without volume data."""
+        config = ProcessingConfig(num_processes=1)
+        transform = DoMINOPreprocessingTransformation(
+            config,
+            surface_variables={"pMeanTrim": "scalar"},
+        )
+
+        # Set volume data to None.
+        sample_data_raw.volume_unstructured_grid = None
+
+        result = transform.transform(sample_data_raw)
+
+        # Check that volume data is None
+        assert result.volume_mesh_centers is None
+        assert result.volume_fields is None

@@ -76,23 +76,33 @@ def test_domino_etl_config():
             assert m.call_count == 1
         assert cfg.etl.source.kind == "drivaerml"
         assert cfg.etl.source.model_type == "surface"
-        assert cfg.etl.source.volume_variables == {
+        assert cfg.etl.transformations.preprocessing.volume_variables == {
             "UMeanTrim": "vector",
             "pMeanTrim": "scalar",
             "nutMeanTrim": "scalar",
         }
-        assert cfg.etl.source.surface_variables == {
+        assert cfg.etl.transformations.preprocessing.surface_variables == {
             "pMeanTrim": "scalar",
             "wallShearStressMeanTrim": "vector",
         }
 
         # Test transformation settings
+        # Test preprocessing transformation
+        with patch.object(
+            data_transformations.DoMINOPreprocessingTransformation,
+            "__init__",
+            return_value=None,
+        ) as m:
+            instantiate(cfg.etl.transformations.preprocessing)
+            assert m.call_count == 1
+
+        # Test zarr transformation
         with patch.object(
             data_transformations.DoMINOZarrTransformation,
             "__init__",
             return_value=None,
         ) as m:
-            instantiate(cfg.etl.transformations)
+            instantiate(cfg.etl.transformations.zarr)
             assert m.call_count == 1
 
         # Test sink settings

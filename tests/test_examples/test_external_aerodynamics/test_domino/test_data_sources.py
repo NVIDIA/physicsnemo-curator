@@ -21,6 +21,7 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
+import pyvista as pv
 import vtk
 from numcodecs import Blosc
 
@@ -45,6 +46,8 @@ from examples.external_aerodynamics.domino.schemas import (
 )
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
+from .utils import create_mock_stl, create_mock_surface_vtk, create_mock_volume_vtk
+
 
 @pytest.fixture
 def temp_dir():
@@ -63,13 +66,13 @@ def mock_domino_data_drivaerml(temp_dir):
     # Create STL file with correct name and path
     stl_path = case_dir / "drivaer_001.stl"
     stl_path.parent.mkdir(parents=True, exist_ok=True)
-    _create_mock_stl(stl_path)
+    create_mock_stl(stl_path)
 
     # Create VTK files with correct paths
     vtk_path = case_dir
     vtk_path.mkdir(parents=True, exist_ok=True)
-    _create_mock_surface_vtk(vtk_path / "boundary_001.vtp")  # Updated surface file name
-    _create_mock_volume_vtk(vtk_path / "volume_001.vtu")  # Updated volume file name
+    create_mock_surface_vtk(vtk_path / "boundary_001.vtp")  # Updated surface file name
+    create_mock_volume_vtk(vtk_path / "volume_001.vtu")  # Updated volume file name
 
     return case_dir
 
@@ -83,7 +86,7 @@ def mock_drivesim_data(temp_dir):
     # Create STL file with DriveSim path/name
     stl_path = case_dir / "body.stl"  # Different from DrivAerML
     stl_path.parent.mkdir(parents=True, exist_ok=True)
-    _create_mock_stl(stl_path)
+    create_mock_stl(stl_path)
 
     # Create VTK files with DriveSim paths
     vtk_path = case_dir / "VTK" / "simpleFoam_steady_3000"  # Different structure
@@ -92,112 +95,12 @@ def mock_drivesim_data(temp_dir):
     # Create surface data
     surface_path = vtk_path / "boundary"
     surface_path.mkdir(parents=True, exist_ok=True)
-    _create_mock_surface_vtk(surface_path / "aero_suv.vtp")  # Different filename
+    create_mock_surface_vtk(surface_path / "aero_suv.vtp")  # Different filename
 
     # Create volume data
-    _create_mock_volume_vtk(vtk_path / "internal.vtu")  # Different filename
+    create_mock_volume_vtk(vtk_path / "internal.vtu")  # Different filename
 
     return case_dir
-
-
-def _create_mock_stl(path):
-    """Create a simple STL file."""
-    points = vtk.vtkPoints()
-    points.InsertNextPoint(0, 0, 0)
-    points.InsertNextPoint(1, 0, 0)
-    points.InsertNextPoint(0, 1, 0)
-
-    triangle = vtk.vtkTriangle()
-    triangle.GetPointIds().SetId(0, 0)
-    triangle.GetPointIds().SetId(1, 1)
-    triangle.GetPointIds().SetId(2, 2)
-
-    triangles = vtk.vtkCellArray()
-    triangles.InsertNextCell(triangle)
-
-    polydata = vtk.vtkPolyData()
-    polydata.SetPoints(points)
-    polydata.SetPolys(triangles)
-
-    writer = vtk.vtkSTLWriter()
-    writer.SetFileName(str(path))
-    writer.SetInputData(polydata)
-    writer.Write()
-
-
-def _create_mock_surface_vtk(path):
-    """Create a simple surface VTK file."""
-    polydata = vtk.vtkPolyData()
-
-    # Points
-    points = vtk.vtkPoints()
-    points.InsertNextPoint(0, 0, 0)
-    points.InsertNextPoint(1, 0, 0)
-    points.InsertNextPoint(0, 1, 0)
-    polydata.SetPoints(points)
-
-    # Create a cell (triangle)
-    triangle = vtk.vtkTriangle()
-    triangle.GetPointIds().SetId(0, 0)
-    triangle.GetPointIds().SetId(1, 1)
-    triangle.GetPointIds().SetId(2, 2)
-
-    triangles = vtk.vtkCellArray()
-    triangles.InsertNextCell(triangle)
-    polydata.SetPolys(triangles)
-
-    # Surface data - add to CellData instead of PointData
-    pressure = vtk.vtkFloatArray()
-    pressure.SetName("pMeanTrim")
-    pressure.SetNumberOfComponents(1)
-    pressure.InsertNextValue(1.0)  # One value per cell
-
-    shear = vtk.vtkFloatArray()
-    shear.SetName("wallShearStressMeanTrim")
-    shear.SetNumberOfComponents(3)
-    shear.InsertNextTuple3(1, 0, 0)  # One vector per cell
-
-    polydata.GetCellData().AddArray(pressure)  # Changed from PointData to CellData
-    polydata.GetCellData().AddArray(shear)  # Changed from PointData to CellData
-
-    writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetFileName(str(path))
-    writer.SetInputData(polydata)
-    writer.Write()
-
-
-def _create_mock_volume_vtk(path):
-    """Create a simple volume VTK file."""
-    grid = vtk.vtkUnstructuredGrid()
-
-    # Points
-    points = vtk.vtkPoints()
-    points.InsertNextPoint(0, 0, 0)
-    points.InsertNextPoint(1, 0, 0)
-    points.InsertNextPoint(0, 1, 0)
-    points.InsertNextPoint(0, 0, 1)
-    grid.SetPoints(points)
-
-    # Volume data
-    velocity = vtk.vtkFloatArray()
-    velocity.SetName("UMeanTrim")
-    velocity.SetNumberOfComponents(3)
-    for _ in range(4):
-        velocity.InsertNextTuple3(1, 0, 0)
-
-    pressure = vtk.vtkFloatArray()
-    pressure.SetName("pMeanTrim")
-    pressure.SetNumberOfComponents(1)
-    for i in range(4):
-        pressure.InsertNextValue(float(i))
-
-    grid.GetPointData().AddArray(velocity)
-    grid.GetPointData().AddArray(pressure)
-
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(str(path))
-    writer.SetInputData(grid)
-    writer.Write()
 
 
 class TestDoMINODataSource:
@@ -247,17 +150,13 @@ class TestDoMINODataSource:
             input_dir=mock_domino_data_drivaerml.parent,
             kind=DatasetKind.DRIVAERML,
             model_type=ModelType.SURFACE,
-            surface_variables={
-                "pMeanTrim": "scalar",
-                "wallShearStressMeanTrim": "vector",
-            },
         )
 
         data = source.read_file("run_001")
 
         assert isinstance(data, DoMINOExtractedDataInMemory)
-        assert data.surface_fields is not None
-        assert isinstance(data.surface_fields, np.ndarray)
+        assert data.surface_polydata is not None
+        assert isinstance(data.surface_polydata, pv.PolyData)
         assert data.metadata.filename == "run_001"
 
     def test_drivaerml_read_volume_data(self, mock_domino_data_drivaerml):
@@ -268,14 +167,13 @@ class TestDoMINODataSource:
             input_dir=mock_domino_data_drivaerml.parent,
             kind=DatasetKind.DRIVAERML,
             model_type=ModelType.VOLUME,
-            volume_variables={"UMeanTrim": "vector", "pMeanTrim": "scalar"},
         )
 
         data = source.read_file("run_001")
 
         assert isinstance(data, DoMINOExtractedDataInMemory)
-        assert data.volume_fields is not None
-        assert isinstance(data.volume_fields, np.ndarray)
+        assert data.volume_unstructured_grid is not None
+        assert isinstance(data.volume_unstructured_grid, vtk.vtkUnstructuredGrid)
         assert data.metadata.filename == "run_001"
 
     def test_drivaerml_write_numpy(self, temp_dir):
@@ -407,17 +305,13 @@ class TestDoMINODataSource:
             input_dir=mock_drivesim_data.parent,
             kind=DatasetKind.DRIVESIM,
             model_type=ModelType.SURFACE,
-            surface_variables={
-                "pMeanTrim": "scalar",
-                "wallShearStressMeanTrim": "vector",
-            },
         )
 
         data = source.read_file("run_001")
 
         assert isinstance(data, DoMINOExtractedDataInMemory)
-        assert data.surface_fields is not None
-        assert isinstance(data.surface_fields, np.ndarray)
+        assert data.surface_polydata is not None
+        assert isinstance(data.surface_polydata, pv.PolyData)
         assert data.metadata.filename == "run_001"
 
     def test_drivesim_read_volume_data(self, mock_drivesim_data):
@@ -428,14 +322,13 @@ class TestDoMINODataSource:
             input_dir=mock_drivesim_data.parent,
             kind=DatasetKind.DRIVESIM,
             model_type=ModelType.VOLUME,
-            volume_variables={"UMeanTrim": "vector", "pMeanTrim": "scalar"},
         )
 
         data = source.read_file("run_001")
 
         assert isinstance(data, DoMINOExtractedDataInMemory)
-        assert data.volume_fields is not None
-        assert isinstance(data.volume_fields, np.ndarray)
+        assert data.volume_unstructured_grid is not None
+        assert isinstance(data.volume_unstructured_grid, vtk.vtkUnstructuredGrid)
         assert data.metadata.filename == "run_001"
 
     def test_path_getter_selection(self):

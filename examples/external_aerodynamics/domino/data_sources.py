@@ -15,10 +15,9 @@
 # limitations under the License.
 
 import shutil
-import warnings
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import numpy as np
 import pyvista as pv
@@ -28,8 +27,7 @@ import zarr
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
-from .constants import DatasetKind, ModelType, PhysicsConstants
-from .domino_utils import get_volume_data, to_float32
+from .constants import DatasetKind, ModelType
 from .paths import get_path_getter
 from .schemas import (
     DoMINOExtractedDataInMemory,
@@ -42,48 +40,26 @@ from .schemas import (
 class DoMINODataSource(DataSource):
     """Data source for reading and writing DoMINO simulation data."""
 
-    DECIMATION_ALGOS: tuple[str, ...] = ("decimate_pro", "decimate")
-
     def __init__(
         self,
         cfg: ProcessingConfig,
         input_dir: Optional[Path] = None,
         output_dir: Optional[Path] = None,
         kind: DatasetKind | str = DatasetKind.DRIVAERML,
-        surface_variables: Optional[dict[str, str]] = None,
-        volume_variables: Optional[dict[str, str]] = None,
         model_type: Optional[ModelType | str] = None,
         serialization_method: str = "numpy",
         overwrite_existing: bool = True,
-        decimation: Optional[dict[str, Any]] = None,
     ):
         super().__init__(cfg)
 
         self.input_dir = Path(input_dir) if input_dir else None
         self.output_dir = Path(output_dir) if output_dir else None
         self.kind = DatasetKind(kind.lower()) if isinstance(kind, str) else kind
-        self.surface_variables = surface_variables
-        self.volume_variables = volume_variables
         self.model_type = (
             ModelType(model_type.lower()) if isinstance(model_type, str) else None
         )
         self.serialization_method = serialization_method
         self.overwrite_existing = overwrite_existing
-
-        self.decimation_algo = None
-        self.target_reduction = None
-        if decimation is not None:
-            self.decimation_algo = decimation.pop("algo")
-            if self.decimation_algo not in self.DECIMATION_ALGOS:
-                raise ValueError(
-                    f"Unsupported decimation algo {self.decimation_algo}, must be one of {', '.join(self.DECIMATION_ALGOS)}"
-                )
-            self.target_reduction = decimation.pop("reduction", 0.0)
-            if not 0 <= self.target_reduction < 1.0:
-                raise ValueError(
-                    f"Expected value in [0, 1), got {self.target_reduction}"
-                )
-            self.decimation_kwargs = dict(decimation)
 
         # Validate directories based on read/write usage
         if self.input_dir and not self.input_dir.exists():
@@ -92,7 +68,6 @@ class DoMINODataSource(DataSource):
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.path_getter = get_path_getter(kind)
-        self.constants = PhysicsConstants()
 
     def get_file_list(self) -> list[str]:
         """Get list of simulation directories to process."""
@@ -121,27 +96,11 @@ class DoMINODataSource(DataSource):
             raise FileNotFoundError(f"STL file not found: {stl_path}")
 
         reader = pv.get_reader(str(stl_path))
-        mesh_stl = reader.read()
-
-        bounds = mesh_stl.bounds
-        stl_vertices = mesh_stl.points
-        stl_faces = np.array(mesh_stl.faces).reshape((-1, 4))[
-            :, 1:
-        ]  # Assuming triangular elements
-        mesh_indices_flattened = stl_faces.flatten()
-        stl_sizes = mesh_stl.compute_cell_sizes(length=False, area=True, volume=False)
-        stl_sizes = np.array(stl_sizes.cell_data["Area"])
-        stl_centers = np.array(mesh_stl.cell_centers().points)
-
-        length_scale = np.amax(np.amax(stl_vertices, 0) - np.amin(stl_vertices, 0))
+        stl_polydata = reader.read()
 
         # Initialize volume and surface data
-        volume_fields = None
-        volume_coordinates = None
-        surface_fields = None
-        surface_coordinates = None
-        surface_normals = None
-        surface_sizes = None
+        surface_polydata = None
+        volume_unstructured_grid = None
 
         # Load volume data if needed
         if self.model_type in [ModelType.VOLUME, ModelType.COMBINED]:
@@ -152,12 +111,7 @@ class DoMINODataSource(DataSource):
             reader = vtk.vtkXMLUnstructuredGridReader()
             reader.SetFileName(str(volume_path))
             reader.Update()
-            polydata = reader.GetOutput()
-
-            # Process volume data
-            volume_coordinates, volume_fields = self._process_volume_data(
-                polydata, length_scale
-            )
+            volume_unstructured_grid = reader.GetOutput()
 
         # Load surface data if needed
         if self.model_type in [ModelType.SURFACE, ModelType.COMBINED]:
@@ -165,121 +119,19 @@ class DoMINODataSource(DataSource):
             if not surface_path.exists():
                 raise FileNotFoundError(f"Surface data file not found: {surface_path}")
 
-            # Process surface data
-            (
-                surface_coordinates,
-                surface_normals,
-                surface_sizes,
-                surface_fields,
-            ) = self._process_surface_data(surface_path)
+            surface_polydata = pv.read(surface_path)
 
         metadata = DoMINOMetadata(
             filename=dirname,
-            stream_velocity=self.constants.STREAM_VELOCITY,
-            air_density=self.constants.AIR_DENSITY,
-            x_bound=bounds[0:2],  # xmin, xmax
-            y_bound=bounds[2:4],  # ymin, ymax
-            z_bound=bounds[4:6],  # zmin, zmax
             dataset_type=self.model_type,  # surface, volume, combined
-            num_points=len(mesh_stl.points),
-            num_faces=len(mesh_indices_flattened),
-            decimation_reduction=self.target_reduction,
-            decimation_algo=self.decimation_algo,
         )
 
         return DoMINOExtractedDataInMemory(
-            stl_coordinates=to_float32(stl_vertices),
-            stl_centers=to_float32(stl_centers),
-            stl_faces=to_float32(mesh_indices_flattened),
-            stl_areas=to_float32(stl_sizes),
-            surface_mesh_centers=to_float32(surface_coordinates),
-            surface_normals=to_float32(surface_normals),
-            surface_areas=to_float32(surface_sizes),
-            volume_fields=to_float32(volume_fields),
-            volume_mesh_centers=to_float32(volume_coordinates),
-            surface_fields=to_float32(surface_fields),
+            stl_polydata=stl_polydata,
+            surface_polydata=surface_polydata,
+            volume_unstructured_grid=volume_unstructured_grid,
             metadata=metadata,
         )
-
-    def _process_volume_data(self, polydata, length_scale):
-        """Process volume mesh data."""
-
-        volume_coordinates, volume_fields = get_volume_data(
-            polydata, self.volume_variables
-        )
-        volume_fields = np.concatenate(volume_fields, axis=-1)
-
-        # Non-dimensionalize volume fields
-        volume_fields[:, :3] = volume_fields[:, :3] / self.constants.STREAM_VELOCITY
-        volume_fields[:, 3:4] = volume_fields[:, 3:4] / (
-            self.constants.AIR_DENSITY * self.constants.STREAM_VELOCITY**2.0
-        )
-        volume_fields[:, 4:] = volume_fields[:, 4:] / (
-            self.constants.STREAM_VELOCITY * length_scale
-        )
-
-        return volume_coordinates, volume_fields
-
-    def _process_surface_data(self, filename: Path):
-        """Process surface mesh data."""
-
-        mesh = pv.read(filename)
-
-        # Decimate mesh if needed.
-        mesh = self._decimate_mesh(mesh)
-
-        cell_data = (mesh.cell_data[k] for k in self.surface_variables)
-        surface_fields = np.concatenate(
-            [d if d.ndim > 1 else d[:, np.newaxis] for d in cell_data], axis=-1
-        )
-        surface_coordinates = np.array(mesh.cell_centers().points)
-        surface_normals = np.array(mesh.cell_normals)
-        surface_sizes = mesh.compute_cell_sizes(length=False, area=True, volume=False)
-        surface_sizes = np.array(surface_sizes.cell_data["Area"])
-
-        # Normalize cell normals
-        surface_normals = (
-            surface_normals / np.linalg.norm(surface_normals, axis=1)[:, np.newaxis]
-        )
-
-        # Non-dimensionalize surface fields
-        surface_fields = surface_fields / (
-            self.constants.AIR_DENSITY * self.constants.STREAM_VELOCITY**2.0
-        )
-
-        return surface_coordinates, surface_normals, surface_sizes, surface_fields
-
-    def _decimate_mesh(self, mesh: pv.PolyData):
-        """Decimate source mesh."""
-
-        if not (self.decimation_algo is not None and self.target_reduction > 0):
-            return mesh
-
-        # Need point_data to interpolate target mesh node values.
-        mesh = mesh.cell_data_to_point_data()
-        # Decimation algos require tri-mesh.
-        mesh = mesh.triangulate()
-        match self.decimation_algo:
-            case "decimate_pro":
-                mesh = mesh.decimate_pro(
-                    self.target_reduction, **self.decimation_kwargs
-                )
-            case "decimate":
-                if mesh.n_points > 400_000:
-                    warnings.warn(
-                        "decimate algo may hang on meshes of size more than 400K"
-                    )
-                mesh = mesh.decimate(
-                    self.target_reduction,
-                    attribute_error=True,
-                    scalars=True,
-                    vectors=True,
-                    **self.decimation_kwargs,
-                )
-            case _:
-                raise ValueError(f"Unsupported decimation algo {self.algo}")
-        # Compute cell data.
-        return mesh.point_data_to_cell_data()
 
     def write(
         self,
