@@ -60,6 +60,8 @@ etl:
     # Users can choose between DoMINOZarrTransformation or DoMINONumpyTransformation.
     # NOTE: This should match the Sink class' serialization method.
     # If you choose the NumPy transformation, please comment out the Zarr transformation, and uncomment the below NumPy transformation.
+
+    # TODO (@saikrishnanc): Use Hydra facilities to avoid having to edit the config in multiple places.
     zarr:
       _target_: examples.external_aerodynamics.domino.data_transformations.DoMINOZarrTransformation
       _convert_: all

@@ -108,6 +108,7 @@ class DoMINODataSource(DataSource):
             if not volume_path.exists():
                 raise FileNotFoundError(f"Volume data file not found: {volume_path}")
 
+            # TODO (@saikrishnanc): Use pyvista to read the volume data.
             reader = vtk.vtkXMLUnstructuredGridReader()
             reader.SetFileName(str(volume_path))
             reader.Update()
