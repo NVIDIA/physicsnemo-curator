@@ -107,7 +107,9 @@ class DoMINOPreprocessingTransformation(DataTransformation):
                     f"Expected value in [0, 1), got {self.target_reduction}"
                 )
             # Copy decimation dict, excluding 'algo' and 'reduction'
-            self.decimation_kwargs = {k: v for k, v in decimation.items() if k not in ("algo", "reduction")}
+            self.decimation_kwargs = {
+                k: v for k, v in decimation.items() if k not in ("algo", "reduction")
+            }
 
         self.constants = PhysicsConstants()
 
