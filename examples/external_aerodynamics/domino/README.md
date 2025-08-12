@@ -20,7 +20,7 @@ The DoMINO ETL pipeline processes automotive aerodynamics simulation data for ma
 - Computes derived quantities and reference values
 - Applies mesh decimation for efficiency (optional)
 
-**Outputs:** Training-ready datasets in numpy or Zarr format
+**Outputs:** Training-ready datasets in NumPy or Zarr format
 
 - Optimized for DoMINO model training workflows
 - Compressed and chunked for efficient data loading
@@ -107,9 +107,7 @@ physicsnemo-curator-etl                    \
 - `etl.common.model_type`: can be `surface` (default) or `volume` or `combined`.
     This option is used to specify the type of model that will be trained on the
     dataset.
-- **Output format**: To switch from Zarr (default) to NumPy, make two changes for consistency:
-  1. In `etl.transformations`: uncomment the `numpy` section and comment out the `zarr` section
-  2. In `etl.sink`: set `serialization_method` to `"numpy"`
+- **Output format**: To switch from Zarr (default) to NumPy, please use the `serialization_format=numpy` flag.
 
 Please refer to the [config file](../../../examples/config/domino_etl.yaml) for more
 options.

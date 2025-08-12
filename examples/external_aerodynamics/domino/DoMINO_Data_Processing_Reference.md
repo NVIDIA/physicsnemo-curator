@@ -50,10 +50,10 @@ The processed data is stored in either numpy or zarr format:
 
 ```bash
 output/
-└── run_1.npy
+└── run_1.npz
 ```
 
-The `npy` file contains a dictionary with the following keys:
+The `npz` file contains a dictionary with the following keys:
 
 - `stl_coordinates`: (float32) Vertex coordinates from STL geometry
 - `stl_centers`: (float32) Cell center coordinates from STL

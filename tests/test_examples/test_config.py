@@ -102,7 +102,7 @@ def test_domino_etl_config():
             "__init__",
             return_value=None,
         ) as m:
-            instantiate(cfg.etl.transformations.zarr)
+            instantiate(cfg.etl.transformations.write_ready_transformation)
             assert m.call_count == 1
 
         # Test sink settings

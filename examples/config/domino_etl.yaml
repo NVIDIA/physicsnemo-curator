@@ -16,6 +16,8 @@
 
 defaults:
   - /variables: drivaerml
+  - /serialization_format: zarr  # Default value, can be overridden via CLI
+  - /override_transformations: ${serialization_format}
   - _self_
 
 etl:
@@ -55,23 +57,7 @@ etl:
         reduction: 0.0  # 0 means no decimation.
         preserve_topology: false
 
-    # Default - Zarr transformation.
-    # This takes in the processed data and metadata, and converts it into a Zarr/NumPy write ready format.
-    # Users can choose between DoMINOZarrTransformation or DoMINONumpyTransformation.
-    # NOTE: This should match the Sink class' serialization method.
-    # If you choose the NumPy transformation, please comment out the Zarr transformation, and uncomment the below NumPy transformation.
-
-    # TODO (@saikrishnanc): Use Hydra facilities to avoid having to edit the config in multiple places.
-    zarr:
-      _target_: examples.external_aerodynamics.domino.data_transformations.DoMINOZarrTransformation
-      _convert_: all
-      compression_method: "zstd"
-      compression_level: 5
-      chunk_size_mb: 1.0
-
-    # numpy:
-    #   _target_: examples.external_aerodynamics.domino.data_transformations.DoMINONumpyTransformation
-    #   _convert_: all
+    write_ready_transformation: ${override_transformations.write_ready_transformation}
 
   sink:
     _target_: examples.external_aerodynamics.domino.data_sources.DoMINODataSource
@@ -79,6 +65,5 @@ etl:
 
     output_dir: ???  # Path to output directory (required)
     kind: ${etl.common.kind}
-    # "zarr" or "numpy". NOTE: This should match the Transformation class' output format.
-    serialization_method: "zarr"
+    serialization_method: ${serialization_format.serialization_method}
     overwrite_existing: true
