@@ -114,13 +114,13 @@ class DoMINODataSource(DataSource):
             reader.Update()
             volume_unstructured_grid = reader.GetOutput()
 
-        # Load surface data if needed
-        if self.model_type in [ModelType.SURFACE, ModelType.COMBINED]:
-            surface_path = self.path_getter.surface_path(car_dir)
-            if not surface_path.exists():
-                raise FileNotFoundError(f"Surface data file not found: {surface_path}")
+        # # Load surface data if needed
+        # if self.model_type in [ModelType.SURFACE, ModelType.COMBINED]:
+        #     surface_path = self.path_getter.surface_path(car_dir)
+        #     if not surface_path.exists():
+        #         raise FileNotFoundError(f"Surface data file not found: {surface_path}")
 
-            surface_polydata = pv.read(surface_path)
+        #     surface_polydata = pv.read(surface_path)
 
         metadata = DoMINOMetadata(
             filename=dirname,
