@@ -121,9 +121,9 @@ class DoMINOPreprocessingTransformation(DataTransformation):
         # Process STL data
         mesh_stl = data.stl_polydata
         stl_vertices = mesh_stl.points
-        stl_faces = np.array(mesh_stl.faces).reshape((-1, 4))[
-            :, 1:
-        ]  # Assuming triangular elements
+        stl_faces = (
+            np.array(mesh_stl.faces).reshape((-1, 4))[:, 1:].astype(np.int32)
+        )  # Assuming triangular elements
         mesh_indices_flattened = stl_faces.flatten()
         stl_sizes = mesh_stl.compute_cell_sizes(length=False, area=True, volume=False)
         stl_sizes = np.array(stl_sizes.cell_data["Area"])
@@ -135,7 +135,7 @@ class DoMINOPreprocessingTransformation(DataTransformation):
         # Update processed STL data
         data.stl_coordinates = to_float32(stl_vertices)
         data.stl_centers = to_float32(stl_centers)
-        data.stl_faces = to_float32(mesh_indices_flattened)
+        data.stl_faces = mesh_indices_flattened
         data.stl_areas = to_float32(stl_sizes)
 
         # Update metadata
