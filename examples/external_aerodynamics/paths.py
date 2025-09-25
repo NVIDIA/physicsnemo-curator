@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-This module contains the path definitions for the DoMINO dataset.
+This module contains the path definitions for the External Aerodynamics dataset.
 """
 
 from enum import Enum

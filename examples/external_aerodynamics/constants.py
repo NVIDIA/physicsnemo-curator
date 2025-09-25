@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-This module contains constants and enums for the DoMINO dataset.
+This module contains constants and enums for external aerodynamics datasets.
 """
 
 from dataclasses import dataclass

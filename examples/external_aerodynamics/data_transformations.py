@@ -26,42 +26,44 @@ from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 from .constants import PhysicsConstants
-from .domino_utils import decimate_mesh, get_volume_data, to_float32
+from .external_aero_utils import decimate_mesh, get_volume_data, to_float32
 from .schemas import (
-    DoMINOExtractedDataInMemory,
-    DoMINONumpyDataInMemory,
-    DoMINONumpyMetadata,
-    DoMINOZarrDataInMemory,
+    ExternalAerodynamicsExtractedDataInMemory,
+    ExternalAerodynamicsNumpyDataInMemory,
+    ExternalAerodynamicsNumpyMetadata,
+    ExternalAerodynamicsZarrDataInMemory,
     PreparedZarrArrayInfo,
 )
 
 
-class DoMINONumpyTransformation(DataTransformation):
-    """Transforms DoMINO data for NumPy storage format (legacy support)."""
+class ExternalAerodynamicsNumpyTransformation(DataTransformation):
+    """Transforms External Aerodynamics data for NumPy storage format (legacy support)."""
 
     def __init__(self, cfg: ProcessingConfig):
         super().__init__(cfg)
 
-    def transform(self, data: DoMINOExtractedDataInMemory) -> DoMINONumpyDataInMemory:
-        """Transform data for NumPy storage.
+    def transform(
+        self, data: ExternalAerodynamicsExtractedDataInMemory
+    ) -> ExternalAerodynamicsNumpyDataInMemory:
+        """Transform data for NumPy storage format.
 
         Note: This is a legacy format with minimal metadata support.
         For full metadata support, use Zarr storage format instead.
 
         Args:
-            data: DoMINO extracted data in memory
+            data: External Aerodynamics extracted data in memory
 
         Returns:
             Data formatted for NumPy storage with basic metadata
         """
         # Create minimal metadata
-        numpy_metadata = DoMINONumpyMetadata(
+        numpy_metadata = ExternalAerodynamicsNumpyMetadata(
             filename=data.metadata.filename,
             stream_velocity=data.metadata.stream_velocity,
             air_density=data.metadata.air_density,
         )
 
-        return DoMINONumpyDataInMemory(
+        return ExternalAerodynamicsNumpyDataInMemory(
             stl_coordinates=to_float32(data.stl_coordinates),
             stl_centers=to_float32(data.stl_centers),
             stl_faces=to_float32(data.stl_faces),
@@ -76,8 +78,8 @@ class DoMINONumpyTransformation(DataTransformation):
         )
 
 
-class DoMINOPreprocessingTransformation(DataTransformation):
-    """General preprocessing of data for DoMINO model."""
+class ExternalAerodynamicsPreprocessingTransformation(DataTransformation):
+    """General preprocessing of data for External Aerodynamics model."""
 
     DECIMATION_ALGOS: tuple[str, ...] = ("decimate_pro", "decimate")
 
@@ -114,8 +116,8 @@ class DoMINOPreprocessingTransformation(DataTransformation):
         self.constants = PhysicsConstants()
 
     def transform(
-        self, data: DoMINOExtractedDataInMemory
-    ) -> DoMINOExtractedDataInMemory:
+        self, data: ExternalAerodynamicsExtractedDataInMemory
+    ) -> ExternalAerodynamicsExtractedDataInMemory:
         """Transform data for preprocessing."""
 
         # Process STL data
@@ -246,8 +248,8 @@ class DoMINOPreprocessingTransformation(DataTransformation):
         return surface_coordinates, surface_normals, surface_sizes, surface_fields
 
 
-class DoMINOZarrTransformation(DataTransformation):
-    """Transforms DoMINO data for Zarr storage format."""
+class ExternalAerodynamicsZarrTransformation(DataTransformation):
+    """Transforms External Aerodynamics data for Zarr storage format."""
 
     def __init__(
         self,
@@ -304,13 +306,15 @@ class DoMINOZarrTransformation(DataTransformation):
             compressor=self.compressor,
         )
 
-    def transform(self, data: DoMINOExtractedDataInMemory) -> DoMINOZarrDataInMemory:
-        """Transform data for Zarr storage.
+    def transform(
+        self, data: ExternalAerodynamicsExtractedDataInMemory
+    ) -> ExternalAerodynamicsZarrDataInMemory:
+        """Transform data for Zarr storage format.
 
         Organizes data into hierarchical groups and applies compression settings.
 
         Args:
-            data: Dictionary containing DoMINO data
+            data: Dictionary containing External Aerodynamics data
 
         Returns:
             Dictionary with data formatted for Zarr storage, including:
@@ -318,7 +322,7 @@ class DoMINOZarrTransformation(DataTransformation):
                 - Compression settings
                 - Chunking configurations
         """
-        return DoMINOZarrDataInMemory(
+        return ExternalAerodynamicsZarrDataInMemory(
             stl_coordinates=self._prepare_array(data.stl_coordinates),
             stl_centers=self._prepare_array(data.stl_centers),
             stl_faces=self._prepare_array(data.stl_faces),

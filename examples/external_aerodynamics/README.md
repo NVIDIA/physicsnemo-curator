@@ -1,10 +1,11 @@
-# How to curate data for DoMINO model with PhysicsNeMo-Curator
+# How to curate data for External Aerodynamics model with PhysicsNeMo-Curator
 
-This document describes the DoMINO data processing pipeline in PhysicsNeMo Curator.
+This document describes the External Aerodynamics data processing pipeline in PhysicsNeMo Curator.
+**NOTE** This can be used as is for the DoMINO and Transolver models.
 
 ## Overview
 
-The DoMINO ETL pipeline processes automotive aerodynamics simulation data for machine learning training. It:
+The External Aerodynamics ETL pipeline processes automotive aerodynamics simulation data for machine learning training. It:
 
 **Reads:** CFD simulation data in multiple schemas (DriveSim, DrivAerML, AhmedML)
 
@@ -22,7 +23,7 @@ The DoMINO ETL pipeline processes automotive aerodynamics simulation data for ma
 
 **Outputs:** Training-ready datasets in NumPy or Zarr format
 
-- Optimized for DoMINO model training workflows
+- Optimized for DoMINO and Transolver model training workflows
 - Compressed and chunked for efficient data loading
 - Preserves metadata and processing parameters
 
@@ -62,7 +63,7 @@ Example of the command line that launches Curator configured for DrivAerML datas
 export PYTHONPATH=$PYTHONPATH:examples &&
 physicsnemo-curator-etl                         \
     --config-dir=examples/config                \
-    --config-name=domino_etl                    \
+    --config-name=external_aero_etl_drivaerml   \
     etl.source.input_dir=/data/drivaerml/       \
     etl.sink.output_dir=/data/drivaerml.processed.surface \
     etl.common.model_type=surface
@@ -72,10 +73,10 @@ To run on AhmedML dataset:
 
 ```bash
 export PYTHONPATH=$PYTHONPATH:examples &&
-physicsnemo-curator-etl                    \
-    --config-dir=examples/config           \
-    --config-name=domino_etl_ahmedml      \
-    etl.source.input_dir=/data/ahmedml/   \
+physicsnemo-curator-etl                     \
+    --config-dir=examples/config            \
+    --config-name=external_aero_etl_ahmedml \
+    etl.source.input_dir=/data/ahmedml/     \
     etl.sink.output_dir=/data/ahmedml.processed.surface \
     etl.common.model_type=surface
 ```
@@ -90,7 +91,7 @@ physicsnemo-curator-etl                    \
     dataset.
 - **Output format**: To switch from Zarr (default) to NumPy, please use the `serialization_format=numpy` flag.
 
-Please refer to the [config file](../../../examples/config/domino_etl.yaml) for more
+Please refer to the [config file](../../../examples/config/external_aero_etl_drivaerml.yaml) for more
 options.
 
 ### Mesh Decimation Options
@@ -141,12 +142,15 @@ This ETL pipeline is intended to be configurable. As such, you can extend it in 
 
 - Create your own transformation (use [data_transformations.py](./data_transformations.py) as a template)
 - Stack multiple transformations on top of each other.
-This is already demonstrated in [domino_etl.yaml](../../../examples/config/domino_etl.yaml),
+This is already demonstrated in [external_aero_etl_drivaerml.yaml](../../../examples/config/external_aero_etl_drivaerml.yaml),
 where `DoMINOPreprocessingTransformation` is applied followed by `DoMINOZarrTransformation`.
 
-Please use these guidelines to create your own ETL pipeline to train a DoMINO model
+Please use these guidelines to create your own ETL pipeline to train a DoMINO or Transolver model
 on a different dataset or on a non external aerodynamics application!
 
 ### Model Training
 
-Train your DoMINO Model on your own data by following the [example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/domino)!
+Train your External Aerodynamics Model on your own data by following the
+[DoMINO example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/domino)
+or the
+[Transolver example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/transolver).

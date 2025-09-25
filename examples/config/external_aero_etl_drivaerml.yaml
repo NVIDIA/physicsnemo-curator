@@ -27,17 +27,17 @@ etl:
     model_type: surface  # produce data for which model? surface, volume, combined
 
   processing:
-    num_processes: 12
+    num_processes: 4
     args: {}
 
   validator:
-    _target_: examples.external_aerodynamics.domino.dataset_validator.DoMINODatasetValidator
+    _target_: examples.external_aerodynamics.dataset_validator.ExternalAerodynamicsDatasetValidator
     _convert_: all
 
     validation_level: "fields"  # One of "structure" or "fields"
 
   source:
-    _target_: examples.external_aerodynamics.domino.data_sources.DoMINODataSource
+    _target_: examples.external_aerodynamics.data_sources.ExternalAerodynamicsDataSource
     _convert_: all
 
     input_dir: ???  # Path to input dataset directory (required)
@@ -50,7 +50,7 @@ etl:
     # These take in the raw geometry, volume and surface data, and apply DoMINO specific preprocessing transformations.
     # Variable names are piped in from the variables/drivaerml.yaml or variables/ahmedml.yaml file.
     preprocessing:
-      _target_: examples.external_aerodynamics.domino.data_transformations.DoMINOPreprocessingTransformation
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsPreprocessingTransformation
       _convert_: all
       decimation:
         algo: decimate_pro  # can be one of {decimate_pro, decimate}
@@ -60,7 +60,7 @@ etl:
     write_ready_transformation: ${override_transformations.write_ready_transformation}
 
   sink:
-    _target_: examples.external_aerodynamics.domino.data_sources.DoMINODataSource
+    _target_: examples.external_aerodynamics.data_sources.ExternalAerodynamicsDataSource
     _convert_: all
 
     output_dir: ???  # Path to output directory (required)

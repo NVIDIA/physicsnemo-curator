@@ -30,15 +30,15 @@ from physicsnemo_curator.etl.processing_config import ProcessingConfig
 from .constants import DatasetKind, ModelType
 from .paths import get_path_getter
 from .schemas import (
-    DoMINOExtractedDataInMemory,
-    DoMINOMetadata,
-    DoMINONumpyDataInMemory,
-    DoMINOZarrDataInMemory,
+    ExternalAerodynamicsExtractedDataInMemory,
+    ExternalAerodynamicsMetadata,
+    ExternalAerodynamicsNumpyDataInMemory,
+    ExternalAerodynamicsZarrDataInMemory,
 )
 
 
-class DoMINODataSource(DataSource):
-    """Data source for reading and writing DoMINO simulation data."""
+class ExternalAerodynamicsDataSource(DataSource):
+    """Data source for reading and writing External Aerodynamics simulation data."""
 
     def __init__(
         self,
@@ -73,15 +73,15 @@ class DoMINODataSource(DataSource):
         """Get list of simulation directories to process."""
         return sorted(d.name for d in self.input_dir.iterdir() if d.is_dir())
 
-    def read_file(self, dirname: str) -> DoMINOExtractedDataInMemory:
-        """Read DoMINO simulation data from a directory.
+    def read_file(self, dirname: str) -> ExternalAerodynamicsExtractedDataInMemory:
+        """Read External Aerodynamics simulation data from a directory.
 
         Args:
             dirname: Name of the simulation directory
 
         Returns:
-            DoMINOExtractedDataInMemory containing processed simulation data,
-            and metadata (DoMINOMetadata).
+            ExternalAerodynamicsExtractedDataInMemory containing processed simulation data,
+            and metadata (ExternalAerodynamicsMetadata).
 
         Raises:
             FileNotFoundError: STL file is not found.
@@ -122,12 +122,12 @@ class DoMINODataSource(DataSource):
 
             surface_polydata = pv.read(surface_path)
 
-        metadata = DoMINOMetadata(
+        metadata = ExternalAerodynamicsMetadata(
             filename=dirname,
             dataset_type=self.model_type,  # surface, volume, combined
         )
 
-        return DoMINOExtractedDataInMemory(
+        return ExternalAerodynamicsExtractedDataInMemory(
             stl_polydata=stl_polydata,
             surface_polydata=surface_polydata,
             volume_unstructured_grid=volume_unstructured_grid,
@@ -136,7 +136,9 @@ class DoMINODataSource(DataSource):
 
     def write(
         self,
-        data: DoMINONumpyDataInMemory | DoMINOZarrDataInMemory,
+        data: (
+            ExternalAerodynamicsNumpyDataInMemory | ExternalAerodynamicsZarrDataInMemory
+        ),
         filename: str,
     ) -> None:
         """Write transformed data to storage.
@@ -146,15 +148,15 @@ class DoMINODataSource(DataSource):
             filename: Name of the simulation case
         """
         if self.serialization_method == "numpy":
-            if not isinstance(data, DoMINONumpyDataInMemory):
+            if not isinstance(data, ExternalAerodynamicsNumpyDataInMemory):
                 raise TypeError(
-                    "Expected DoMINONumpyDataInMemory for numpy serialization"
+                    "Expected ExternalAerodynamicsNumpyDataInMemory for numpy serialization"
                 )
             self._write_numpy(data, filename)
         elif self.serialization_method == "zarr":
-            if not isinstance(data, DoMINOZarrDataInMemory):
+            if not isinstance(data, ExternalAerodynamicsZarrDataInMemory):
                 raise TypeError(
-                    "Expected DoMINOZarrDataInMemory for zarr serialization"
+                    "Expected ExternalAerodynamicsZarrDataInMemory for zarr serialization"
                 )
             self._write_zarr(data, filename)
         else:
@@ -162,7 +164,9 @@ class DoMINODataSource(DataSource):
                 f"Unsupported serialization method: {self.serialization_method}"
             )
 
-    def _write_numpy(self, data: DoMINONumpyDataInMemory, filename: str) -> None:
+    def _write_numpy(
+        self, data: ExternalAerodynamicsNumpyDataInMemory, filename: str
+    ) -> None:
         """Write data in NumPy format (legacy support).
 
         Note: This format supports only basic metadata. For full metadata support,
@@ -198,7 +202,9 @@ class DoMINODataSource(DataSource):
 
         np.savez(output_file, **save_dict)
 
-    def _write_zarr(self, data: DoMINOZarrDataInMemory, filename: str) -> None:
+    def _write_zarr(
+        self, data: ExternalAerodynamicsZarrDataInMemory, filename: str
+    ) -> None:
         """Write data in Zarr format with full metadata support."""
         store_path = self.output_dir / f"{filename}.zarr"
 

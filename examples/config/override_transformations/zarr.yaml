@@ -15,7 +15,7 @@
 # limitations under the License.
 
 write_ready_transformation:
-  _target_: examples.external_aerodynamics.domino.data_transformations.DoMINOZarrTransformation
+  _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsZarrTransformation
   _convert_: all
   compression_method: "zstd"
   compression_level: 5

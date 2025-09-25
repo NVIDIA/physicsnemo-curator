@@ -15,5 +15,5 @@
 # limitations under the License.
 
 write_ready_transformation:
-  _target_: examples.external_aerodynamics.domino.data_transformations.DoMINONumpyTransformation
+  _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsNumpyTransformation
   _convert_: all

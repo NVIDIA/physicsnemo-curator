@@ -26,8 +26,8 @@ from .constants import ModelType
 
 
 @dataclass
-class DoMINOMetadata:
-    """Metadata for DoMINO simulation data.
+class ExternalAerodynamicsMetadata:
+    """Metadata for External Aerodynamics simulation data.
 
     Version history:
     - 1.0: Initial version with expected metadata fields.
@@ -56,17 +56,15 @@ class DoMINOMetadata:
 
 
 @dataclass
-class DoMINOExtractedDataInMemory:
-    """Container for DoMINO data and metadata extracted from the simulation.
-    This is the in memory data structure.
+class ExternalAerodynamicsExtractedDataInMemory:
+    """Container for External Aerodynamics data and metadata extracted from the simulation.
 
     Version history:
-    - 1.0: Initial version of data for training DoMINO.
-    - 2.0: This can contain raw data and processed data.
+    - 1.0: Initial version with expected data fields.
     """
 
     # Metadata
-    metadata: DoMINOMetadata
+    metadata: ExternalAerodynamicsMetadata
 
     # Raw data
     stl_polydata: Optional[pv.PolyData] = None
@@ -104,16 +102,15 @@ class PreparedZarrArrayInfo:
 
 
 @dataclass(frozen=True)
-class DoMINOZarrDataInMemory:
-    """Container for DoMINO data prepared for Zarr storage.
-    This is the in memory data structure.
+class ExternalAerodynamicsZarrDataInMemory:
+    """Container for External Aerodynamics data prepared for Zarr storage.
 
     Version history:
     - 1.0: Initial version with prepared arrays for Zarr storage
     """
 
     # Metadata
-    metadata: DoMINOMetadata
+    metadata: ExternalAerodynamicsMetadata
 
     # Geometry data
     stl_coordinates: PreparedZarrArrayInfo
@@ -133,7 +130,7 @@ class DoMINOZarrDataInMemory:
 
 
 @dataclass(frozen=True)
-class DoMINONumpyMetadata:
+class ExternalAerodynamicsNumpyMetadata:
     """Minimal metadata for legacy NumPy storage format.
 
     Note: For full metadata support, use Zarr storage format instead.
@@ -145,8 +142,8 @@ class DoMINONumpyMetadata:
 
 
 @dataclass(frozen=True)
-class DoMINONumpyDataInMemory:
-    """Container for DoMINO data prepared for NumPy storage.
+class ExternalAerodynamicsNumpyDataInMemory:
+    """Container for External Aerodynamics data prepared for NumPy storage.
 
     Version history:
     - 1.0: Legacy version with basic arrays and minimal metadata.
@@ -154,7 +151,7 @@ class DoMINONumpyDataInMemory:
     """
 
     # Basic metadata (legacy support)
-    metadata: DoMINONumpyMetadata
+    metadata: ExternalAerodynamicsNumpyMetadata
 
     # Geometry data
     stl_coordinates: np.ndarray

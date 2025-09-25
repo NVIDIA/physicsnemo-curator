@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-Utilities for processing DoMINO data.
+Utilities for processing External Aerodynamics data.
 """
 
 import warnings

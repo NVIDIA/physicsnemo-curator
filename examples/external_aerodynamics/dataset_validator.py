@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Validation utilities for DoMINO datasets."""
+"""Validation utilities for External Aerodynamics datasets."""
 
 import logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -23,7 +23,7 @@ from typing import Optional
 
 import vtk
 
-from examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.constants import (
     DatasetKind,
     ModelType,
 )
@@ -37,8 +37,8 @@ from physicsnemo_curator.etl.processing_config import ProcessingConfig
 from .paths import get_path_getter
 
 
-class DoMINODatasetValidator(DatasetValidator):
-    """Validator for DoMINO datasets."""
+class ExternalAerodynamicsDatasetValidator(DatasetValidator):
+    """Validator for External Aerodynamics datasets."""
 
     def __init__(
         self,
@@ -51,7 +51,7 @@ class DoMINODatasetValidator(DatasetValidator):
         model_type: Optional[ModelType | str] = None,
         **kwargs,
     ):
-        """Initialize DoMINO validator."""
+        """Initialize External Aerodynamics validator."""
         super().__init__(cfg, **kwargs)
 
         # Get parameters from config
@@ -72,7 +72,7 @@ class DoMINODatasetValidator(DatasetValidator):
             List of validation errors. Empty list means validation passed.
         """
         self.logger.info(
-            f"Starting DoMINO dataset validation (level: {self.validation_level.value})"
+            f"Starting External Aerodynamics dataset validation (level: {self.validation_level.value})"
         )
 
         if not self.input_dir.exists():

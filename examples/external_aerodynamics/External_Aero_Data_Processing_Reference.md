@@ -1,6 +1,9 @@
-# DoMINO Data Processing Reference
+# External Aerodynamics Data Processing Reference
 
-This is a reference for the entire data processing pipeline for the DoMINO model.
+This is a reference for the entire data processing pipeline for the following external aerodynamics models in PhysicsNeMo:
+
+1. [DoMINO](https://github.com/NVIDIA/physicsnemo/blob/main/examples/cfd/external_aerodynamics/domino/README.md)
+2. [Transolver](https://github.com/NVIDIA/physicsnemo/blob/main/examples/cfd/external_aerodynamics/transolver/README.md)
 
 ## Input Data Structure
 
@@ -147,7 +150,7 @@ Fields are non-dimensionalized as follows:
 
 Note: The exact fields processed depend on the `surface_variables` and
 `volume_variables` configurations provided to the data source.
-See `examples/config/domino_etl.yaml` and `examples/config/variables/*.yaml` files for examples.
+See `examples/config/external_aero_etl_drivaerml.yaml` and `examples/config/variables/*.yaml` files for examples.
 
 ### Reference Values
 
@@ -155,4 +158,4 @@ See `examples/config/domino_etl.yaml` and `examples/config/variables/*.yaml` fil
 - density: Air density
 - length_scale: Characteristic length (maximum dimension of the geometry)
 
-For more details, see the configuration examples in `config/domino_etl.yaml`.
+For more details, see the configuration examples in `config/external_aero_etl_drivaerml.yaml`.
