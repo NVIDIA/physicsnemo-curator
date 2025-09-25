@@ -22,23 +22,23 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.constants import (
     ModelType,
 )
-from examples.external_aerodynamics.domino.data_sources import (
+from examples.external_aerodynamics.data_sources import (
     DatasetKind,
-    DoMINODataSource,
+    ExternalAerodynamicsDataSource,
 )
-from examples.external_aerodynamics.domino.data_transformations import (
-    DoMINONumpyTransformation,
-    DoMINOPreprocessingTransformation,
-    DoMINOZarrTransformation,
+from examples.external_aerodynamics.data_transformations import (
+    ExternalAerodynamicsNumpyTransformation,
+    ExternalAerodynamicsPreprocessingTransformation,
+    ExternalAerodynamicsZarrTransformation,
 )
-from examples.external_aerodynamics.domino.schemas import (
-    DoMINOExtractedDataInMemory,
-    DoMINOMetadata,
-    DoMINONumpyDataInMemory,
-    DoMINOZarrDataInMemory,
+from examples.external_aerodynamics.schemas import (
+    ExternalAerodynamicsExtractedDataInMemory,
+    ExternalAerodynamicsMetadata,
+    ExternalAerodynamicsNumpyDataInMemory,
+    ExternalAerodynamicsZarrDataInMemory,
     PreparedZarrArrayInfo,
 )
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
@@ -73,7 +73,7 @@ def sample_data_raw(temp_dir):
     create_mock_volume_vtk(vtk_path / "volume_001.vtu")  # Updated volume file name
 
     config = ProcessingConfig(num_processes=1)
-    source = DoMINODataSource(
+    source = ExternalAerodynamicsDataSource(
         config,
         input_dir=case_dir.parent,
         kind=DatasetKind.DRIVAERML,
@@ -87,9 +87,9 @@ def sample_data_raw(temp_dir):
 
 @pytest.fixture
 def sample_data_processed():
-    """Create sample processed DoMINO data for testing."""
-    return DoMINOExtractedDataInMemory(
-        metadata=DoMINOMetadata(
+    """Create sample processed External Aerodynamics data for testing."""
+    return ExternalAerodynamicsExtractedDataInMemory(
+        metadata=ExternalAerodynamicsMetadata(
             filename="run_1234",
             dataset_type=ModelType.COMBINED,
             stream_velocity=30.0,
@@ -115,22 +115,22 @@ def sample_data_processed():
     )
 
 
-class TestDoMINONumpyTransformation:
-    """Test the DoMINONumpyTransformation class."""
+class TestExternalAerodynamicsNumpyTransformation:
+    """Test the ExternalAerodynamicsNumpyTransformation class."""
 
     def test_initialization(self):
         """Test initialization of NumPy transformation."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINONumpyTransformation(config)
+        transform = ExternalAerodynamicsNumpyTransformation(config)
         assert transform.config == config
 
     def test_transform(self, sample_data_processed):
-        """Test NumPy transformation of DoMINO data."""
+        """Test NumPy transformation of External Aerodynamics data."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINONumpyTransformation(config)
+        transform = ExternalAerodynamicsNumpyTransformation(config)
 
         result = transform.transform(sample_data_processed)
-        assert isinstance(result, DoMINONumpyDataInMemory)
+        assert isinstance(result, ExternalAerodynamicsNumpyDataInMemory)
 
         # Check a couple of STL fields
         np.testing.assert_array_equal(
@@ -155,28 +155,28 @@ class TestDoMINONumpyTransformation:
         )
 
 
-class TestDoMINOZarrTransformation:
-    """Test the DoMINOZarrTransformation class."""
+class TestExternalAerodynamicsZarrTransformation:
+    """Test the ExternalAerodynamicsZarrTransformation class."""
 
     def test_initialization(self):
         """Test initialization of Zarr transformation."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINOZarrTransformation(config)
+        transform = ExternalAerodynamicsZarrTransformation(config)
         assert transform.config == config
         assert transform.compressor.cname == "zstd"
         assert transform.compressor.clevel == 5
 
     def test_transform(self, sample_data_processed):
-        """Test Zarr transformation of DoMINO data."""
+        """Test Zarr transformation of External Aerodynamics data."""
         config = ProcessingConfig(
             num_processes=1,
         )
-        transform = DoMINOZarrTransformation(config)
+        transform = ExternalAerodynamicsZarrTransformation(config)
 
         result = transform.transform(sample_data_processed)
 
         # Check overall structure
-        assert isinstance(result, DoMINOZarrDataInMemory)
+        assert isinstance(result, ExternalAerodynamicsZarrDataInMemory)
 
         # Check metadata
         assert result.metadata == sample_data_processed.metadata
@@ -208,7 +208,7 @@ class TestDoMINOZarrTransformation:
     def test_prepare_array(self):
         """Test array preparation for Zarr storage."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINOZarrTransformation(config)
+        transform = ExternalAerodynamicsZarrTransformation(config)
 
         # Test 1D array
         array_1d = np.array([1, 2, 3], dtype=np.float64)
@@ -245,7 +245,7 @@ class TestDoMINOZarrTransformation:
             warnings.simplefilter("always")
 
             # Create transformation
-            DoMINOZarrTransformation(config, chunk_size_mb=chunk_size_mb)
+            ExternalAerodynamicsZarrTransformation(config, chunk_size_mb=chunk_size_mb)
 
             if should_warn:
                 assert len(w) == 1
@@ -260,7 +260,7 @@ class TestDoMINOZarrTransformation:
     def test_chunk_size_effect(self, sample_data_processed):
         """Test that different chunk sizes result in different chunking."""
         # Create larger test data for meaningful chunk size testing
-        large_data = DoMINOExtractedDataInMemory(
+        large_data = ExternalAerodynamicsExtractedDataInMemory(
             metadata=sample_data_processed.metadata,
             stl_coordinates=np.random.rand(100000, 3),  # Roughly 2.4 MB
             stl_centers=sample_data_processed.stl_centers,
@@ -277,8 +277,12 @@ class TestDoMINOZarrTransformation:
         config = ProcessingConfig(num_processes=1)
 
         # Create transformations with different chunk sizes
-        transform_small = DoMINOZarrTransformation(config, chunk_size_mb=1.0)
-        transform_large = DoMINOZarrTransformation(config, chunk_size_mb=10.0)
+        transform_small = ExternalAerodynamicsZarrTransformation(
+            config, chunk_size_mb=1.0
+        )
+        transform_large = ExternalAerodynamicsZarrTransformation(
+            config, chunk_size_mb=10.0
+        )
 
         # Transform data with both
         result_small = transform_small.transform(large_data)
@@ -307,13 +311,13 @@ class TestDoMINOZarrTransformation:
         assert large_data_num_chunks == 1
 
 
-class TestDoMINOPreprocessingTransformation:
-    """Test the DoMINOPreprocessingTransformation class."""
+class TestExternalAerodynamicsPreprocessingTransformation:
+    """Test the ExternalAerodynamicsPreprocessingTransformation class."""
 
     def test_initialization(self):
         """Test initialization of preprocessing transformation."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINOPreprocessingTransformation(
+        transform = ExternalAerodynamicsPreprocessingTransformation(
             config,
             surface_variables={
                 "pMeanTrim": "scalar",
@@ -339,7 +343,7 @@ class TestDoMINOPreprocessingTransformation:
     def test_initialization_with_decimation(self):
         """Test initialization with decimation parameters."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINOPreprocessingTransformation(
+        transform = ExternalAerodynamicsPreprocessingTransformation(
             config,
             surface_variables={"pMeanTrim": "scalar"},
             volume_variables={"UMeanTrim": "vector"},
@@ -352,7 +356,7 @@ class TestDoMINOPreprocessingTransformation:
         """Test initialization with invalid decimation algorithm."""
         config = ProcessingConfig(num_processes=1)
         with pytest.raises(ValueError, match="Unsupported decimation algo"):
-            DoMINOPreprocessingTransformation(
+            ExternalAerodynamicsPreprocessingTransformation(
                 config,
                 decimation={"algo": "invalid_algo", "reduction": 0.5},
             )
@@ -361,15 +365,15 @@ class TestDoMINOPreprocessingTransformation:
         """Test initialization with invalid reduction value."""
         config = ProcessingConfig(num_processes=1)
         with pytest.raises(ValueError, match="Expected value in \[0, 1\)"):
-            DoMINOPreprocessingTransformation(
+            ExternalAerodynamicsPreprocessingTransformation(
                 config,
                 decimation={"algo": "decimate_pro", "reduction": 1.5},
             )
 
     def test_transform_basic(self, sample_data_raw):
-        """Test basic preprocessing transformation of DoMINO data."""
+        """Test basic preprocessing transformation of External Aerodynamics data."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINOPreprocessingTransformation(
+        transform = ExternalAerodynamicsPreprocessingTransformation(
             config,
             surface_variables={
                 "pMeanTrim": "scalar",
@@ -382,7 +386,7 @@ class TestDoMINOPreprocessingTransformation:
         )
 
         result = transform.transform(sample_data_raw)
-        assert isinstance(result, DoMINOExtractedDataInMemory)
+        assert isinstance(result, ExternalAerodynamicsExtractedDataInMemory)
 
         # Check that raw data is cleaned up
         assert result.stl_polydata is None
@@ -392,7 +396,7 @@ class TestDoMINOPreprocessingTransformation:
         # Check that processed data is updated and converted to float32
         assert result.stl_coordinates.dtype == np.float32
         assert result.stl_centers.dtype == np.float32
-        assert result.stl_faces.dtype == np.float32
+        assert result.stl_faces.dtype == np.int32
         assert result.stl_areas.dtype == np.float32
 
         # Check metadata updates
@@ -404,7 +408,7 @@ class TestDoMINOPreprocessingTransformation:
     def test_transform_with_surface_data(self, sample_data_raw):
         """Test preprocessing transformation with surface data."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINOPreprocessingTransformation(
+        transform = ExternalAerodynamicsPreprocessingTransformation(
             config,
             surface_variables={
                 "pMeanTrim": "scalar",
@@ -443,7 +447,7 @@ class TestDoMINOPreprocessingTransformation:
     def test_transform_with_volume_data(self, sample_data_raw):
         """Test preprocessing transformation with volume data."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINOPreprocessingTransformation(
+        transform = ExternalAerodynamicsPreprocessingTransformation(
             config,
             volume_variables={
                 "UMeanTrim": "vector",
@@ -463,7 +467,7 @@ class TestDoMINOPreprocessingTransformation:
     def test_transform_no_surface_data(self, sample_data_raw):
         """Test preprocessing transformation without surface data."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINOPreprocessingTransformation(
+        transform = ExternalAerodynamicsPreprocessingTransformation(
             config,
             volume_variables={"UMeanTrim": "vector"},
         )
@@ -482,7 +486,7 @@ class TestDoMINOPreprocessingTransformation:
     def test_transform_no_volume_data(self, sample_data_raw):
         """Test preprocessing transformation without volume data."""
         config = ProcessingConfig(num_processes=1)
-        transform = DoMINOPreprocessingTransformation(
+        transform = ExternalAerodynamicsPreprocessingTransformation(
             config,
             surface_variables={"pMeanTrim": "scalar"},
         )

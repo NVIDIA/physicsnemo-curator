@@ -21,12 +21,12 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.constants import (
     DatasetKind,
     ModelType,
 )
-from examples.external_aerodynamics.domino.dataset_validator import (
-    DoMINODatasetValidator,
+from examples.external_aerodynamics.dataset_validator import (
+    ExternalAerodynamicsDatasetValidator,
 )
 from physicsnemo_curator.etl.dataset_validators import ValidationLevel
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
@@ -58,7 +58,7 @@ def basic_config():
 
 def test_validator_init(basic_config):
     """Test validator initialization."""
-    validator = DoMINODatasetValidator(
+    validator = ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=Path("/test"),
         kind=DatasetKind.DRIVAERML,
@@ -75,7 +75,7 @@ def test_validator_init(basic_config):
 
 def test_structure_validation(mock_input_dir, basic_config):
     """Test basic structure validation."""
-    validator = DoMINODatasetValidator(
+    validator = ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,
@@ -89,7 +89,7 @@ def test_structure_validation(mock_input_dir, basic_config):
 
 def test_missing_directory(basic_config):
     """Test validation of non-existent directory."""
-    validator = DoMINODatasetValidator(
+    validator = ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=Path("/nonexistent"),
         kind=DatasetKind.DRIVAERML,
@@ -107,7 +107,7 @@ def test_invalid_case_name(mock_input_dir, basic_config):
     invalid_case = mock_input_dir / "invalid_name"
     invalid_case.mkdir()
 
-    validator = DoMINODatasetValidator(
+    validator = ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,
@@ -134,7 +134,7 @@ def test_field_validation(mock_reader, mock_input_dir, basic_config):
     mock_reader_instance.GetOutput.return_value = mock_data
     mock_reader.return_value = mock_reader_instance
 
-    validator = DoMINODatasetValidator(
+    validator = ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,
@@ -153,7 +153,7 @@ def test_field_validation(mock_reader, mock_input_dir, basic_config):
 
 def test_combined_model_validation(mock_input_dir, basic_config):
     """Test validation with combined model type."""
-    validator = DoMINODatasetValidator(
+    validator = ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,
@@ -175,7 +175,7 @@ def test_combined_model_validation(mock_input_dir, basic_config):
 def test_validation_logging(mock_input_dir, basic_config, caplog):
     """Test validation logging messages."""
     with caplog.at_level(logging.INFO):
-        validator = DoMINODatasetValidator(
+        validator = ExternalAerodynamicsDatasetValidator(
             basic_config,
             input_dir=mock_input_dir,
             kind=DatasetKind.DRIVAERML,
@@ -183,13 +183,13 @@ def test_validation_logging(mock_input_dir, basic_config, caplog):
         )
         validator.validate()
 
-    assert "Starting DoMINO dataset validation" in caplog.text
+    assert "Starting External Aerodynamics dataset validation" in caplog.text
     assert "Found" in caplog.text and "case directories to validate" in caplog.text
     assert "Validation completed successfully" in caplog.text
 
 
-@patch("examples.external_aerodynamics.domino.dataset_validator.ProcessPoolExecutor")
-@patch("examples.external_aerodynamics.domino.dataset_validator.as_completed")
+@patch("examples.external_aerodynamics.dataset_validator.ProcessPoolExecutor")
+@patch("examples.external_aerodynamics.dataset_validator.as_completed")
 def test_parallel_validation(
     mock_as_completed, mock_executor, mock_input_dir, basic_config
 ):
@@ -214,7 +214,7 @@ def test_parallel_validation(
     # Mock as_completed to return our future
     mock_as_completed.return_value = [mock_future]
 
-    validator = DoMINODatasetValidator(
+    validator = ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,

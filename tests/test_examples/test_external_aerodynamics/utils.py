@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Utility functions for DoMINO tests."""
+"""Utility functions for External Aerodynamics tests."""
 
 import vtk
 

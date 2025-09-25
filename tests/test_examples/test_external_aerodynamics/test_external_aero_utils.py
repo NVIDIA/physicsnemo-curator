@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 import vtk
 
-from examples.external_aerodynamics.domino.domino_utils import (
+from examples.external_aerodynamics.external_aero_utils import (
     get_fields,
     get_node_to_elem,
     get_vertices,

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from examples.external_aerodynamics.domino.paths import (
+from examples.external_aerodynamics.paths import (
     DrivAerMLPaths,
     DriveSimPaths,
     VTKPaths,

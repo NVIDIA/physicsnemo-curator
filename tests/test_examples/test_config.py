@@ -21,12 +21,12 @@ from unittest.mock import patch
 from hydra import compose, initialize
 from hydra.utils import instantiate
 
-from examples.external_aerodynamics.domino import (
+from examples.external_aerodynamics import (
     data_sources,
     data_transformations,
     dataset_validator,
 )
-from examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.constants import (
     DatasetKind,
     ModelType,
 )
@@ -38,13 +38,13 @@ def get_config_path() -> Path:
     return Path("../../examples/config")
 
 
-def test_domino_etl_config():
-    """Test that the domino_etl.yaml configuration is valid and has expected values."""
+def test_external_aero_etl_drivaerml_config():
+    """Test that the external_aero_etl_drivaerml.yaml configuration is valid and has expected values."""
     # Initialize Hydra with the config directory
     with initialize(version_base="1.3", config_path=str(get_config_path())):
         # Compose the configuration
         cfg = compose(
-            config_name="domino_etl",
+            config_name="external_aero_etl_drivaerml",
             overrides=[
                 "etl.source.input_dir=/path/to/input/dataset",
                 "etl.sink.output_dir=/path/to/output/directory",
@@ -61,7 +61,9 @@ def test_domino_etl_config():
 
         # Test that we can actually create the validator
         with patch.object(
-            dataset_validator.DoMINODatasetValidator, "__init__", return_value=None
+            dataset_validator.ExternalAerodynamicsDatasetValidator,
+            "__init__",
+            return_value=None,
         ) as m:
             instantiate(cfg.etl.validator)
             assert m.call_count == 1
@@ -70,7 +72,7 @@ def test_domino_etl_config():
 
         # Test source settings
         with patch.object(
-            data_sources.DoMINODataSource, "__init__", return_value=None
+            data_sources.ExternalAerodynamicsDataSource, "__init__", return_value=None
         ) as m:
             instantiate(cfg.etl.source)
             assert m.call_count == 1
@@ -89,7 +91,7 @@ def test_domino_etl_config():
         # Test transformation settings
         # Test preprocessing transformation
         with patch.object(
-            data_transformations.DoMINOPreprocessingTransformation,
+            data_transformations.ExternalAerodynamicsPreprocessingTransformation,
             "__init__",
             return_value=None,
         ) as m:
@@ -98,7 +100,7 @@ def test_domino_etl_config():
 
         # Test zarr transformation
         with patch.object(
-            data_transformations.DoMINOZarrTransformation,
+            data_transformations.ExternalAerodynamicsZarrTransformation,
             "__init__",
             return_value=None,
         ) as m:
@@ -107,7 +109,7 @@ def test_domino_etl_config():
 
         # Test sink settings
         with patch.object(
-            data_sources.DoMINODataSource, "__init__", return_value=None
+            data_sources.ExternalAerodynamicsDataSource, "__init__", return_value=None
         ) as m:
             instantiate(cfg.etl.sink)
             assert m.call_count == 1
@@ -120,7 +122,7 @@ def test_config_validation():
     # Initialize Hydra with the config directory
     with initialize(version_base="1.3", config_path=str(get_config_path())):
         # Compose the configuration
-        cfg = compose(config_name="domino_etl")
+        cfg = compose(config_name="external_aero_etl_drivaerml")
 
         # Test that kind is a valid DatasetKind
         assert cfg.etl.common.kind in [k.value for k in DatasetKind]
@@ -138,7 +140,7 @@ def test_config_paths():
     with initialize(version_base="1.3", config_path=str(get_config_path())):
         # Compose the configuration
         cfg = compose(
-            config_name="domino_etl",
+            config_name="external_aero_etl_drivaerml",
             overrides=[
                 "etl.source.input_dir=/path/to/input/dataset",
                 "etl.sink.output_dir=/path/to/output/directory",
@@ -160,7 +162,7 @@ def test_config_override():
     with initialize(version_base="1.3", config_path=str(get_config_path())):
         # Compose the configuration with overrides
         cfg = compose(
-            config_name="domino_etl",
+            config_name="external_aero_etl_drivaerml",
             overrides=[
                 "etl.common.kind=drivesim",
                 "etl.common.model_type=volume",

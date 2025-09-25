@@ -25,23 +25,23 @@ import pyvista as pv
 import vtk
 from numcodecs import Blosc
 
-from examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.constants import (
     DatasetKind,
     ModelType,
 )
-from examples.external_aerodynamics.domino.data_sources import (
-    DoMINODataSource,
+from examples.external_aerodynamics.data_sources import (
+    ExternalAerodynamicsDataSource,
 )
-from examples.external_aerodynamics.domino.paths import (
+from examples.external_aerodynamics.paths import (
     DrivAerMLPaths,
     DriveSimPaths,
 )
-from examples.external_aerodynamics.domino.schemas import (
-    DoMINOExtractedDataInMemory,
-    DoMINOMetadata,
-    DoMINONumpyDataInMemory,
-    DoMINONumpyMetadata,
-    DoMINOZarrDataInMemory,
+from examples.external_aerodynamics.schemas import (
+    ExternalAerodynamicsExtractedDataInMemory,
+    ExternalAerodynamicsMetadata,
+    ExternalAerodynamicsNumpyDataInMemory,
+    ExternalAerodynamicsNumpyMetadata,
+    ExternalAerodynamicsZarrDataInMemory,
     PreparedZarrArrayInfo,
 )
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
@@ -58,8 +58,8 @@ def temp_dir():
 
 
 @pytest.fixture
-def mock_domino_data_drivaerml(temp_dir):
-    """Create mock DrivAerML DoMINO data structure."""
+def mock_external_aero_data_drivaerml(temp_dir):
+    """Create mock DrivAerML External Aerodynamics data structure."""
     case_dir = temp_dir / "run_001"
     case_dir.mkdir(parents=True, exist_ok=True)
 
@@ -79,7 +79,7 @@ def mock_domino_data_drivaerml(temp_dir):
 
 @pytest.fixture
 def mock_drivesim_data(temp_dir):
-    """Create mock DriveSim DoMINO data structure."""
+    """Create mock DriveSim External Aerodynamics data structure."""
     case_dir = temp_dir / "run_001"
     case_dir.mkdir(parents=True, exist_ok=True)
 
@@ -103,13 +103,13 @@ def mock_drivesim_data(temp_dir):
     return case_dir
 
 
-class TestDoMINODataSource:
-    """Test the DoMINODataSource class."""
+class TestExternalAerodynamicsDataSource:
+    """Test the ExternalAerodynamicsDataSource class."""
 
     def test_drivaerml_initialization(self, temp_dir):
         """Test data source initialization."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config,
             input_dir=temp_dir,
             kind=DatasetKind.DRIVAERML,
@@ -125,16 +125,16 @@ class TestDoMINODataSource:
         """Test initialization with non-existent directory."""
         config = ProcessingConfig(num_processes=1)
         with pytest.raises(FileNotFoundError):
-            DoMINODataSource(
+            ExternalAerodynamicsDataSource(
                 config, input_dir="/nonexistent/path", kind=DatasetKind.DRIVAERML
             )
 
-    def test_drivaerml_get_file_list(self, mock_domino_data_drivaerml):
+    def test_drivaerml_get_file_list(self, mock_external_aero_data_drivaerml):
         """Test file list retrieval."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config,
-            input_dir=mock_domino_data_drivaerml.parent,
+            input_dir=mock_external_aero_data_drivaerml.parent,
             kind=DatasetKind.DRIVAERML,
         )
 
@@ -142,36 +142,36 @@ class TestDoMINODataSource:
         assert len(files) == 1
         assert files[0] == "run_001"
 
-    def test_drivaerml_read_surface_data(self, mock_domino_data_drivaerml):
+    def test_drivaerml_read_surface_data(self, mock_external_aero_data_drivaerml):
         """Test reading surface data."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config,
-            input_dir=mock_domino_data_drivaerml.parent,
+            input_dir=mock_external_aero_data_drivaerml.parent,
             kind=DatasetKind.DRIVAERML,
             model_type=ModelType.SURFACE,
         )
 
         data = source.read_file("run_001")
 
-        assert isinstance(data, DoMINOExtractedDataInMemory)
+        assert isinstance(data, ExternalAerodynamicsExtractedDataInMemory)
         assert data.surface_polydata is not None
         assert isinstance(data.surface_polydata, pv.PolyData)
         assert data.metadata.filename == "run_001"
 
-    def test_drivaerml_read_volume_data(self, mock_domino_data_drivaerml):
+    def test_drivaerml_read_volume_data(self, mock_external_aero_data_drivaerml):
         """Test reading volume data."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config,
-            input_dir=mock_domino_data_drivaerml.parent,
+            input_dir=mock_external_aero_data_drivaerml.parent,
             kind=DatasetKind.DRIVAERML,
             model_type=ModelType.VOLUME,
         )
 
         data = source.read_file("run_001")
 
-        assert isinstance(data, DoMINOExtractedDataInMemory)
+        assert isinstance(data, ExternalAerodynamicsExtractedDataInMemory)
         assert data.volume_unstructured_grid is not None
         assert isinstance(data.volume_unstructured_grid, vtk.vtkUnstructuredGrid)
         assert data.metadata.filename == "run_001"
@@ -179,12 +179,12 @@ class TestDoMINODataSource:
     def test_drivaerml_write_numpy(self, temp_dir):
         """Test writing data in NumPy format."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config, output_dir=temp_dir, serialization_method="numpy"
         )
 
-        test_data = DoMINONumpyDataInMemory(
-            metadata=DoMINONumpyMetadata(
+        test_data = ExternalAerodynamicsNumpyDataInMemory(
+            metadata=ExternalAerodynamicsNumpyMetadata(
                 filename="test_case",
                 stream_velocity=[30.0, 0.0, 0.0],
                 air_density=1.225,
@@ -200,7 +200,7 @@ class TestDoMINODataSource:
     def test_drivaerml_write_zarr(self, temp_dir):
         """Test writing data in Zarr format."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config, output_dir=temp_dir, serialization_method="zarr"
         )
         compressor_for_test = Blosc(
@@ -209,7 +209,7 @@ class TestDoMINODataSource:
             shuffle=Blosc.SHUFFLE,
         )
 
-        test_data = DoMINOZarrDataInMemory(
+        test_data = ExternalAerodynamicsZarrDataInMemory(
             stl_coordinates=PreparedZarrArrayInfo(
                 data=np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]),
                 chunks=(2, 3),
@@ -230,7 +230,7 @@ class TestDoMINODataSource:
                 chunks=(1,),
                 compressor=compressor_for_test,
             ),
-            metadata=DoMINOMetadata(
+            metadata=ExternalAerodynamicsMetadata(
                 stream_velocity=[30.0, 0.0, 0.0],
                 air_density=1.225,
                 filename="test_case",
@@ -283,9 +283,9 @@ class TestDoMINODataSource:
         assert (temp_dir / "test_case.zarr").exists()
 
     def test_drivesim_initialization(self, temp_dir):
-        """Test data source initialization with DriveSim dataset."""
+        """Test data source initialization with DriveSim External Aerodynamics dataset."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config,
             input_dir=temp_dir,
             kind=DatasetKind.DRIVESIM,
@@ -298,9 +298,9 @@ class TestDoMINODataSource:
         assert isinstance(source.path_getter, DriveSimPaths.__class__)
 
     def test_drivesim_read_surface_data(self, mock_drivesim_data):
-        """Test reading surface data from DriveSim dataset."""
+        """Test reading surface data from DriveSim External Aerodynamics dataset."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config,
             input_dir=mock_drivesim_data.parent,
             kind=DatasetKind.DRIVESIM,
@@ -309,15 +309,15 @@ class TestDoMINODataSource:
 
         data = source.read_file("run_001")
 
-        assert isinstance(data, DoMINOExtractedDataInMemory)
+        assert isinstance(data, ExternalAerodynamicsExtractedDataInMemory)
         assert data.surface_polydata is not None
         assert isinstance(data.surface_polydata, pv.PolyData)
         assert data.metadata.filename == "run_001"
 
     def test_drivesim_read_volume_data(self, mock_drivesim_data):
-        """Test reading volume data from DriveSim dataset."""
+        """Test reading volume data from DriveSim External Aerodynamics dataset."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config,
             input_dir=mock_drivesim_data.parent,
             kind=DatasetKind.DRIVESIM,
@@ -326,33 +326,37 @@ class TestDoMINODataSource:
 
         data = source.read_file("run_001")
 
-        assert isinstance(data, DoMINOExtractedDataInMemory)
+        assert isinstance(data, ExternalAerodynamicsExtractedDataInMemory)
         assert data.volume_unstructured_grid is not None
         assert isinstance(data.volume_unstructured_grid, vtk.vtkUnstructuredGrid)
         assert data.metadata.filename == "run_001"
 
     def test_path_getter_selection(self):
-        """Test correct path getter class is selected based on dataset kind."""
+        """Test correct path getter class is selected based on External Aerodynamics dataset kind."""
         config = ProcessingConfig(num_processes=1)
 
-        drivesim_source = DoMINODataSource(config, kind=DatasetKind.DRIVESIM)
+        drivesim_source = ExternalAerodynamicsDataSource(
+            config, kind=DatasetKind.DRIVESIM
+        )
         assert isinstance(drivesim_source.path_getter, DriveSimPaths.__class__)
 
-        drivaerml_source = DoMINODataSource(config, kind=DatasetKind.DRIVAERML)
+        drivaerml_source = ExternalAerodynamicsDataSource(
+            config, kind=DatasetKind.DRIVAERML
+        )
         assert isinstance(drivaerml_source.path_getter, DrivAerMLPaths.__class__)
 
     def test_drivesim_initialization_with_invalid_directory_raises_error(self):
-        """Test initialization with non-existent directory for DriveSim."""
+        """Test initialization with non-existent directory for DriveSim External Aerodynamics."""
         config = ProcessingConfig(num_processes=1)
         with pytest.raises(FileNotFoundError):
-            DoMINODataSource(
+            ExternalAerodynamicsDataSource(
                 config, input_dir="/nonexistent/path", kind=DatasetKind.DRIVESIM
             )
 
     def test_drivesim_get_file_list(self, mock_drivesim_data):
-        """Test file list retrieval for DriveSim dataset."""
+        """Test file list retrieval for DriveSim External Aerodynamics dataset."""
         config = ProcessingConfig(num_processes=1)
-        source = DoMINODataSource(
+        source = ExternalAerodynamicsDataSource(
             config, input_dir=mock_drivesim_data.parent, kind=DatasetKind.DRIVESIM
         )
 
@@ -364,7 +368,7 @@ class TestDoMINODataSource:
         """Test that should_skip returns False when overwrite_existing is True."""
 
         for method in ["numpy", "zarr"]:
-            data_source = DoMINODataSource(
+            data_source = ExternalAerodynamicsDataSource(
                 cfg=Mock(spec=ProcessingConfig),
                 output_dir=temp_dir,
                 serialization_method=method,
@@ -375,7 +379,7 @@ class TestDoMINODataSource:
     def test_should_skip_numpy_when_file_exists(self, temp_dir):
         """Test that should_skip returns True when numpy file exists and overwrite_existing is False."""
 
-        data_source = DoMINODataSource(
+        data_source = ExternalAerodynamicsDataSource(
             cfg=Mock(spec=ProcessingConfig),
             output_dir=temp_dir,
             serialization_method="numpy",
@@ -390,7 +394,7 @@ class TestDoMINODataSource:
     def test_should_skip_zarr_when_file_exists(self, temp_dir):
         """Test that should_skip returns True when numpy file exists and overwrite_existing is False."""
 
-        data_source = DoMINODataSource(
+        data_source = ExternalAerodynamicsDataSource(
             cfg=Mock(spec=ProcessingConfig),
             output_dir=temp_dir,
             serialization_method="zarr",
@@ -406,7 +410,7 @@ class TestDoMINODataSource:
         """Test that should_skip returns False when numpy file doesn't exist and overwrite_existing is False."""
 
         for method in ["numpy", "zarr"]:
-            data_source = DoMINODataSource(
+            data_source = ExternalAerodynamicsDataSource(
                 cfg=Mock(spec=ProcessingConfig),
                 output_dir=temp_dir,
                 serialization_method=method,

@@ -19,7 +19,7 @@ import dataclasses
 
 import pytest
 
-from examples.external_aerodynamics.domino.constants import (
+from examples.external_aerodynamics.constants import (
     DatasetKind,
     ModelType,
     PhysicsConstants,
