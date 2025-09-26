@@ -18,11 +18,9 @@
 Utilities for processing External Aerodynamics data.
 """
 
-import warnings
 from typing import Optional, TypeAlias
 
 import numpy as np
-import pyvista as pv
 import vtk
 from vtk.util import numpy_support
 
@@ -81,36 +79,3 @@ def get_volume_data(polydata, variables):
     fields = get_fields(point_data, variables)
 
     return vertices, fields
-
-
-def decimate_mesh(
-    mesh: pv.PolyData,
-    algo: str,
-    reduction: float,
-    kwargs: dict,
-) -> pv.PolyData:
-    """Decimate mesh using pyvista."""
-
-    # Need point_data to interpolate target mesh node values.
-    mesh = mesh.cell_data_to_point_data()
-
-    # Decimation algos require tri-mesh.
-    mesh = mesh.triangulate()
-    match algo:
-        case "decimate_pro":
-            mesh = mesh.decimate_pro(reduction, **kwargs)
-        case "decimate":
-            if mesh.n_points > 400_000:
-                warnings.warn("decimate algo may hang on meshes of size more than 400K")
-            mesh = mesh.decimate(
-                reduction,
-                attribute_error=True,
-                scalars=True,
-                vectors=True,
-                **kwargs,
-            )
-        case _:
-            raise ValueError(f"Unsupported decimation algo {algo}")
-
-    # Compute cell data.
-    return mesh.point_data_to_cell_data()

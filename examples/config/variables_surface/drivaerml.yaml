@@ -1,4 +1,4 @@
-# @package etl.transformations.preprocessing
+# @package etl.transformations.surface_preprocessing
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -15,11 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-volume_variables:
-  UMean: vector
-  pMean: scalar
-  nutMean: scalar
-
 surface_variables:
-  pMean: scalar
-  wallShearStressMean: vector
+  pMeanTrim: scalar
+  wallShearStressMeanTrim: vector

@@ -15,7 +15,8 @@
 # limitations under the License.
 
 defaults:
-  - /variables: drivaerml
+  - /variables_surface: drivaerml
+  - /variables_volume: drivaerml
   - /serialization_format: zarr  # Default value, can be overridden via CLI
   - /override_transformations: ${serialization_format}
   - _self_
@@ -49,13 +50,36 @@ etl:
     # Preprocessing transformations.
     # These take in the raw geometry, volume and surface data, and apply DoMINO specific preprocessing transformations.
     # Variable names are piped in from the variables/drivaerml.yaml or variables/ahmedml.yaml file.
-    preprocessing:
-      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsPreprocessingTransformation
+    stl_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSTLTransformation
       _convert_: all
-      decimation:
-        algo: decimate_pro  # can be one of {decimate_pro, decimate}
-        reduction: 0.0  # 0 means no decimation.
-        preserve_topology: false
+
+    surface_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSurfaceTransformation
+      _convert_: all
+      surface_processors:
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.decimate_mesh
+          _partial_: true
+          algo: decimate_pro  # can be one of {decimate_pro, decimate}
+          reduction: 0.0  # 0 means no decimation.
+          preserve_topology: false
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
+          _partial_: true
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
+          _partial_: true
+          air_density: 1.205  # kg/m³
+          stream_velocity: 30.00  # m/s
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
+          _partial_: true
+
+    volume_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsVolumeTransformation
+      _convert_: all
+      volume_processors:
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields
+          _partial_: true
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
+          _partial_: true
 
     write_ready_transformation: ${override_transformations.write_ready_transformation}
 
