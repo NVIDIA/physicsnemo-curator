@@ -20,6 +20,9 @@ from typing import Any, Callable, Optional
 import numpy as np
 from numcodecs import Blosc
 
+from examples.external_aerodynamics.external_aero_geometry_data_processors import (
+    default_geometry_processing_for_external_aerodynamics,
+)
 from examples.external_aerodynamics.external_aero_surface_data_processors import (
     default_surface_processing_for_external_aerodynamics,
 )
@@ -88,42 +91,29 @@ class ExternalAerodynamicsNumpyTransformation(DataTransformation):
 class ExternalAerodynamicsSTLTransformation(DataTransformation):
     """Transforms STL data for External Aerodynamics model."""
 
-    def __init__(self, cfg: ProcessingConfig):
+    def __init__(
+        self,
+        cfg: ProcessingConfig,
+        geometry_processors: Optional[tuple[Callable, ...]] = None,
+    ):
         super().__init__(cfg)
-        self.constants = PhysicsConstants()
+        self.geometry_processors = geometry_processors
+        self.logger = setup_logger()
 
     def transform(
         self, data: ExternalAerodynamicsExtractedDataInMemory
     ) -> ExternalAerodynamicsExtractedDataInMemory:
         """Transform STL data for External Aerodynamics model."""
 
-        # Process STL data
-        stl_vertices = data.stl_polydata.points
-        stl_faces = (
-            np.array(data.stl_polydata.faces).reshape((-1, 4))[:, 1:].astype(np.int32)
-        )  # Assuming triangular elements
-        mesh_indices_flattened = stl_faces.flatten()
-        stl_sizes = data.stl_polydata.compute_cell_sizes(
-            length=False, area=True, volume=False
-        )
-        stl_sizes = np.array(stl_sizes.cell_data["Area"])
-        stl_centers = np.array(data.stl_polydata.cell_centers().points)
+        # Regardless of whether there are any additional geometry processors,
+        # we always apply the default geometry processing.
+        # This will ensure that the bare minimum criteria for geometry data is met.
+        # That is - The geometry data (vertices, faces, areas and centers) are present.
+        data = default_geometry_processing_for_external_aerodynamics(data)
 
-        # Update processed STL data
-        data.stl_coordinates = to_float32(stl_vertices)
-        data.stl_centers = to_float32(stl_centers)
-        data.stl_faces = mesh_indices_flattened
-        data.stl_areas = to_float32(stl_sizes)
-
-        # Update metadata
-        bounds = data.stl_polydata.bounds
-        data.metadata.x_bound = bounds[0:2]  # xmin, xmax
-        data.metadata.y_bound = bounds[2:4]  # ymin, ymax
-        data.metadata.z_bound = bounds[4:6]  # zmin, zmax
-        data.metadata.num_points = len(data.stl_polydata.points)
-        data.metadata.num_faces = len(mesh_indices_flattened)
-        data.metadata.stream_velocity = self.constants.STREAM_VELOCITY
-        data.metadata.air_density = self.constants.AIR_DENSITY
+        if self.geometry_processors is not None:
+            for processor in self.geometry_processors:
+                data = processor(data)
 
         # Delete raw STL data to save memory
         data.stl_polydata = None
@@ -156,15 +146,16 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
 
         if data.surface_polydata is not None:
 
+            # Regardless of whether there are any additional surface processors,
+            # we always apply the default surface processing.
+            # This will ensure that the bare minimum criteria for surface data is met.
+            # That is - The surface data (mesh centers, normals, areas and fields) are present.
             data = default_surface_processing_for_external_aerodynamics(
                 data, self.surface_variables
             )
 
             if self.surface_processors is not None:
                 for processor in self.surface_processors:
-                    self.logger.info(
-                        f"Processing surface data with processor: {processor}"
-                    )
                     data = processor(data)
 
             # Delete raw surface data to save memory
@@ -194,12 +185,17 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
         # Load volume data if needed
         if data.volume_unstructured_grid is not None:
 
+            # Regardless of whether there are any additional volume processors,
+            # we always apply the default volume processing.
+            # This will ensure that the bare minimum criteria for volume data is met.
+            # That is - The volume data (mesh centers and fields) are present.
             data = default_volume_processing_for_external_aerodynamics(
                 data, self.volume_variables
             )
 
-            for processor, kwargs in self.volume_processors:
-                data = processor(data, **kwargs)
+            if self.volume_processors is not None:
+                for processor, kwargs in self.volume_processors:
+                    data = processor(data, **kwargs)
 
             # Delete raw volume data to save memory
             data.volume_unstructured_grid = None

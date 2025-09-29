@@ -53,10 +53,21 @@ etl:
     stl_preprocessing:
       _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSTLTransformation
       _convert_: all
+      # Regardless of whether there are any additional geometry processors,
+      # we always apply the default geometry processing.
+      # This will ensure that the bare minimum criteria for geometry data is met.
+      # That is - The geometry data (vertices, faces, areas and centers) are present.
+      geometry_processors:
+        - _target_: examples.external_aerodynamics.external_aero_geometry_data_processors.update_geometry_data_to_float32
+          _partial_: true
 
     surface_preprocessing:
       _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSurfaceTransformation
       _convert_: all
+      # Regardless of whether there are any additional surface processors,
+      # we always apply the default surface processing.
+      # This will ensure that the bare minimum criteria for surface data is met.
+      # That is - The surface data (mesh centers, normals, areas and fields) are present.
       surface_processors:
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.decimate_mesh
           _partial_: true
@@ -75,6 +86,10 @@ etl:
     volume_preprocessing:
       _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsVolumeTransformation
       _convert_: all
+      # Regardless of whether there are any additional volume processors,
+      # we always apply the default volume processing.
+      # This will ensure that the bare minimum criteria for volume data is met.
+      # That is - The volume data (mesh centers and fields) are present.
       volume_processors:
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields
           _partial_: true

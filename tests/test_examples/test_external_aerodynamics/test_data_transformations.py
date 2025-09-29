@@ -21,18 +21,31 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import pyvista as pv
+import vtk
 
 from examples.external_aerodynamics.constants import (
     ModelType,
 )
-from examples.external_aerodynamics.data_sources import (
-    DatasetKind,
-    ExternalAerodynamicsDataSource,
-)
 from examples.external_aerodynamics.data_transformations import (
     ExternalAerodynamicsNumpyTransformation,
-    ExternalAerodynamicsPreprocessingTransformation,
+    ExternalAerodynamicsSTLTransformation,
+    ExternalAerodynamicsSurfaceTransformation,
+    ExternalAerodynamicsVolumeTransformation,
     ExternalAerodynamicsZarrTransformation,
+)
+from examples.external_aerodynamics.external_aero_geometry_data_processors import (
+    update_geometry_data_to_float32,
+)
+from examples.external_aerodynamics.external_aero_surface_data_processors import (
+    decimate_mesh,
+    non_dimensionalize_surface_fields,
+    normalize_surface_normals,
+    update_surface_data_to_float32,
+)
+from examples.external_aerodynamics.external_aero_volume_data_processors import (
+    non_dimensionalize_volume_fields,
+    update_volume_data_to_float32,
 )
 from examples.external_aerodynamics.schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
@@ -42,8 +55,6 @@ from examples.external_aerodynamics.schemas import (
     PreparedZarrArrayInfo,
 )
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
-
-from .utils import create_mock_stl, create_mock_surface_vtk, create_mock_volume_vtk
 
 
 @pytest.fixture
@@ -58,31 +69,84 @@ def temp_dir():
 def sample_data_raw(temp_dir):
     """Create sample Raw DrivAerML data for testing."""
 
-    case_dir = temp_dir / "run_001"
-    case_dir.mkdir(parents=True, exist_ok=True)
+    # Simple STL geometry - triangle
+    stl_points = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.5, 1.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+    stl_faces = np.array([3, 0, 1, 2], dtype=np.int32)  # Single triangle
+    stl_polydata = pv.PolyData(points=stl_points, faces=stl_faces)
 
-    # Create STL file with correct name and path
-    stl_path = case_dir / "drivaer_001.stl"
-    stl_path.parent.mkdir(parents=True, exist_ok=True)
-    create_mock_stl(stl_path)
+    # Simple surface mesh with basic fields
+    surface_points = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.5, 1.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+    surface_faces = np.array([3, 0, 1, 2], dtype=np.int32)
+    surface_polydata = pv.PolyData(points=surface_points, faces=surface_faces)
 
-    # Create VTK files with correct paths
-    vtk_path = case_dir
-    vtk_path.mkdir(parents=True, exist_ok=True)
-    create_mock_surface_vtk(vtk_path / "boundary_001.vtp")  # Updated surface file name
-    create_mock_volume_vtk(vtk_path / "volume_001.vtu")  # Updated volume file name
-
-    config = ProcessingConfig(num_processes=1)
-    source = ExternalAerodynamicsDataSource(
-        config,
-        input_dir=case_dir.parent,
-        kind=DatasetKind.DRIVAERML,
-        model_type=ModelType.COMBINED,
+    # Add basic fields
+    surface_polydata["pMeanTrim"] = np.array(
+        [101325.0, 101300.0, 101350.0], dtype=np.float64
+    )
+    surface_polydata["wallShearStressMeanTrim"] = np.array(
+        [[1.0, 0.0, 0.0], [1.5, 0.1, 0.0], [0.8, 0.0, 0.0]], dtype=np.float64
     )
 
-    data = source.read_file("run_001")
+    # Simple volume grid with basic fields
+    volume_grid = vtk.vtkUnstructuredGrid()
+    volume_points = vtk.vtkPoints()
+    for point in [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]:
+        volume_points.InsertNextPoint(point)
+    volume_grid.SetPoints(volume_points)
 
-    return data
+    # Add single tetrahedron cell
+    tetra = vtk.vtkTetra()
+    for i in range(4):
+        tetra.GetPointIds().SetId(i, i)
+    volume_grid.InsertNextCell(tetra.GetCellType(), tetra.GetPointIds())
+
+    # Add volume fields
+    velocity_array = vtk.vtkFloatArray()
+    velocity_array.SetName("UMeanTrim")
+    velocity_array.SetNumberOfComponents(3)
+    velocity_array.SetNumberOfTuples(4)
+    for i, vel in enumerate([[30, 0, 0], [25, 0, 0], [28, 1, 0], [27, 0, 1]]):
+        velocity_array.SetTuple3(i, vel[0], vel[1], vel[2])
+    volume_grid.GetPointData().AddArray(velocity_array)
+
+    pressure_array = vtk.vtkFloatArray()
+    pressure_array.SetName("pMeanTrim")
+    pressure_array.SetNumberOfComponents(1)
+    pressure_array.SetNumberOfTuples(4)
+    for i, p in enumerate([101325, 101300, 101320, 101310]):
+        pressure_array.SetValue(i, p)
+    volume_grid.GetPointData().AddArray(pressure_array)
+
+    return ExternalAerodynamicsExtractedDataInMemory(
+        metadata=None,
+        stl_polydata=stl_polydata,
+        surface_polydata=surface_polydata,
+        volume_unstructured_grid=volume_grid,
+        stl_coordinates=None,
+        stl_centers=None,
+        stl_faces=None,
+        stl_areas=None,
+        surface_mesh_centers=None,
+        surface_normals=None,
+        surface_areas=None,
+        surface_fields=None,
+        volume_mesh_centers=None,
+        volume_fields=None,
+    )
 
 
 @pytest.fixture
@@ -311,191 +375,336 @@ class TestExternalAerodynamicsZarrTransformation:
         assert large_data_num_chunks == 1
 
 
-class TestExternalAerodynamicsPreprocessingTransformation:
-    """Test the ExternalAerodynamicsPreprocessingTransformation class."""
+class TestExternalAerodynamicsSTLTransformation:
+    """Test the ExternalAerodynamicsSTLTransformation class."""
 
     def test_initialization(self):
-        """Test initialization of preprocessing transformation."""
+        """Test initialization of STL transformation class."""
         config = ProcessingConfig(num_processes=1)
-        transform = ExternalAerodynamicsPreprocessingTransformation(
-            config,
-            surface_variables={
-                "pMeanTrim": "scalar",
-                "wallShearStressMeanTrim": "vector",
-            },
-            volume_variables={
-                "UMeanTrim": "vector",
-                "pMeanTrim": "scalar",
-            },
-        )
+        transform = ExternalAerodynamicsSTLTransformation(config)
         assert transform.config == config
-        assert transform.surface_variables == {
-            "pMeanTrim": "scalar",
-            "wallShearStressMeanTrim": "vector",
-        }
-        assert transform.volume_variables == {
-            "UMeanTrim": "vector",
-            "pMeanTrim": "scalar",
-        }
-        assert transform.decimation_algo is None
-        assert transform.target_reduction is None
+        assert transform.geometry_processors is None
 
-    def test_initialization_with_decimation(self):
-        """Test initialization with decimation parameters."""
+    def test_initialization_with_processors(self):
+        """Test initialization with geometry processors."""
         config = ProcessingConfig(num_processes=1)
-        transform = ExternalAerodynamicsPreprocessingTransformation(
-            config,
-            surface_variables={"pMeanTrim": "scalar"},
-            volume_variables={"UMeanTrim": "vector"},
-            decimation={"algo": "decimate_pro", "reduction": 0.5},
+
+        def dummy_processor(data):
+            return data
+
+        transform = ExternalAerodynamicsSTLTransformation(
+            config, geometry_processors=(dummy_processor,)
         )
-        assert transform.decimation_algo == "decimate_pro"
-        assert transform.target_reduction == 0.5
-
-    def test_initialization_invalid_decimation_algo(self):
-        """Test initialization with invalid decimation algorithm."""
-        config = ProcessingConfig(num_processes=1)
-        with pytest.raises(ValueError, match="Unsupported decimation algo"):
-            ExternalAerodynamicsPreprocessingTransformation(
-                config,
-                decimation={"algo": "invalid_algo", "reduction": 0.5},
-            )
-
-    def test_initialization_invalid_reduction(self):
-        """Test initialization with invalid reduction value."""
-        config = ProcessingConfig(num_processes=1)
-        with pytest.raises(ValueError, match="Expected value in \[0, 1\)"):
-            ExternalAerodynamicsPreprocessingTransformation(
-                config,
-                decimation={"algo": "decimate_pro", "reduction": 1.5},
-            )
+        assert transform.geometry_processors == (dummy_processor,)
 
     def test_transform_basic(self, sample_data_raw):
-        """Test basic preprocessing transformation of External Aerodynamics data."""
+        """Test basic STL transformation of External Aerodynamics data."""
         config = ProcessingConfig(num_processes=1)
-        transform = ExternalAerodynamicsPreprocessingTransformation(
-            config,
-            surface_variables={
-                "pMeanTrim": "scalar",
-                "wallShearStressMeanTrim": "vector",
-            },
-            volume_variables={
-                "UMeanTrim": "vector",
-                "pMeanTrim": "scalar",
-            },
-        )
+        transform = ExternalAerodynamicsSTLTransformation(config)
 
         result = transform.transform(sample_data_raw)
         assert isinstance(result, ExternalAerodynamicsExtractedDataInMemory)
 
-        # Check that raw data is cleaned up
+        # Check that raw STL data is cleaned up
         assert result.stl_polydata is None
-        assert result.surface_polydata is None
-        assert result.volume_unstructured_grid is None
 
-        # Check that processed data is updated and converted to float32
+        # Check that processed STL data is present
+        assert result.stl_coordinates is not None
+        assert result.stl_centers is not None
+        assert result.stl_faces is not None
+        assert result.stl_areas is not None
+
+        # Check metadata
+        assert result.metadata.num_points == 3
+        assert result.metadata.num_faces == 3
+
+    def test_transform_with_simple_processors(self, sample_data_raw):
+        """Test STL transformation with custom, simple processors."""
+        config = ProcessingConfig(num_processes=1)
+
+        # Create a mock processor that modifies the data
+        def mock_processor(data):
+            # Just modify the data slightly to verify it was called
+            if data.stl_coordinates is not None:
+                data.stl_coordinates = data.stl_coordinates * 2.0
+            return data
+
+        transform = ExternalAerodynamicsSTLTransformation(
+            config, geometry_processors=(mock_processor,)
+        )
+
+        original_coords = sample_data_raw.stl_coordinates.copy()
+        result = transform.transform(sample_data_raw)
+
+        # Check that the processor was applied
+        np.testing.assert_array_equal(result.stl_coordinates, original_coords * 2.0)
+
+    def test_transform_with_default_processor_and_float32_conversion(
+        self, sample_data_raw
+    ):
+        """Test STL transformation with float32 conversion on top of the default processor."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsSTLTransformation(
+            config, geometry_processors=(update_geometry_data_to_float32,)
+        )
+        result = transform.transform(sample_data_raw)
+
+        # Check data types
         assert result.stl_coordinates.dtype == np.float32
         assert result.stl_centers.dtype == np.float32
-        assert result.stl_faces.dtype == np.int32
+        assert result.stl_faces.dtype == np.int32  # This should remain int32
         assert result.stl_areas.dtype == np.float32
 
-        # Check metadata updates
-        assert result.metadata.stream_velocity == 30.0  # From PhysicsConstants
-        assert result.metadata.air_density == 1.205  # From PhysicsConstants
-        assert result.metadata.num_points == 3  # From the test mesh
-        assert result.metadata.num_faces == 3  # From the test mesh
+
+class TestExternalAerodynamicsSurfaceTransformation:
+    """Test the ExternalAerodynamicsSurfaceTransformation class."""
+
+    def test_initialization(self):
+        """Test initialization of the surface transformation class."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsSurfaceTransformation(config)
+        assert transform.config == config
+        assert transform.surface_variables is None
+        assert transform.surface_processors is None
+
+    def test_initialization_with_variables(self):
+        """Test initialization with surface variables."""
+        config = ProcessingConfig(num_processes=1)
+        surface_variables = {
+            "pMeanTrim": "scalar",
+            "wallShearStressMeanTrim": "vector",
+        }
+        transform = ExternalAerodynamicsSurfaceTransformation(
+            config, surface_variables=surface_variables
+        )
+        assert transform.surface_variables == surface_variables
 
     def test_transform_with_surface_data(self, sample_data_raw):
-        """Test preprocessing transformation with surface data."""
+        """Test surface transformation with surface data."""
         config = ProcessingConfig(num_processes=1)
-        transform = ExternalAerodynamicsPreprocessingTransformation(
+        transform = ExternalAerodynamicsSurfaceTransformation(
             config,
             surface_variables={
                 "pMeanTrim": "scalar",
                 "wallShearStressMeanTrim": "vector",
             },
-            volume_variables={
-                "UMeanTrim": "vector",
-                "pMeanTrim": "scalar",
-            },
         )
 
-        # Set volume data to None since this is a surface data transformation only test.
-        sample_data_raw.volume_unstructured_grid = None
         result = transform.transform(sample_data_raw)
+
+        # Check that raw surface data is cleaned up
+        assert result.surface_polydata is None
 
         # Check surface data processing
-        assert result.surface_mesh_centers.dtype == np.float32
-        assert result.surface_normals.dtype == np.float32
-        assert result.surface_areas.dtype == np.float32
-        assert result.surface_fields.dtype == np.float32
-
-        # Check that surface fields are non-dimensionalized
-        # The normalization factor should be (air_density * stream_velocity^2)
-        normalization_factor = 1.205 * 30.0**2
-        np.testing.assert_array_almost_equal(
-            result.surface_fields,
-            np.array(
-                [[1.0 / normalization_factor, 1.0 / normalization_factor, 0.0, 0.0]]
-            ),
-        )
-
-        # Check that normals are normalized
-        norms = np.linalg.norm(result.surface_normals, axis=1)
-        np.testing.assert_array_almost_equal(norms, np.ones_like(norms))
-
-    def test_transform_with_volume_data(self, sample_data_raw):
-        """Test preprocessing transformation with volume data."""
-        config = ProcessingConfig(num_processes=1)
-        transform = ExternalAerodynamicsPreprocessingTransformation(
-            config,
-            volume_variables={
-                "UMeanTrim": "vector",
-                "pMeanTrim": "scalar",
-            },
-        )
-
-        # Set surface data to None since this is a volume data transformation only test.
-        sample_data_raw.surface_polydata = None
-        result = transform.transform(sample_data_raw)
-
-        # Check volume data processing
-        assert result.volume_mesh_centers.dtype == np.float32
-        assert result.volume_fields.dtype == np.float32
-        assert result.volume_fields is not None
+        assert result.surface_mesh_centers is not None
+        assert result.surface_normals is not None
+        assert result.surface_areas is not None
+        assert result.surface_fields is not None
 
     def test_transform_no_surface_data(self, sample_data_raw):
-        """Test preprocessing transformation without surface data."""
+        """Test surface transformation without surface data."""
         config = ProcessingConfig(num_processes=1)
-        transform = ExternalAerodynamicsPreprocessingTransformation(
-            config,
-            volume_variables={"UMeanTrim": "vector"},
-        )
+        transform = ExternalAerodynamicsSurfaceTransformation(config)
 
         # Set surface data to None.
         sample_data_raw.surface_polydata = None
 
         result = transform.transform(sample_data_raw)
 
-        # Check that surface data is None
+        # Check that surface data remains None
         assert result.surface_mesh_centers is None
         assert result.surface_normals is None
         assert result.surface_areas is None
         assert result.surface_fields is None
 
-    def test_transform_no_volume_data(self, sample_data_raw):
-        """Test preprocessing transformation without volume data."""
+    def test_transform_with_simple_processors(self, sample_data_raw):
+        """Test surface transformation with custom, simple processors."""
         config = ProcessingConfig(num_processes=1)
-        transform = ExternalAerodynamicsPreprocessingTransformation(
-            config,
-            surface_variables={"pMeanTrim": "scalar"},
+
+        # Create a mock processor
+        def mock_processor(data):
+            # Modify surface centers to verify it was called
+            if data.surface_mesh_centers is not None:
+                data.surface_mesh_centers = data.surface_mesh_centers * 1.5
+            return data
+
+        transform = ExternalAerodynamicsSurfaceTransformation(
+            config, surface_processors=(mock_processor,)
         )
+
+        result = transform.transform(sample_data_raw)
+
+        # The processor should have been applied after default processing
+        assert result.surface_mesh_centers is not None
+
+    def test_transform_with_default_processor_and_float32_conversion(
+        self, sample_data_raw
+    ):
+        """Test surface transformation with float32 conversion on top of the default processor."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsSurfaceTransformation(
+            config, surface_processors=(update_surface_data_to_float32,)
+        )
+        result = transform.transform(sample_data_raw)
+
+        # Check data types
+        assert result.surface_mesh_centers.dtype == np.float32
+        assert result.surface_normals.dtype == np.float32
+        assert result.surface_areas.dtype == np.float32
+        assert result.surface_fields.dtype == np.float32
+
+    def test_transform_with_default_processor_and_mesh_decimation(
+        self, sample_data_raw
+    ):
+        """Test surface transformation with mesh decimation on top of the default processor."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsSurfaceTransformation(
+            config,
+            surface_processors=(
+                decimate_mesh,
+                {"algo": "decimate_pro", "reduction": 0.5},
+            ),
+        )
+        result = transform.transform(sample_data_raw)
+
+        # Check that the mesh was decimated
+        assert (
+            result.surface_mesh_centers.shape[0]
+            < sample_data_raw.surface_mesh_centers.shape[0]
+        )
+
+        # Check metadata
+        assert result.metadata.decimation_algo == "decimate_pro"
+        assert result.metadata.decimation_reduction == 0.0
+
+    def test_transform_with_default_processor_and_normalization(self, sample_data_raw):
+        """Test surface transformation with normalization on top of the default processor."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsSurfaceTransformation(
+            config, surface_processors=(normalize_surface_normals,)
+        )
+        result = transform.transform(sample_data_raw)
+
+        # Check that the normals were normalized
+        assert result.surface_normals.shape == sample_data_raw.surface_normals.shape
+        assert np.all(
+            np.abs(np.linalg.norm(result.surface_normals, axis=1) - 1.0) < 1e-6
+        )
+
+    def test_transform_with_default_processor_and_non_dimensionalization(
+        self, sample_data_raw
+    ):
+        """Test surface transformation with non-dimensionalization on top of the default processor."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsSurfaceTransformation(
+            config, surface_processors=(non_dimensionalize_surface_fields,)
+        )
+        result = transform.transform(sample_data_raw)
+
+        # Check that the fields were non-dimensionalized
+        assert result.surface_fields.shape == sample_data_raw.surface_fields.shape
+        assert np.all(np.abs(result.surface_fields) < 1e-6)
+
+
+class TestExternalAerodynamicsVolumeTransformation:
+    """Test the ExternalAerodynamicsVolumeTransformation class."""
+
+    def test_initialization(self):
+        """Test initialization of volume transformation."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsVolumeTransformation(config)
+        assert transform.config == config
+        assert transform.volume_variables is None
+        assert transform.volume_processors is None
+
+    def test_initialization_with_variables(self):
+        """Test initialization with volume variables."""
+        config = ProcessingConfig(num_processes=1)
+        volume_variables = {
+            "UMeanTrim": "vector",
+            "pMeanTrim": "scalar",
+        }
+        transform = ExternalAerodynamicsVolumeTransformation(
+            config, volume_variables=volume_variables
+        )
+        assert transform.volume_variables == volume_variables
+
+    def test_transform_with_volume_data(self, sample_data_raw):
+        """Test volume transformation with volume data."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsVolumeTransformation(
+            config,
+            volume_variables={
+                "UMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+        )
+
+        result = transform.transform(sample_data_raw)
+
+        # Check that raw volume data is cleaned up
+        assert result.volume_unstructured_grid is None
+
+        # Check volume data processing
+        assert result.volume_mesh_centers is not None
+        assert result.volume_fields is not None
+
+    def test_transform_no_volume_data(self, sample_data_raw):
+        """Test volume transformation without volume data."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsVolumeTransformation(config)
 
         # Set volume data to None.
         sample_data_raw.volume_unstructured_grid = None
 
         result = transform.transform(sample_data_raw)
 
-        # Check that volume data is None
+        # Check that volume data remains None
         assert result.volume_mesh_centers is None
         assert result.volume_fields is None
+
+    def test_transform_with_processors(self, sample_data_raw):
+        """Test volume transformation with custom processors."""
+        config = ProcessingConfig(num_processes=1)
+
+        # Create a mock processor with kwargs
+        def mock_processor(data, scale_factor=1.0):
+            # Modify volume centers to verify it was called
+            if data.volume_mesh_centers is not None:
+                data.volume_mesh_centers = data.volume_mesh_centers * scale_factor
+            return data
+
+        transform = ExternalAerodynamicsVolumeTransformation(
+            config, volume_processors=((mock_processor, {"scale_factor": 2.0}),)
+        )
+
+        result = transform.transform(sample_data_raw)
+
+        # The processor should have been applied after default processing
+        assert result.volume_mesh_centers is not None
+
+    def test_transform_with_default_processor_and_float32_conversion(
+        self, sample_data_raw
+    ):
+        """Test volume transformation with float32 conversion on top of the default processor."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsVolumeTransformation(
+            config, volume_processors=(update_volume_data_to_float32,)
+        )
+        result = transform.transform(sample_data_raw)
+        # Check data types
+        assert result.volume_mesh_centers.dtype == np.float32
+        assert result.volume_fields.dtype == np.float32
+
+    def test_transform_with_default_processor_and_non_dimensionalization(
+        self, sample_data_raw
+    ):
+        """Test volume transformation with non-dimensionalization on top of the default processor."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsVolumeTransformation(
+            config, volume_processors=(non_dimensionalize_volume_fields,)
+        )
+        result = transform.transform(sample_data_raw)
+        # Check that the fields were non-dimensionalized
+        assert result.volume_fields.shape == sample_data_raw.volume_fields.shape
+        assert np.all(np.abs(result.volume_fields) < 1e-6)
