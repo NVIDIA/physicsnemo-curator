@@ -94,6 +94,115 @@ physicsnemo-curator-etl                     \
 Please refer to the [config file](../../../examples/config/external_aero_etl_drivaerml.yaml) for more
 options.
 
+### Injecting and chaining transformations
+
+The pipeline provides a flexible processor injection system that allows you to
+customize and extend the data transformation pipeline. Each transformation class (STL,
+Surface, Volume) supports injecting custom processors that are applied **after** the
+default processing.
+
+#### How Processors Work
+
+1. **Default Processing**: Each transformation always applies required default processing
+   first (e.g., extracting mesh centers, computing normals)
+2. **Custom Processors**: Additional processors are then applied in sequence, allowing
+   you to chain multiple operations
+3. **Function-Based**: Processors are Python functions that take data as input and
+   return modified data
+
+#### Available Processors
+
+**Geometry Processors** (for STL transformation):
+
+- `update_geometry_data_to_float32`: Convert geometry data to float32 precision
+
+**Surface Processors** (for surface transformation):
+
+- `decimate_mesh`: Reduce mesh resolution (see Mesh Decimation Options below)
+- `normalize_surface_normals`: Normalize surface normal vectors to unit length
+- `non_dimensionalize_surface_fields`: Convert fields to non-dimensional form
+- `update_surface_data_to_float32`: Convert surface data to float32 precision
+
+**Volume Processors** (for volume transformation):
+
+- `non_dimensionalize_volume_fields`: Convert volume fields to non-dimensional form
+- `update_volume_data_to_float32`: Convert volume data to float32 precision
+
+#### Configuration Examples
+
+**Single Processor (no parameters):**
+
+```yaml
+surface_preprocessing:
+  _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSurfaceTransformation
+  surface_processors:
+    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
+      _partial_: true
+```
+
+**Single Processor (with parameters):**
+
+```yaml
+surface_preprocessing:
+  surface_processors:
+    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
+      _partial_: true
+      air_density: 1.205  # kg/m³
+      stream_velocity: 30.0  # m/s
+```
+
+**Chaining Multiple Processors:**
+
+```yaml
+surface_preprocessing:
+  surface_processors:
+    # 1. Normalize normals
+    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
+      _partial_: true
+    # 2. Then non-dimensionalize fields
+    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
+      _partial_: true
+      air_density: 1.205
+      stream_velocity: 30.0
+    # 3. Finally convert to float32
+    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
+      _partial_: true
+```
+
+#### Creating Custom Processors
+
+You can create your own processors by writing functions that follow this signature:
+
+```python
+from examples.external_aerodynamics.schemas import ExternalAerodynamicsExtractedDataInMemory
+
+def my_custom_processor(
+    data: ExternalAerodynamicsExtractedDataInMemory,
+    my_param: float = 1.0,  # Optional parameters
+) -> ExternalAerodynamicsExtractedDataInMemory:
+    """Custom processing logic."""
+    # Modify data as needed
+    data.surface_fields = data.surface_fields * my_param
+    return data
+```
+
+Then reference it in your config:
+
+```yaml
+surface_processors:
+  - _target_: my_module.my_custom_processor
+    _partial_: true
+    my_param: 2.0
+```
+
+**Key Points:**
+
+- Always use `_partial_: true` when configuring processors with Hydra
+- Processors are applied in the order they appear in the configuration
+- Each processor receives the output of the previous processor
+- Processors must return the modified data object
+- Default processing always runs first, before any custom processors
+
 ### Mesh Decimation Options
 
 PhysicsNeMo-Curator supports mesh decimation with the following options:
