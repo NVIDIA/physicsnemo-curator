@@ -511,7 +511,7 @@ class TestExternalAerodynamicsSurfaceTransformation:
         assert result.surface_areas is not None
         assert result.surface_fields is not None
 
-    def test_transform_no_surface_data_raises_error(self, sample_data_raw):
+    def test_transform_no_surface_data(self, sample_data_raw):
         """Test surface transformation without surface data."""
         config = ProcessingConfig(num_processes=1)
         transform = ExternalAerodynamicsSurfaceTransformation(
@@ -525,8 +525,11 @@ class TestExternalAerodynamicsSurfaceTransformation:
         # Set surface data to None.
         sample_data_raw.surface_polydata = None
 
-        with pytest.raises(ValueError):
-            transform.transform(sample_data_raw)
+        result = transform.transform(sample_data_raw)
+        assert result.surface_mesh_centers is None
+        assert result.surface_normals is None
+        assert result.surface_areas is None
+        assert result.surface_fields is None
 
     def test_transform_with_simple_processors(self, sample_data_raw):
         """Test surface transformation with custom, simple processors."""
@@ -667,7 +670,7 @@ class TestExternalAerodynamicsVolumeTransformation:
         assert result.volume_mesh_centers is not None
         assert result.volume_fields is not None
 
-    def test_transform_no_volume_data_raises_error(self, sample_data_raw):
+    def test_transform_no_volume_data(self, sample_data_raw):
         """Test volume transformation without volume data."""
         config = ProcessingConfig(num_processes=1)
         transform = ExternalAerodynamicsVolumeTransformation(
@@ -681,8 +684,9 @@ class TestExternalAerodynamicsVolumeTransformation:
         # Set volume data to None.
         sample_data_raw.volume_unstructured_grid = None
 
-        with pytest.raises(ValueError):
-            transform.transform(sample_data_raw)
+        result = transform.transform(sample_data_raw)
+        assert result.volume_mesh_centers is None
+        assert result.volume_fields is None
 
     def test_transform_with_processors(self, sample_data_raw):
         """Test volume transformation with custom processors."""

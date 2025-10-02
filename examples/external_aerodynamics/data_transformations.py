@@ -143,6 +143,10 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
         )
         self.logger = logging.getLogger(__name__)
 
+        self.surface_variables = surface_variables
+        self.surface_processors = surface_processors
+        self.constants = PhysicsConstants()
+
         if surface_variables is None:
             self.logger.error("Surface variables are empty!")
             raise ValueError("Surface variables are empty!")
@@ -150,33 +154,31 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
         self.logger.info(
             f"Initializing ExternalAerodynamicsSurfaceTransformation with surface_variables: {surface_variables} and surface_processors: {surface_processors}"
         )
-        self.surface_variables = surface_variables
-        self.surface_processors = surface_processors
-        self.constants = PhysicsConstants()
+        self.logger.info(
+            "This will only be processed if the model_type is surface/combined."
+        )
 
     def transform(
         self, data: ExternalAerodynamicsExtractedDataInMemory
     ) -> ExternalAerodynamicsExtractedDataInMemory:
         """Transform surface data for External Aerodynamics model."""
 
-        if data.surface_polydata is None:
-            self.logger.error("No raw surface data present!")
-            raise ValueError("No raw surface data present!")
+        if data.surface_polydata is not None:
 
-        # Regardless of whether there are any additional surface processors,
-        # we always apply the default surface processing.
-        # This will ensure that the bare minimum criteria for surface data is met.
-        # That is - The surface data (mesh centers, normals, areas and fields) are present.
-        data = default_surface_processing_for_external_aerodynamics(
-            data, self.surface_variables
-        )
+            # Regardless of whether there are any additional surface processors,
+            # we always apply the default surface processing.
+            # This will ensure that the bare minimum criteria for surface data is met.
+            # That is - The surface data (mesh centers, normals, areas and fields) are present.
+            data = default_surface_processing_for_external_aerodynamics(
+                data, self.surface_variables
+            )
 
-        if self.surface_processors is not None:
-            for processor in self.surface_processors:
-                data = processor(data)
+            if self.surface_processors is not None:
+                for processor in self.surface_processors:
+                    data = processor(data)
 
-        # Delete raw surface data to save memory
-        data.surface_polydata = None
+            # Delete raw surface data to save memory
+            data.surface_polydata = None
 
         return data
 
@@ -208,29 +210,30 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
         self.logger.info(
             f"Initializing ExternalAerodynamicsVolumeTransformation with volume_variables: {volume_variables} and volume_processors: {volume_processors}"
         )
+        self.logger.info(
+            "This will only be processed if the model_type is volume/combined."
+        )
 
     def transform(
         self, data: ExternalAerodynamicsExtractedDataInMemory
     ) -> ExternalAerodynamicsExtractedDataInMemory:
 
-        if data.volume_unstructured_grid is None:
-            self.logger.error("No raw volume data present!")
-            raise ValueError("No raw volume data present!")
+        if data.volume_unstructured_grid is not None:
 
-        # Regardless of whether there are any additional volume processors,
-        # we always apply the default volume processing.
-        # This will ensure that the bare minimum criteria for volume data is met.
-        # That is - The volume data (mesh centers and fields) are present.
-        data = default_volume_processing_for_external_aerodynamics(
-            data, self.volume_variables
-        )
+            # Regardless of whether there are any additional volume processors,
+            # we always apply the default volume processing.
+            # This will ensure that the bare minimum criteria for volume data is met.
+            # That is - The volume data (mesh centers and fields) are present.
+            data = default_volume_processing_for_external_aerodynamics(
+                data, self.volume_variables
+            )
 
-        if self.volume_processors is not None:
-            for processor in self.volume_processors:
-                data = processor(data)
+            if self.volume_processors is not None:
+                for processor in self.volume_processors:
+                    data = processor(data)
 
-        # Delete raw volume data to save memory
-        data.volume_unstructured_grid = None
+            # Delete raw volume data to save memory
+            data.volume_unstructured_grid = None
 
         return data
 
