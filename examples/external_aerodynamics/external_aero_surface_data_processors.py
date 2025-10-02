@@ -43,7 +43,7 @@ def default_surface_processing_for_external_aerodynamics(
     data.surface_fields = np.concatenate(
         [d if d.ndim > 1 else d[:, np.newaxis] for d in cell_data], axis=-1
     )
-    data.surface_coordinates = np.array(data.surface_polydata.cell_centers().points)
+    data.surface_mesh_centers = np.array(data.surface_polydata.cell_centers().points)
     data.surface_normals = np.array(data.surface_polydata.cell_normals)
     data.surface_areas = data.surface_polydata.compute_cell_sizes(
         length=False, area=True, volume=False
@@ -99,7 +99,7 @@ def update_surface_data_to_float32(
     """Update surface data to float32."""
 
     # Update processed surface data
-    data.surface_mesh_centers = to_float32(data.surface_coordinates)
+    data.surface_mesh_centers = to_float32(data.surface_mesh_centers)
     data.surface_normals = to_float32(data.surface_normals)
     data.surface_areas = to_float32(data.surface_areas)
     data.surface_fields = to_float32(data.surface_fields)

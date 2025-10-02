@@ -28,7 +28,7 @@ def default_geometry_processing_for_external_aerodynamics(
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Default geometry processing for External Aerodynamics."""
 
-    data.stl_vertices = data.stl_polydata.points
+    data.stl_coordinates = data.stl_polydata.points
     data.stl_faces = (
         np.array(data.stl_polydata.faces).reshape((-1, 4))[:, 1:].astype(np.int32)
     ).flatten()  # Assuming triangular elements
@@ -54,7 +54,7 @@ def update_geometry_data_to_float32(
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Update geometry data to float32."""
 
-    data.stl_coordinates = to_float32(data.stl_vertices)
+    data.stl_coordinates = to_float32(data.stl_coordinates)
     data.stl_centers = to_float32(data.stl_centers)
     data.stl_areas = to_float32(data.stl_areas)
     # data.stl_faces will be left as is (np.int32)

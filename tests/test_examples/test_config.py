@@ -78,12 +78,12 @@ def test_external_aero_etl_drivaerml_config():
             assert m.call_count == 1
         assert cfg.etl.source.kind == "drivaerml"
         assert cfg.etl.source.model_type == "surface"
-        assert cfg.etl.transformations.preprocessing.volume_variables == {
+        assert cfg.etl.transformations.volume_preprocessing.volume_variables == {
             "UMeanTrim": "vector",
             "pMeanTrim": "scalar",
             "nutMeanTrim": "scalar",
         }
-        assert cfg.etl.transformations.preprocessing.surface_variables == {
+        assert cfg.etl.transformations.surface_preprocessing.surface_variables == {
             "pMeanTrim": "scalar",
             "wallShearStressMeanTrim": "vector",
         }
@@ -91,20 +91,20 @@ def test_external_aero_etl_drivaerml_config():
         # Test transformation settings
         # Test preprocessing transformation
         with patch.object(
-            data_transformations.ExternalAerodynamicsPreprocessingTransformation,
+            data_transformations.ExternalAerodynamicsVolumeTransformation,
             "__init__",
             return_value=None,
         ) as m:
-            instantiate(cfg.etl.transformations.preprocessing)
+            instantiate(cfg.etl.transformations.volume_preprocessing)
             assert m.call_count == 1
 
         # Test zarr transformation
         with patch.object(
-            data_transformations.ExternalAerodynamicsZarrTransformation,
+            data_transformations.ExternalAerodynamicsSurfaceTransformation,
             "__init__",
             return_value=None,
         ) as m:
-            instantiate(cfg.etl.transformations.write_ready_transformation)
+            instantiate(cfg.etl.transformations.surface_preprocessing)
             assert m.call_count == 1
 
         # Test sink settings
