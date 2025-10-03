@@ -15,8 +15,8 @@
 # limitations under the License.
 
 defaults:
-  - /variables_surface: drivaerml
-  - /variables_volume: drivaerml
+  - /variables/surface: drivaerml
+  - /variables/volume: drivaerml
   - /serialization_format: zarr  # Default value, can be overridden via CLI
   - /override_transformations: ${serialization_format}
   - _self_

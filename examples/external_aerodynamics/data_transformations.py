@@ -98,11 +98,6 @@ class ExternalAerodynamicsSTLTransformation(DataTransformation):
     ):
         super().__init__(cfg)
         self.geometry_processors = geometry_processors
-        logging.basicConfig(
-            format="%(asctime)s - Process %(process)d - %(levelname)s - %(message)s",
-            level=logging.INFO,
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
         self.logger = logging.getLogger(__name__)
 
     def transform(
@@ -136,11 +131,6 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
         surface_processors: Optional[tuple[Callable, ...]] = None,
     ):
         super().__init__(cfg)
-        logging.basicConfig(
-            format="%(asctime)s - Process %(process)d - %(levelname)s - %(message)s",
-            level=logging.INFO,
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
         self.logger = logging.getLogger(__name__)
 
         self.surface_variables = surface_variables
@@ -196,11 +186,6 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
         self.volume_variables = volume_variables
         self.volume_processors = volume_processors
         self.constants = PhysicsConstants()
-        logging.basicConfig(
-            format="%(asctime)s - Process %(process)d - %(levelname)s - %(message)s",
-            level=logging.INFO,
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
         self.logger = logging.getLogger(__name__)
 
         if volume_variables is None:
