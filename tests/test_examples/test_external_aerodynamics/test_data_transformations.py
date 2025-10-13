@@ -45,6 +45,7 @@ from examples.external_aerodynamics.external_aero_surface_data_processors import
 )
 from examples.external_aerodynamics.external_aero_volume_data_processors import (
     non_dimensionalize_volume_fields,
+    shuffle_volume_data,
     update_volume_data_to_float32,
 )
 from examples.external_aerodynamics.schemas import (
@@ -766,3 +767,110 @@ class TestExternalAerodynamicsVolumeTransformation:
         )
         expected = np.concatenate([expected_velocity, expected_pressure], axis=-1)
         np.testing.assert_allclose(result.volume_fields, expected, rtol=1e-5)
+
+    def test_transform_with_default_processor_and_shuffle_data(self, sample_data_raw):
+        """Test volume transformation with shuffle on top of the default processor."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsVolumeTransformation(
+            config,
+            volume_variables={
+                "UMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+            volume_processors=(shuffle_volume_data,),
+        )
+
+        # Get original volume data for comparison
+        from examples.external_aerodynamics.external_aero_utils import get_volume_data
+
+        original_centers, original_fields = get_volume_data(
+            sample_data_raw.volume_unstructured_grid,
+            {"UMeanTrim": "vector", "pMeanTrim": "scalar"},
+        )
+        original_fields = np.concatenate(original_fields, axis=-1)
+
+        result = transform.transform(sample_data_raw)
+
+        # Check that data was shuffled (should be different from original)
+        assert not np.array_equal(result.volume_mesh_centers, original_centers)
+        assert not np.array_equal(result.volume_fields, original_fields)
+
+        # Check that shapes are preserved
+        assert result.volume_mesh_centers.shape == original_centers.shape
+        assert result.volume_fields.shape == original_fields.shape
+
+        # Verify all data points are preserved (no loss or duplication)
+        # Sort both original and shuffled data to compare
+        original_sorted_idx = np.lexsort(original_centers.T)
+        result_sorted_idx = np.lexsort(result.volume_mesh_centers.T)
+
+        np.testing.assert_allclose(
+            original_centers[original_sorted_idx],
+            result.volume_mesh_centers[result_sorted_idx],
+            rtol=1e-10,
+        )
+        np.testing.assert_allclose(
+            original_fields[original_sorted_idx],
+            result.volume_fields[result_sorted_idx],
+            rtol=1e-10,
+        )
+
+        # Check that data is coupled (same permutation applied to both)
+        for i in range(len(result.volume_mesh_centers)):
+            shuffled_center = result.volume_mesh_centers[i]
+            shuffled_field = result.volume_fields[i]
+
+            # Find where this center was in the original data
+            original_idx = np.where(
+                np.all(np.isclose(original_centers, shuffled_center), axis=1)
+            )[0][0]
+
+            # Verify the field at this position matches the original
+            np.testing.assert_allclose(
+                shuffled_field, original_fields[original_idx], rtol=1e-10
+            )
+
+    def test_transform_with_default_processor_and_shuffle_data_large_array(self):
+        """Test shuffling with a larger array to ensure efficiency."""
+        # Create a larger dataset
+        n_points = 10000
+        centers = np.random.rand(n_points, 3).astype(np.float64)
+        fields = np.random.rand(n_points, 4).astype(np.float64)
+
+        # Create metadata
+        metadata = ExternalAerodynamicsMetadata(
+            filename="test_large",
+            dataset_type=ModelType.VOLUME,  # Only has volume data for this test.
+        )
+
+        # Create data container
+        data = ExternalAerodynamicsExtractedDataInMemory(metadata=metadata)
+        data.volume_mesh_centers = centers
+        data.volume_fields = fields
+
+        # Store original
+        original_centers = centers.copy()
+        original_fields = fields.copy()
+
+        # Shuffle
+        result = shuffle_volume_data(data, seed=42)
+
+        # Verify shapes
+        assert result.volume_mesh_centers.shape == original_centers.shape
+        assert result.volume_fields.shape == original_fields.shape
+
+        # Verify coupling: for a sample of points, check they moved together
+        sample_indices = [0, 100, 500, 1000, 5000, 9999]
+        for orig_idx in sample_indices:
+            orig_center = original_centers[orig_idx]
+            orig_field = original_fields[orig_idx]
+
+            # Find where this center moved to
+            new_idx = np.where(
+                np.all(np.isclose(result.volume_mesh_centers, orig_center), axis=1)
+            )[0][0]
+
+            # Check the field moved with it
+            np.testing.assert_allclose(
+                result.volume_fields[new_idx], orig_field, rtol=1e-10
+            )

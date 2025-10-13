@@ -64,3 +64,22 @@ def update_volume_data_to_float32(
     data.volume_mesh_centers = to_float32(data.volume_mesh_centers)
     data.volume_fields = to_float32(data.volume_fields)
     return data
+
+
+def shuffle_volume_data(
+    data: ExternalAerodynamicsExtractedDataInMemory,
+    seed: int = 42,
+) -> ExternalAerodynamicsExtractedDataInMemory:
+    """
+    Shuffle volume data.
+
+    This is useful because instead of randomly accessing the data upon read,
+    we can shuffle the data during preprocessing, and do sequential reads.
+    """
+
+    rng = np.random.default_rng(seed)
+    indices = rng.permutation(len(data.volume_mesh_centers))
+    data.volume_mesh_centers = data.volume_mesh_centers[indices]
+    data.volume_fields = data.volume_fields[indices]
+
+    return data

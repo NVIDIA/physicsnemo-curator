@@ -95,6 +95,8 @@ etl:
           _partial_: true
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
           _partial_: true
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.shuffle_volume_data
+          _partial_: true
 
     write_ready_transformation: ${override_transformations.write_ready_transformation}
 
