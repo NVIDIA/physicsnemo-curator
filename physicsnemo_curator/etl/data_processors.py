@@ -82,6 +82,9 @@ class ParallelProcessor:
             self.logger.warning("No files found to process")
             return
 
+        # Clean up orphaned temp files from previous interrupted runs
+        self.sink.cleanup_temp_files()
+
         files_per_worker = (
             num_files + self.config.num_processes - 1
         ) // self.config.num_processes

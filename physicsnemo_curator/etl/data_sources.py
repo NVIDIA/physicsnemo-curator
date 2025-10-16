@@ -16,6 +16,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 from .processing_config import ProcessingConfig
@@ -40,11 +41,81 @@ class DataSource(ABC):
         pass
 
     @abstractmethod
-    def write(self, data: dict[str, Any], filename: str) -> None:
-        """Write transformed data to storage."""
+    def _get_output_path(self, filename: str) -> Path:
+        """Get the final output path for a given filename.
+
+        Args:
+            filename: Name of the file to process
+
+        Returns:
+            Path object representing the final output location
+        """
         pass
 
     @abstractmethod
+    def _write_impl_temp_file(self, data: dict[str, Any], output_path: Path) -> None:
+        """Implement actual data writing logic to a temporary file.
+
+        Args:
+            data: Transformed data to write
+            output_path: Path where data should be written (may be temporary)
+        """
+        pass
+
+    def write(self, data: dict[str, Any], filename: str) -> None:
+        """Write transformed data to storage with atomic temp-then-rename.
+
+        This method handles the temp-then-rename pattern for robust writes.
+        It ensures that output files are either complete or don't exist,
+        preventing partial files from interrupted writes.
+
+        Subclasses should implement _write_impl_temp_file() for actual serialization.
+
+        Args:
+            data: Transformed data to write
+            filename: Name of the file being processed
+        """
+        final_path = self._get_output_path(filename)
+        temp_path = self._get_temporary_output_path(final_path)
+
+        # Write to temporary location
+        self._write_impl_temp_file(data, temp_path)
+
+        # Atomic rename to final location
+        temp_path.rename(final_path)
+        self.logger.debug(f"Successfully wrote {final_path}")
+
+    def _get_temporary_output_path(self, final_path: Path) -> Path:
+        """Get temporary path for a final output path.
+
+        Args:
+            final_path: The final destination path
+
+        Returns:
+            Temporary path with _temp suffix before the extension
+        """
+        return final_path.with_name(f"{final_path.name}_temp")
+
     def should_skip(self, filename: str) -> bool:
-        """Checks whether the file should be skipped."""
+        """Check if processing should be skipped for this file.
+
+        Default implementation checks if the output file exists.
+        Subclasses can override for custom skip logic (e.g., overwrite flags).
+
+        Args:
+            filename: Name of the file to check
+
+        Returns:
+            True if processing should be skipped, False otherwise
+        """
+        return self._get_output_path(filename).exists()
+
+    def cleanup_temp_files(self) -> None:
+        """Clean up orphaned temporary files from interrupted runs.
+
+        This method should be called at the start of processing to remove
+        any temporary files left over from previous interrupted runs.
+        Subclasses can override to implement cleanup logic specific to
+        their output format and directory structure.
+        """
         pass

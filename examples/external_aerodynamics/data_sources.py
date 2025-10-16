@@ -134,46 +134,62 @@ class ExternalAerodynamicsDataSource(DataSource):
             metadata=metadata,
         )
 
-    def write(
+    def _get_output_path(self, filename: str) -> Path:
+        """Get the final output path for a given filename.
+
+        Args:
+            filename: Name of the simulation case
+
+        Returns:
+            Path to the output file/directory
+        """
+        if self.serialization_method == "numpy":
+            return self.output_dir / f"{filename}.npz"
+        elif self.serialization_method == "zarr":
+            return self.output_dir / f"{filename}.zarr"
+        else:
+            raise ValueError(
+                f"Unsupported serialization method: {self.serialization_method}"
+            )
+
+    def _write_impl_temp_file(
         self,
         data: (
             ExternalAerodynamicsNumpyDataInMemory | ExternalAerodynamicsZarrDataInMemory
         ),
-        filename: str,
+        output_path: Path,
     ) -> None:
-        """Write transformed data to storage.
+        """Write transformed data to the specified output path.
 
         Args:
             data: Transformed data to write (either NumPy or Zarr format)
-            filename: Name of the simulation case
+            output_path: Path where data should be written (may be temporary)
         """
         if self.serialization_method == "numpy":
             if not isinstance(data, ExternalAerodynamicsNumpyDataInMemory):
                 raise TypeError(
                     "Expected ExternalAerodynamicsNumpyDataInMemory for numpy serialization"
                 )
-            self._write_numpy(data, filename)
+            self._write_numpy(data, output_path)
         elif self.serialization_method == "zarr":
             if not isinstance(data, ExternalAerodynamicsZarrDataInMemory):
                 raise TypeError(
                     "Expected ExternalAerodynamicsZarrDataInMemory for zarr serialization"
                 )
-            self._write_zarr(data, filename)
+            self._write_zarr(data, output_path)
         else:
             raise ValueError(
                 f"Unsupported serialization method: {self.serialization_method}"
             )
 
     def _write_numpy(
-        self, data: ExternalAerodynamicsNumpyDataInMemory, filename: str
+        self, data: ExternalAerodynamicsNumpyDataInMemory, output_path: Path
     ) -> None:
         """Write data in NumPy format (legacy support).
 
         Note: This format supports only basic metadata. For full metadata support,
         use Zarr format instead.
         """
-        output_file = self.output_dir / f"{filename}.npz"
-
         # Convert to dict for numpy storage
         save_dict = {
             # Arrays
@@ -200,21 +216,24 @@ class ExternalAerodynamicsDataSource(DataSource):
             if value is not None:
                 save_dict[field] = value
 
-        np.savez(output_file, **save_dict)
+        np.savez(output_path, **save_dict)
 
     def _write_zarr(
-        self, data: ExternalAerodynamicsZarrDataInMemory, filename: str
+        self, data: ExternalAerodynamicsZarrDataInMemory, output_path: Path
     ) -> None:
-        """Write data in Zarr format with full metadata support."""
-        store_path = self.output_dir / f"{filename}.zarr"
+        """Write data in Zarr format with full metadata support.
 
-        # Check if store exists
-        if store_path.exists():
-            self.logger.warning(f"Overwriting existing data for {filename}")
-            shutil.rmtree(store_path)
+        Args:
+            data: Data to write in Zarr format
+            output_path: Path where the .zarr directory should be written
+        """
+        # Clean up if output path already exists
+        if output_path.exists():
+            self.logger.warning(f"Overwriting existing data for {output_path}")
+            shutil.rmtree(output_path)
 
         # Create store
-        zarr_store = zarr.DirectoryStore(store_path)
+        zarr_store = zarr.DirectoryStore(output_path)
         root = zarr.group(store=zarr_store)
 
         # Write metadata as attributes
@@ -249,18 +268,39 @@ class ExternalAerodynamicsDataSource(DataSource):
                 )
 
     def should_skip(self, filename: str) -> bool:
-        """Checks whether the file should be skipped."""
+        """Checks whether the file should be skipped.
+
+        Args:
+            filename: Name of the file to check
+
+        Returns:
+            True if processing should be skipped, False otherwise
+        """
         if self.overwrite_existing:
             return False
 
-        match self.serialization_method:
-            case "numpy":
-                # Skip if the file already exists.
-                return (self.output_dir / f"{filename}.npz").exists()
-            case "zarr":
-                # Skip if the file already exists.
-                return (self.output_dir / f"{filename}.zarr").exists()
-            case _:
-                raise ValueError(
-                    f"Unsupported serialization method: {self.serialization_method}"
-                )
+        output_path = self._get_output_path(filename)
+        if output_path.exists():
+            self.logger.info(f"Skipping {filename} - File already exists")
+            return True
+        return False
+
+    def cleanup_temp_files(self) -> None:
+        """Clean up orphaned temporary files from interrupted runs."""
+        if not self.output_dir or not self.output_dir.exists():
+            return
+
+        # Find all temp files/directories for this serialization method
+        if self.serialization_method == "numpy":
+            pattern = "*_temp.npz"
+        elif self.serialization_method == "zarr":
+            pattern = "*_temp.zarr"
+        else:
+            return
+
+        for temp_file in self.output_dir.glob(pattern):
+            self.logger.warning(f"Removing orphaned temp file: {temp_file}")
+            if temp_file.is_dir():
+                shutil.rmtree(temp_file)
+            else:
+                temp_file.unlink()
