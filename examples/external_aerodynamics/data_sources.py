@@ -216,7 +216,11 @@ class ExternalAerodynamicsDataSource(DataSource):
             if value is not None:
                 save_dict[field] = value
 
-        np.savez(output_path, **save_dict)
+        # Use numpy.savez with explicit file path
+        # np.savez normally adds .npz automatically, but we need explicit control
+        # over the filename for the temp-then-rename pattern to work
+        with open(output_path, "wb") as f:
+            np.savez(f, **save_dict)
 
     def _write_zarr(
         self, data: ExternalAerodynamicsZarrDataInMemory, output_path: Path
@@ -292,9 +296,9 @@ class ExternalAerodynamicsDataSource(DataSource):
 
         # Find all temp files/directories for this serialization method
         if self.serialization_method == "numpy":
-            pattern = "*_temp.npz"
+            pattern = "*.npz_temp"
         elif self.serialization_method == "zarr":
-            pattern = "*_temp.zarr"
+            pattern = "*.zarr_temp"
         else:
             return
 

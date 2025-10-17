@@ -417,3 +417,163 @@ class TestExternalAerodynamicsDataSource:
                 overwrite_existing=False,
             )
             assert not data_source.should_skip("test_file")
+
+    def test_write_numpy_uses_temp_then_rename(self, temp_dir):
+        """Test that numpy write uses temp-then-rename pattern."""
+        config = ProcessingConfig(num_processes=1)
+        source = ExternalAerodynamicsDataSource(
+            config, output_dir=temp_dir, serialization_method="numpy"
+        )
+
+        test_data = ExternalAerodynamicsNumpyDataInMemory(
+            metadata=ExternalAerodynamicsNumpyMetadata(
+                filename="test_case",
+                stream_velocity=[30.0, 0.0, 0.0],
+                air_density=1.225,
+            ),
+            stl_coordinates=np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]),
+            stl_centers=np.array([[0.5, 0.5, 0.5]]),
+            stl_faces=np.array([[0, 1, 2]]),
+            stl_areas=np.array([1.0]),
+        )
+
+        # Write should create final file, not temp file
+        source.write(test_data, "test_case")
+
+        # Final file should exist
+        assert (temp_dir / "test_case.npz").exists()
+
+        # Temp file should NOT exist after successful write
+        assert not (temp_dir / "test_case.npz_temp").exists()
+
+    def test_write_zarr_uses_temp_then_rename(self, temp_dir):
+        """Test that zarr write uses temp-then-rename pattern."""
+        config = ProcessingConfig(num_processes=1)
+        source = ExternalAerodynamicsDataSource(
+            config, output_dir=temp_dir, serialization_method="zarr"
+        )
+
+        compressor_for_test = Blosc(
+            cname="zstd",
+            clevel=5,
+            shuffle=Blosc.SHUFFLE,
+        )
+
+        test_data = ExternalAerodynamicsZarrDataInMemory(
+            stl_coordinates=PreparedZarrArrayInfo(
+                data=np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]),
+                chunks=(2, 3),
+                compressor=compressor_for_test,
+            ),
+            stl_centers=PreparedZarrArrayInfo(
+                data=np.array([[0.5, 0.5, 0.5]]),
+                chunks=(1, 3),
+                compressor=compressor_for_test,
+            ),
+            stl_faces=PreparedZarrArrayInfo(
+                data=np.array([[0, 1, 2]]),
+                chunks=(1, 3),
+                compressor=compressor_for_test,
+            ),
+            stl_areas=PreparedZarrArrayInfo(
+                data=np.array([1.0]),
+                chunks=(1,),
+                compressor=compressor_for_test,
+            ),
+            metadata=ExternalAerodynamicsMetadata(
+                stream_velocity=[30.0, 0.0, 0.0],
+                air_density=1.225,
+                filename="test_case",
+                dataset_type=ModelType.COMBINED,
+            ),
+        )
+
+        # Write should create final file, not temp file
+        source.write(test_data, "test_case")
+
+        # Final directory should exist
+        assert (temp_dir / "test_case.zarr").exists()
+
+        # Temp directory should NOT exist after successful write
+        assert not (temp_dir / "test_case.zarr_temp").exists()
+
+    def test_cleanup_temp_files_numpy(self, temp_dir):
+        """Test cleanup of orphaned numpy temp files."""
+        config = ProcessingConfig(num_processes=1)
+        source = ExternalAerodynamicsDataSource(
+            config, output_dir=temp_dir, serialization_method="numpy"
+        )
+
+        # Create orphaned temp files
+        temp_file1 = temp_dir / "case1.npz_temp"
+        temp_file2 = temp_dir / "case2.npz_temp"
+        temp_file1.touch()
+        temp_file2.touch()
+
+        # Create a normal file (should not be deleted)
+        normal_file = temp_dir / "case3.npz"
+        normal_file.touch()
+
+        # Verify temp files exist
+        assert temp_file1.exists()
+        assert temp_file2.exists()
+        assert normal_file.exists()
+
+        # Run cleanup
+        source.cleanup_temp_files()
+
+        # Temp files should be removed
+        assert not temp_file1.exists()
+        assert not temp_file2.exists()
+
+        # Normal file should still exist
+        assert normal_file.exists()
+
+    def test_cleanup_temp_files_zarr(self, temp_dir):
+        """Test cleanup of orphaned zarr temp directories."""
+        config = ProcessingConfig(num_processes=1)
+        source = ExternalAerodynamicsDataSource(
+            config, output_dir=temp_dir, serialization_method="zarr"
+        )
+
+        # Create orphaned temp directories
+        temp_dir1 = temp_dir / "case1.zarr_temp"
+        temp_dir2 = temp_dir / "case2.zarr_temp"
+        temp_dir1.mkdir()
+        temp_dir2.mkdir()
+
+        # Add some files inside temp dirs to simulate real zarr stores
+        (temp_dir1 / "data.bin").touch()
+        (temp_dir2 / "data.bin").touch()
+
+        # Create a normal zarr directory (should not be deleted)
+        normal_dir = temp_dir / "case3.zarr"
+        normal_dir.mkdir()
+        (normal_dir / "data.bin").touch()
+
+        # Verify temp dirs exist
+        assert temp_dir1.exists()
+        assert temp_dir2.exists()
+        assert normal_dir.exists()
+
+        # Run cleanup
+        source.cleanup_temp_files()
+
+        # Temp dirs should be removed
+        assert not temp_dir1.exists()
+        assert not temp_dir2.exists()
+
+        # Normal dir should still exist
+        assert normal_dir.exists()
+
+    def test_cleanup_temp_files_with_no_temp_files(self, temp_dir):
+        """Test cleanup when no temp files exist (should not error)."""
+        config = ProcessingConfig(num_processes=1)
+
+        for method in ["numpy", "zarr"]:
+            source = ExternalAerodynamicsDataSource(
+                config, output_dir=temp_dir, serialization_method=method
+            )
+
+            # Should not raise any errors
+            source.cleanup_temp_files()
