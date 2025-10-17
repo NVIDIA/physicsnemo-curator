@@ -231,11 +231,6 @@ class ExternalAerodynamicsDataSource(DataSource):
             data: Data to write in Zarr format
             output_path: Path where the .zarr directory should be written
         """
-        # Clean up if output path already exists
-        if output_path.exists():
-            self.logger.warning(f"Overwriting existing data for {output_path}")
-            shutil.rmtree(output_path)
-
         # Create store
         zarr_store = zarr.DirectoryStore(output_path)
         root = zarr.group(store=zarr_store)

@@ -75,11 +75,21 @@ class DataSource(ABC):
             data: Transformed data to write
             filename: Name of the file being processed
         """
+        import shutil
+
         final_path = self._get_output_path(filename)
         temp_path = self._get_temporary_output_path(final_path)
 
         # Write to temporary location
         self._write_impl_temp_file(data, temp_path)
+
+        # Remove destination if it exists (for overwrite case)
+        # This is necessary because rename() won't replace non-empty directories
+        if final_path.exists():
+            if final_path.is_dir():
+                shutil.rmtree(final_path)
+            else:
+                final_path.unlink()
 
         # Atomic rename to final location
         temp_path.rename(final_path)
