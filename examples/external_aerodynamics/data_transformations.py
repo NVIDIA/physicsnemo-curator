@@ -19,7 +19,7 @@ import warnings
 from typing import Callable, Optional
 
 import numpy as np
-from numcodecs import Blosc
+import zarr
 
 from examples.external_aerodynamics.external_aero_geometry_data_processors import (
     default_geometry_processing_for_external_aerodynamics,
@@ -234,10 +234,11 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
         chunk_size_mb: float = 1.0,  # Default 1MB chunk size
     ):
         super().__init__(cfg)
-        self.compressor = Blosc(
+        # Zarr 3 codec configuration
+        self.compressor = zarr.codecs.BloscCodec(
             cname=compression_method,
             clevel=compression_level,
-            shuffle=Blosc.SHUFFLE,
+            shuffle=zarr.codecs.BloscShuffle.shuffle,
         )
         self.chunk_size_mb = chunk_size_mb
 

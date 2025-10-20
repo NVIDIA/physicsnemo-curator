@@ -17,7 +17,7 @@
 from typing import Any, Dict
 
 import numpy as np
-from numcodecs import Blosc
+import zarr
 
 from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
@@ -40,11 +40,11 @@ class H5ToZarrTransformation(DataTransformation):
         self.chunk_size = chunk_size
         self.compression_level = compression_level
 
-        # Set up compression
-        self.compressor = Blosc(
-            cname="zstd",  # zstd compression algorithm
-            clevel=compression_level,
-            shuffle=Blosc.SHUFFLE,
+        # Set up Zarr 3 compression codec
+        self.compressor = zarr.codecs.BloscCodec(
+            cname="zstd",
+            clevel=self.compression_level,
+            shuffle=zarr.codecs.BloscShuffle.shuffle,
         )
 
     def transform(self, data: Dict[str, Any]) -> Dict[str, Any]:

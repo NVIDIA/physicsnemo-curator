@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 import pyvista as pv
 import vtk
-from numcodecs import Blosc
+import zarr
 
 from examples.external_aerodynamics.constants import (
     DatasetKind,
@@ -203,10 +203,11 @@ class TestExternalAerodynamicsDataSource:
         source = ExternalAerodynamicsDataSource(
             config, output_dir=temp_dir, serialization_method="zarr"
         )
-        compressor_for_test = Blosc(
+        # Zarr 3 codec configuration
+        compressor_for_test = zarr.codecs.BloscCodec(
             cname="zstd",
-            clevel=5,
-            shuffle=Blosc.SHUFFLE,
+            clevel=3,
+            shuffle=zarr.codecs.BloscShuffle.shuffle,
         )
 
         test_data = ExternalAerodynamicsZarrDataInMemory(
@@ -453,11 +454,15 @@ class TestExternalAerodynamicsDataSource:
             config, output_dir=temp_dir, serialization_method="zarr"
         )
 
-        compressor_for_test = Blosc(
-            cname="zstd",
-            clevel=5,
-            shuffle=Blosc.SHUFFLE,
-        )
+        # Zarr 3 codec configuration
+        compressor_for_test = {
+            "name": "blosc",
+            "configuration": {
+                "cname": "zstd",
+                "clevel": 5,
+                "shuffle": "shuffle",
+            },
+        }
 
         test_data = ExternalAerodynamicsZarrDataInMemory(
             stl_coordinates=PreparedZarrArrayInfo(

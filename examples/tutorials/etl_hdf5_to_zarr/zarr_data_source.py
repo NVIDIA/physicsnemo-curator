@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import zarr
+from zarr.storage import LocalStore
 
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
@@ -62,8 +63,8 @@ class ZarrDataSource(DataSource):
 
         # Create Zarr store
         self.logger.info(f"Creating Zarr store: {store_path}")
-        store = zarr.DirectoryStore(store_path)
-        root = zarr.group(store=store)
+        store = LocalStore(store_path)
+        root = zarr.open_group(store=store, mode="w")
 
         # Store metadata as root attributes
         if "metadata" in data:
@@ -76,16 +77,18 @@ class ZarrDataSource(DataSource):
 
         # Write all arrays from the transformation
         for array_name, array_info in data.items():
-            root.create_dataset(
-                array_name,
+            root.create_array(
+                name=array_name,
                 data=array_info["data"],
                 chunks=array_info["chunks"],
-                compressor=array_info["compressor"],
+                compressors=(
+                    array_info["compressor"] if array_info["compressor"] else None
+                ),
                 dtype=array_info["dtype"],
             )
 
         # Add some store-level metadata
-        root.attrs["zarr_format"] = 2
+        root.attrs["zarr_format"] = 3
         root.attrs["created_by"] = "physicsnemo-curator-tutorial"
 
         # Something weird is happening here.

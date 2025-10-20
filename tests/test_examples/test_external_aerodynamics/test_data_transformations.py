@@ -24,6 +24,7 @@ import numpy as np
 import pytest
 import pyvista as pv
 import vtk
+import zarr
 
 from examples.external_aerodynamics.constants import (
     ModelType,
@@ -232,7 +233,7 @@ class TestExternalAerodynamicsZarrTransformation:
         config = ProcessingConfig(num_processes=1)
         transform = ExternalAerodynamicsZarrTransformation(config)
         assert transform.config == config
-        assert transform.compressor.cname == "zstd"
+        assert transform.compressor.cname == zarr.codecs.BloscCname.zstd
         assert transform.compressor.clevel == 5
 
     def test_transform(self, sample_data_processed):
