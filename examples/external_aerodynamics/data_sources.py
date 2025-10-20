@@ -23,6 +23,8 @@ import numpy as np
 import pyvista as pv
 import vtk
 import zarr
+from zarr.storage import LocalStore
+
 from constants import DatasetKind, ModelType
 from paths import get_path_getter
 from schemas import (
@@ -231,20 +233,21 @@ class ExternalAerodynamicsDataSource(DataSource):
             output_path: Path where the .zarr directory should be written
         """
         # Create store
-        zarr_store = zarr.DirectoryStore(output_path)
-        root = zarr.group(store=zarr_store)
+        zarr_store = LocalStore(output_path)
+        root = zarr.open_group(store=zarr_store, mode="w")
 
         # Write metadata as attributes
+        data.metadata.zarr_format = zarr.__version__
         root.attrs.update(asdict(data.metadata))
 
         # Write required arrays
         for field in ["stl_coordinates", "stl_centers", "stl_faces", "stl_areas"]:
             array_info = getattr(data, field)
-            root.create_dataset(
-                field,
+            root.create_array(
+                name=field,
                 data=array_info.data,
                 chunks=array_info.chunks,
-                compressor=array_info.compressor,
+                compressors=array_info.compressor if array_info.compressor else None,
             )
 
         # Write optional arrays if present
@@ -258,11 +261,13 @@ class ExternalAerodynamicsDataSource(DataSource):
         ]:
             array_info = getattr(data, field)
             if array_info is not None:
-                root.create_dataset(
-                    field,
+                root.create_array(
+                    name=field,
                     data=array_info.data,
                     chunks=array_info.chunks,
-                    compressor=array_info.compressor,
+                    compressors=(
+                        array_info.compressor if array_info.compressor else None
+                    ),
                 )
 
     def should_skip(self, filename: str) -> bool:
