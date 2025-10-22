@@ -28,7 +28,7 @@ etl:
     model_type: surface  # produce data for which model? surface, volume, combined
 
   processing:
-    num_processes: 12
+    num_processes: 4
     args: {}
 
   validator:

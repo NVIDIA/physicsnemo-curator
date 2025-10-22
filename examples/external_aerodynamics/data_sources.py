@@ -246,6 +246,7 @@ class ExternalAerodynamicsDataSource(DataSource):
                 name=field,
                 data=array_info.data,
                 chunks=array_info.chunks,
+                shards=array_info.shards,
                 compressors=array_info.compressor if array_info.compressor else None,
             )
 
@@ -264,6 +265,7 @@ class ExternalAerodynamicsDataSource(DataSource):
                     name=field,
                     data=array_info.data,
                     chunks=array_info.chunks,
+                    shards=array_info.shards,
                     compressors=(
                         array_info.compressor if array_info.compressor else None
                     ),

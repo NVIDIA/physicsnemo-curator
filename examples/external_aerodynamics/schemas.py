@@ -102,6 +102,7 @@ class PreparedZarrArrayInfo:
     data: np.ndarray
     chunks: tuple[int, ...]
     compressor: zarr.abc.codec
+    shards: Optional[tuple[int, ...]] = None
 
 
 @dataclass(frozen=True)

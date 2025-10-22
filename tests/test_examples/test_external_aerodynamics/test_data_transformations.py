@@ -384,6 +384,137 @@ class TestExternalAerodynamicsZarrTransformation:
         large_data_num_chunks = np.ceil(100000 / large_data_elements_per_chunk)
         assert large_data_num_chunks == 1
 
+    def test_sharding_disabled_for_small_arrays(self, sample_data_processed):
+        """Test that sharding is NOT enabled for small arrays below threshold."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=1000,
+            sharding_threshold_gb=1.0,
+        )
+
+        result = transform.transform(sample_data_processed)
+
+        # All arrays in sample_data_processed are small (<1GB), so no sharding
+        assert result.stl_coordinates.shards is None
+        assert result.stl_centers.shards is None
+        assert result.stl_faces.shards is None
+        assert result.stl_areas.shards is None
+        assert result.surface_mesh_centers.shards is None
+        assert result.surface_normals.shards is None
+        assert result.surface_areas.shards is None
+        assert result.surface_fields.shards is None
+        assert result.volume_mesh_centers.shards is None
+        assert result.volume_fields.shards is None
+
+    def test_sharding_enabled_for_large_arrays(self):
+        """Test that sharding IS enabled for large arrays above threshold."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=1000,
+            sharding_threshold_gb=1.0,
+        )
+
+        # Create a large array > 1GB
+        # For float32, 1 GB = 1024^3 / 4 = 268,435,456 elements
+        # Create a 2D array: 300M elements / 3 columns = 100M rows
+        # This is 300M * 4 bytes = 1.2 GB
+        large_array = np.random.rand(100_000_000, 3).astype(np.float64)
+
+        metadata = ExternalAerodynamicsMetadata(
+            filename="test_large",
+            dataset_type=ModelType.COMBINED,
+            stream_velocity=30.0,
+            air_density=1.205,
+        )
+
+        large_data = ExternalAerodynamicsExtractedDataInMemory(
+            metadata=metadata,
+            stl_coordinates=np.array([[0, 0, 0], [1, 1, 1]], dtype=np.float64),
+            stl_centers=np.array([[0.5, 0.5, 0.5]], dtype=np.float64),
+            stl_faces=np.array([[0, 1, 2]], dtype=np.int32),
+            stl_areas=np.array([1.0], dtype=np.float64),
+            volume_fields=large_array,  # Large array
+        )
+
+        result = transform.transform(large_data)
+
+        # Small arrays should have no sharding
+        assert result.stl_coordinates.shards is None
+        assert result.stl_centers.shards is None
+
+        # Large array should have sharding enabled
+        assert result.volume_fields.shards is not None
+        assert len(result.volume_fields.shards) == 2  # 2D array
+        assert (
+            result.volume_fields.shards[1] == 3
+        )  # Second dimension should match array
+
+    def test_sharding_calculation_1d_array(self):
+        """Test correct shard shape calculation for 1D arrays."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=100,  # Use smaller value for easier testing
+            sharding_threshold_gb=0.1,  # Lower threshold for testing
+        )
+
+        # Create 1D array > 0.1GB (400MB as float64, 200MB as float32)
+        # 50M elements * 8 bytes = 400 MB
+        large_1d_array = np.random.rand(50_000_000).astype(np.float64)
+
+        result = transform._prepare_array(large_1d_array)
+
+        # Check that sharding is enabled
+        assert result.shards is not None
+        assert len(result.shards) == 1
+
+        # For 1D array: shard_size = chunks[0] * chunks_per_shard
+        # With 1MB chunks and float32 (4 bytes): chunk_size = 1MB / 4 = 262144 elements
+        # So shards should be ~26,214,400 elements (100 chunks)
+        expected_shard_size = result.chunks[0] * 100
+        assert result.shards[0] == expected_shard_size
+
+    def test_sharding_calculation_2d_array(self):
+        """Test correct shard shape calculation for 2D arrays."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=50,  # Use smaller value for easier testing
+            sharding_threshold_gb=0.1,  # Lower threshold for testing
+        )
+
+        # Create 2D array > 0.1GB (2.4GB as float64, 1.2GB as float32)
+        # 100M rows * 3 cols * 8 bytes = 2.4 GB
+        large_2d_array = np.random.rand(100_000_000, 3).astype(np.float64)
+
+        result = transform._prepare_array(large_2d_array)
+
+        # Check that sharding is enabled
+        assert result.shards is not None
+        assert len(result.shards) == 2
+
+        # For 2D arrays: shard_rows = chunk_rows * chunks_per_shard
+        # Second dimension should match array shape
+        expected_shard_rows = result.chunks[0] * 50
+        assert result.shards[0] == expected_shard_rows
+        assert result.shards[1] == 3  # Matches second dimension
+
+    def test_sharding_initialization_defaults(self):
+        """Test that default sharding parameters are set correctly."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(config)
+
+        # Check defaults match Zarr recommendations
+        assert transform.chunks_per_shard == 1000  # Zarr recommended
+        assert transform.sharding_threshold_gb == 1.0
+        assert transform.chunk_size_mb == 1.0
+
 
 class TestExternalAerodynamicsSTLTransformation:
     """Test the ExternalAerodynamicsSTLTransformation class."""
