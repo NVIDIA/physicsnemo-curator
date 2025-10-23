@@ -230,7 +230,6 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
         compression_level: int = 5,
         chunk_size_mb: float = 1.0,  # Default 1MB chunk size
         chunks_per_shard: int = 1000,  # Number of chunks per shard (~1GB shards with 1MB chunks)
-        sharding_threshold_gb: float = 1.0,  # Enable sharding for arrays > 1GB
     ):
         super().__init__(cfg)
         # Zarr 3 codec configuration
@@ -241,7 +240,6 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
         )
         self.chunk_size_mb = chunk_size_mb
         self.chunks_per_shard = chunks_per_shard
-        self.sharding_threshold_gb = sharding_threshold_gb
 
         # Warn if chunk size might be problematic
         if chunk_size_mb < 1.0:
@@ -260,8 +258,8 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
     def _prepare_array(self, array: np.ndarray) -> PreparedZarrArrayInfo:
         """Prepare array for Zarr storage with compression, chunking, and sharding.
 
-        Sharding is automatically enabled for large arrays (>sharding_threshold_gb)
-        to reduce the number of files created on disk. Small arrays use chunks only.
+        Sharding is always enabled to reduce the number of files created on disk.
+        Each shard contains approximately chunks_per_shard chunks (~1GB per shard by default).
         """
         if array is None:
             return None
@@ -274,32 +272,18 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
         if len(shape) == 1:
             chunk_size = min(shape[0], target_chunk_size // item_size)
             chunks = (chunk_size,)
+            # For 1D arrays: shard contains chunks_per_shard chunks
+            shard_size = min(shape[0], chunks[0] * self.chunks_per_shard)
+            shards = (shard_size,)
         else:
             # For 2D arrays, try to keep rows together
             chunk_rows = min(
                 shape[0], max(1, target_chunk_size // (item_size * shape[1]))
             )
             chunks = (chunk_rows, shape[1])
-
-        # Calculate shards for large arrays to reduce file count
-        shards = None
-        array_size_bytes = array.nbytes
-        threshold_bytes = int(self.sharding_threshold_gb * 1024 * 1024 * 1024)
-
-        if array_size_bytes > threshold_bytes:
-            if len(shape) == 1:
-                # For 1D arrays: shard contains chunks_per_shard chunks
-                shard_size = min(shape[0], chunks[0] * self.chunks_per_shard)
-                shards = (shard_size,)
-            else:
-                # For 2D arrays: extend along first dimension to group multiple chunk-rows
-                shard_rows = min(shape[0], chunks[0] * self.chunks_per_shard)
-                shards = (shard_rows, shape[1])
-
-            logging.info(
-                f"Sharding enabled for array of size {array_size_bytes / (1024**3):.2f} GB: "
-                f"chunks={chunks}, shards={shards}"
-            )
+            # For 2D arrays: extend along first dimension to group multiple chunk-rows
+            shard_rows = min(shape[0], chunks[0] * self.chunks_per_shard)
+            shards = (shard_rows, shape[1])
 
         return PreparedZarrArrayInfo(
             data=np.float32(array),
