@@ -513,6 +513,59 @@ class TestExternalAerodynamicsZarrTransformation:
         assert transform.chunks_per_shard == 1000  # Zarr recommended (~1GB shards)
         assert transform.chunk_size_mb == 1.0
 
+    def test_sharding_divisibility_requirement(self):
+        """Test that shard shapes are always divisible by chunk shapes."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=1000,
+        )
+
+        # Test with various array sizes that might not divide evenly
+        test_cases = [
+            (1234, 3),  # Odd number of rows
+            (999, 5),  # Another odd number
+            (1000000, 4),  # Large array
+            (50, 3),  # Very small array
+            (262144 + 100, 3),  # Just over one chunk
+        ]
+
+        for rows, cols in test_cases:
+            array = np.random.rand(rows, cols).astype(np.float64)
+            result = transform._prepare_array(array)
+
+            # Check that shards are divisible by chunks in each dimension
+            assert result.shards[0] % result.chunks[0] == 0, (
+                f"Shard rows {result.shards[0]} not divisible by chunk rows {result.chunks[0]} "
+                f"for array shape ({rows}, {cols})"
+            )
+            assert (
+                result.shards[1] == result.chunks[1]
+            ), f"Shard cols {result.shards[1]} should equal chunk cols {result.chunks[1]}"
+
+    def test_sharding_small_array_one_shard(self):
+        """Test that small arrays fit into a single shard with proper rounding."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=1000,
+        )
+
+        # Create small array that would need multiple chunks but < chunks_per_shard
+        # With 1MB chunks and float64: ~262144 elements per chunk for 1D
+        # Create array with 500,000 elements (needs ~2 chunks)
+        small_array = np.random.rand(500_000).astype(np.float64)
+        result = transform._prepare_array(small_array)
+
+        # Should have 1 shard that contains all chunks
+        num_chunks_needed = (500_000 + result.chunks[0] - 1) // result.chunks[0]
+        expected_shard_size = num_chunks_needed * result.chunks[0]
+        assert result.shards[0] == expected_shard_size
+        assert result.shards[0] >= 500_000  # Shard is big enough for array
+        assert result.shards[0] % result.chunks[0] == 0  # Properly divisible
+
 
 class TestExternalAerodynamicsSTLTransformation:
     """Test the ExternalAerodynamicsSTLTransformation class."""

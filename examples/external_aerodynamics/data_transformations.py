@@ -273,7 +273,14 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
             chunk_size = min(shape[0], target_chunk_size // item_size)
             chunks = (chunk_size,)
             # For 1D arrays: shard contains chunks_per_shard chunks
-            shard_size = min(shape[0], chunks[0] * self.chunks_per_shard)
+            # Ensure shard size is a multiple of chunk size
+            ideal_shard_size = chunks[0] * self.chunks_per_shard
+            if shape[0] <= ideal_shard_size:
+                # Array fits in one shard - round up to nearest chunk multiple
+                num_chunks = (shape[0] + chunks[0] - 1) // chunks[0]
+                shard_size = num_chunks * chunks[0]
+            else:
+                shard_size = ideal_shard_size
             shards = (shard_size,)
         else:
             # For 2D arrays, try to keep rows together
@@ -282,7 +289,14 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
             )
             chunks = (chunk_rows, shape[1])
             # For 2D arrays: extend along first dimension to group multiple chunk-rows
-            shard_rows = min(shape[0], chunks[0] * self.chunks_per_shard)
+            # Ensure shard rows is a multiple of chunk rows
+            ideal_shard_rows = chunks[0] * self.chunks_per_shard
+            if shape[0] <= ideal_shard_rows:
+                # Array fits in one shard - round up to nearest chunk multiple
+                num_chunks = (shape[0] + chunks[0] - 1) // chunks[0]
+                shard_rows = num_chunks * chunks[0]
+            else:
+                shard_rows = ideal_shard_rows
             shards = (shard_rows, shape[1])
 
         return PreparedZarrArrayInfo(
