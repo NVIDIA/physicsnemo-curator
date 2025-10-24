@@ -36,17 +36,22 @@ from examples.external_aerodynamics.data_transformations import (
     ExternalAerodynamicsZarrTransformation,
 )
 from examples.external_aerodynamics.external_aero_geometry_data_processors import (
+    filter_geometry_invalid_faces,
     update_geometry_data_to_float32,
 )
 from examples.external_aerodynamics.external_aero_surface_data_processors import (
+    filter_invalid_surface_cells,
     non_dimensionalize_surface_fields,
     normalize_surface_normals,
     update_surface_data_to_float32,
+    validate_surface_sample_quality,
 )
 from examples.external_aerodynamics.external_aero_volume_data_processors import (
+    filter_volume_invalid_cells,
     non_dimensionalize_volume_fields,
     shuffle_volume_data,
     update_volume_data_to_float32,
+    validate_volume_sample_quality,
 )
 from examples.external_aerodynamics.schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
@@ -467,6 +472,77 @@ class TestExternalAerodynamicsSTLTransformation:
         assert result.stl_faces.dtype == np.int32  # This should remain int32
         assert result.stl_areas.dtype == np.float32
 
+    def test_transform_with_default_processor_and_filter_invalid_geometry_faces(
+        self, sample_data_raw
+    ):
+        """Test STL transformation with filter invalid geometry faces on top of the default processor."""
+        # Start with sample_data_raw which has 1 valid triangle with 3 vertices
+        stl_polydata = sample_data_raw.stl_polydata
+
+        # Get existing points and faces
+        stl_points = stl_polydata.points  # Shape: (3, 3) - 3 vertices
+        stl_faces = stl_polydata.faces  # [3, 0, 1, 2] - 1 triangle
+
+        # Add 3 collinear points for a degenerate triangle (zero area)
+        # These points lie on a line, so they won't form a valid triangle
+        additional_points = np.array(
+            [
+                [2.0, 0.0, 0.0],
+                [3.0, 0.0, 0.0],
+                [4.0, 0.0, 0.0],  # All on x-axis -> collinear
+            ],
+            dtype=np.float64,
+        )
+        updated_points = np.vstack([stl_points, additional_points])
+
+        # Add the degenerate triangle face
+        # Format: [num_vertices, vertex_idx_0, vertex_idx_1, vertex_idx_2]
+        updated_faces = np.concatenate(
+            [
+                stl_faces,  # Original valid triangle: [3, 0, 1, 2]
+                np.array([3, 3, 4, 5], dtype=np.int32),  # Degenerate triangle
+            ]
+        )
+
+        # Create new polydata with updated geometry
+        sample_data_raw.stl_polydata = pv.PolyData(updated_points, faces=updated_faces)
+
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsSTLTransformation(
+            config, geometry_processors=(filter_geometry_invalid_faces,)
+        )
+        result = transform.transform(sample_data_raw)
+
+        # Check that the invalid geometry face was filtered out
+        # We started with 2 faces (1 valid + 1 invalid), should have 1 valid face after filtering
+        assert (
+            result.metadata.num_faces == 3
+        ), "Should have 3 face indices (1 triangle) after filtering"
+        assert len(result.stl_areas) == 1, "Should have 1 area value after filtering"
+        assert len(result.stl_centers) == 1, "Should have 1 center after filtering"
+
+        # The remaining face should have valid area (> 0)
+        assert np.all(result.stl_areas > 0), "Remaining area should be positive"
+
+        # Check that unused vertices were removed
+        # Original: 6 vertices (3 valid + 3 for degenerate triangle)
+        # After filtering: only 3 vertices (from the valid triangle) should remain
+        assert result.metadata.num_points == 3, "Should have 3 vertices after filtering"
+        assert len(result.stl_coordinates) == 3, "Should have 3 coordinate sets"
+
+        # Check that face indices were reindexed correctly (should be [0, 1, 2])
+        assert len(result.stl_faces) == 3, "Should have 3 face indices"
+        np.testing.assert_array_equal(
+            np.sort(result.stl_faces),
+            np.array([0, 1, 2]),
+            err_msg="Face indices should be reindexed to [0, 1, 2]",
+        )
+
+        # Check that bounds were updated correctly
+        assert result.metadata.x_bound is not None
+        assert result.metadata.y_bound is not None
+        assert result.metadata.z_bound is not None
+
 
 class TestExternalAerodynamicsSurfaceTransformation:
     """Test the ExternalAerodynamicsSurfaceTransformation class."""
@@ -627,6 +703,152 @@ class TestExternalAerodynamicsSurfaceTransformation:
         )
         expected = np.array([[1.0, 0.5, 0.2, 101325.0]]) / dynamic_pressure_factor
         np.testing.assert_allclose(result.surface_fields, expected, rtol=1e-5)
+
+    def test_transform_with_default_processor_and_filter_invalid_surface_cells(
+        self, sample_data_raw
+    ):
+        """Test surface transformation with filter invalid surface cells on top of the default processor."""
+        # Start with sample_data_raw which has 1 valid triangle
+        surface_polydata = sample_data_raw.surface_polydata
+
+        # Get existing points and faces
+        surface_points = surface_polydata.points  # Shape: (3, 3) - 3 points
+        surface_faces = surface_polydata.faces  # [3, 0, 1, 2] - 1 triangle
+
+        # Add 3 collinear points for a degenerate triangle (zero area, zero normal)
+        # These points lie on a line, so they won't form a valid triangle
+        additional_points = np.array(
+            [
+                [2.0, 0.0, 0.0],
+                [3.0, 0.0, 0.0],
+                [4.0, 0.0, 0.0],  # All on x-axis -> collinear
+            ],
+            dtype=np.float64,
+        )
+        updated_points = np.vstack([surface_points, additional_points])
+
+        # Add the degenerate triangle face
+        # Format: [num_vertices, vertex_idx_0, vertex_idx_1, vertex_idx_2]
+        updated_faces = np.concatenate(
+            [
+                surface_faces,  # Original valid triangle: [3, 0, 1, 2]
+                np.array([3, 3, 4, 5], dtype=np.int32),  # Degenerate triangle
+            ]
+        )
+
+        # Create new polydata with updated geometry
+        sample_data_raw.surface_polydata = pv.PolyData(
+            updated_points, faces=updated_faces
+        )
+
+        # Update cell data fields for 2 cells (1 valid + 1 invalid)
+        sample_data_raw.surface_polydata["pMeanTrim"] = np.array(
+            [101325.0, 101330.0], dtype=np.float64
+        )
+        sample_data_raw.surface_polydata["wallShearStressMeanTrim"] = np.array(
+            [[1.0, 0.5, 0.2], [1.1, 0.6, 0.3]], dtype=np.float64
+        )
+
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsSurfaceTransformation(
+            config,
+            surface_variables={
+                "wallShearStressMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+            surface_processors=(filter_invalid_surface_cells,),
+        )
+        result = transform.transform(sample_data_raw)
+
+        # Check that the invalid surface cell was filtered out
+        # We started with 2 cells (1 valid + 1 invalid), should have 1 valid cell after filtering
+        assert (
+            result.surface_mesh_centers.shape[0] == 1
+        ), "Should have 1 cell after filtering"
+        assert result.surface_normals.shape[0] == 1
+        assert result.surface_areas.shape[0] == 1
+        assert result.surface_fields.shape[0] == 1
+
+        # The remaining cell should have valid area (> 0)
+        assert np.all(result.surface_areas > 0), "Remaining area should be positive"
+
+        # The remaining normal should have non-zero magnitude
+        normal_magnitudes = np.linalg.norm(result.surface_normals, axis=1)
+        assert np.all(
+            normal_magnitudes > 1e-6
+        ), "Remaining normal should have non-zero magnitude"
+
+        # Verify the fields dimension is correct (3 components for vector + 1 for scalar)
+        assert result.surface_fields.shape[1] == 4, "Should have 4 field components"
+
+    def test_validate_surface_sample_quality_with_valid_data(self, sample_data_raw):
+        """Test surface sample quality validator with valid data."""
+        config = ProcessingConfig(num_processes=1)
+
+        # First process and non-dimensionalize the data
+        transform = ExternalAerodynamicsSurfaceTransformation(
+            config,
+            surface_variables={
+                "wallShearStressMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+            surface_processors=(
+                partial(
+                    non_dimensionalize_surface_fields,
+                    air_density=sample_data_raw.metadata.air_density,
+                    stream_velocity=sample_data_raw.metadata.stream_velocity,
+                ),
+            ),
+        )
+        processed_data = transform.transform(sample_data_raw)
+
+        # Apply validator - should pass with reasonable data
+        result = validate_surface_sample_quality(
+            processed_data,
+            statistical_tolerance=7.0,
+            pressure_max=4.0,
+        )
+
+        # Should return unchanged data
+        assert result.surface_fields is not None
+        np.testing.assert_array_equal(
+            result.surface_fields, processed_data.surface_fields
+        )
+
+    def test_validate_surface_sample_quality_with_extreme_values(self):
+        """Test surface sample quality validator with data exceeding bounds."""
+        # Create data with extreme pressure values that will exceed threshold
+        metadata = ExternalAerodynamicsMetadata(
+            filename="test_extreme",
+            dataset_type=ModelType.SURFACE,
+            stream_velocity=30.0,
+            air_density=1.205,
+        )
+
+        data = ExternalAerodynamicsExtractedDataInMemory(metadata=metadata)
+
+        # Create surface fields with extreme values (after non-dimensionalization)
+        # Pressure is first component, make it exceed 4.0
+        data.surface_fields = np.array(
+            [
+                [5.0, 1.0, 0.5],  # Pressure = 5.0 > 4.0 (exceeds threshold)
+                [5.5, 1.2, 0.6],
+                [6.0, 1.1, 0.4],
+            ]
+        )
+        data.surface_mesh_centers = np.random.rand(3, 3)
+        data.surface_normals = np.random.rand(3, 3)
+        data.surface_areas = np.random.rand(3)
+
+        # Apply validator - should detect bounds violation and return None
+        result = validate_surface_sample_quality(
+            data,
+            statistical_tolerance=7.0,
+            pressure_max=4.0,
+        )
+
+        # Sample should be rejected (returns None)
+        assert result is None
 
 
 class TestExternalAerodynamicsVolumeTransformation:
@@ -829,6 +1051,168 @@ class TestExternalAerodynamicsVolumeTransformation:
             np.testing.assert_allclose(
                 shuffled_field, original_fields[original_idx], rtol=1e-10
             )
+
+    def test_transform_with_default_processor_and_filter_invalid_volume_cells(
+        self, sample_data_raw
+    ):
+        """Test volume transformation with filter invalid volume cells on top of the default processor."""
+        config = ProcessingConfig(num_processes=1)
+
+        # First, process the volume data using the default processor
+        transform_process = ExternalAerodynamicsVolumeTransformation(
+            config,
+            volume_variables={
+                "UMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+        )
+        processed_data = transform_process.transform(sample_data_raw)
+
+        # Now inject some invalid data into the processed volume data
+        # Original has 4 valid volume cells
+        n_original = len(processed_data.volume_mesh_centers)
+
+        # Add 2 cells: 1 with NaN in coordinates, 1 with inf in fields
+        invalid_center_nan = np.array([[np.nan, 0.5, 0.5]])
+        invalid_field_nan = np.array([[10.0, 0.0, 0.0, 101000.0]])
+
+        invalid_center_inf = np.array([[0.5, 0.5, 0.5]])
+        invalid_field_inf = np.array([[np.inf, 0.0, 0.0, 101000.0]])
+
+        # Concatenate invalid data
+        processed_data.volume_mesh_centers = np.vstack(
+            [processed_data.volume_mesh_centers, invalid_center_nan, invalid_center_inf]
+        )
+        processed_data.volume_fields = np.vstack(
+            [processed_data.volume_fields, invalid_field_nan, invalid_field_inf]
+        )
+
+        # Now apply the filter
+        result = filter_volume_invalid_cells(processed_data)
+
+        # Check that the invalid volume cells were filtered out
+        # We started with 4 valid + 2 invalid = 6 cells, should have 4 valid cells after filtering
+        assert (
+            result.volume_mesh_centers.shape[0] == n_original
+        ), f"Should have {n_original} cells after filtering"
+        assert result.volume_fields.shape[0] == n_original
+
+        # All remaining cells should have finite coordinates
+        assert np.all(
+            np.isfinite(result.volume_mesh_centers)
+        ), "All coordinates should be finite"
+
+        # All remaining cells should have finite fields
+        assert np.all(np.isfinite(result.volume_fields)), "All fields should be finite"
+
+    def test_transform_with_default_processor_and_validate_volume_sample_quality_with_valid_data(
+        self, sample_data_raw
+    ):
+        """Test volume sample quality validator with valid data."""
+        config = ProcessingConfig(num_processes=1)
+
+        # First process and non-dimensionalize the data
+        transform = ExternalAerodynamicsVolumeTransformation(
+            config,
+            volume_variables={
+                "UMeanTrim": "vector",
+                "pMeanTrim": "scalar",
+            },
+            volume_processors=(
+                partial(
+                    non_dimensionalize_volume_fields,
+                    air_density=sample_data_raw.metadata.air_density,
+                    stream_velocity=sample_data_raw.metadata.stream_velocity,
+                ),
+            ),
+        )
+        processed_data = transform.transform(sample_data_raw)
+
+        # Apply validator - should pass with reasonable data
+        # Note: Using higher pressure_max since sample data has absolute pressure values
+        # that non-dimensionalize to ~93 (atmospheric pressure / dynamic pressure)
+        result = validate_volume_sample_quality(
+            processed_data,
+            statistical_tolerance=7.0,
+            velocity_max=3.5,
+            pressure_max=100.0,  # Higher threshold for test with absolute pressure
+        )
+
+        # Should return unchanged data
+        assert result is not None
+        assert result.volume_fields is not None
+        np.testing.assert_array_equal(
+            result.volume_fields, processed_data.volume_fields
+        )
+
+    def test_transform_with_default_processor_and_validate_volume_sample_quality_with_outliers_velocity(
+        self,
+    ):
+        """Test volume sample quality validator with outliers in velocity values."""
+        # Create data with outliers in velocity values
+        metadata = ExternalAerodynamicsMetadata(
+            filename="test_outliers_velocity",
+            dataset_type=ModelType.VOLUME,
+            stream_velocity=30.0,
+            air_density=1.205,
+        )
+
+        data = ExternalAerodynamicsExtractedDataInMemory(metadata=metadata)
+
+        # Create volume fields with outliers in velocity values (after non-dimensionalization)
+        # Fields are [u, v, w, p, ...], make velocity exceed 3.5
+        data.volume_fields = np.array(
+            [
+                [4.0, 2.0, 2.0, 2.0],  # u = 4.0 > 3.5 (exceeds threshold)
+                [3.8, 2.5, 2.2, 2.5],  # u = 3.8 > 3.5 (exceeds threshold)
+                [4.2, 1.8, 2.3, 2.3],  # u = 4.2 > 3.5 (exceeds threshold)
+            ]
+        )
+        data.volume_mesh_centers = np.random.rand(3, 3)
+
+        # Apply validator - should detect bounds violation and return None
+        result = validate_volume_sample_quality(
+            data,
+            statistical_tolerance=7.0,
+            velocity_max=3.5,
+            pressure_max=4.0,
+        )
+
+        # Sample should be rejected (returns None)
+        assert result is None
+
+    def test_validate_volume_sample_quality_with_extreme_pressure(self):
+        """Test volume sample quality validator with extreme pressure values."""
+        # Create data with extreme pressure values
+        metadata = ExternalAerodynamicsMetadata(
+            filename="test_extreme",
+            dataset_type=ModelType.VOLUME,
+            stream_velocity=30.0,
+            air_density=1.205,
+        )
+
+        data = ExternalAerodynamicsExtractedDataInMemory(metadata=metadata)
+
+        # Create volume fields with extreme pressure (4th component)
+        data.volume_fields = np.array(
+            [
+                [2.0, 2.0, 2.0, 5.0],  # p = 5.0 > 4.0 (exceeds threshold)
+                [2.5, 2.2, 1.8, 5.5],
+                [2.3, 1.9, 2.1, 6.0],
+            ]
+        )
+        data.volume_mesh_centers = np.random.rand(3, 3)
+
+        # Apply validator - should detect bounds violation and return None
+        result = validate_volume_sample_quality(
+            data,
+            statistical_tolerance=7.0,
+            velocity_max=3.5,
+            pressure_max=4.0,
+        )
+
+        # Sample should be rejected (returns None)
+        assert result is None
 
     def test_transform_with_default_processor_and_shuffle_data_large_array(self):
         """Test shuffling with a larger array to ensure efficiency."""
