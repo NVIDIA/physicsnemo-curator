@@ -14,22 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-from abc import ABC, abstractmethod
-from typing import Any, Optional
+import multiprocessing
 
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+import pytest
 
 
-class DataTransformation(ABC):
-    """Abstract base class for data transformations."""
+@pytest.fixture(scope="session", autouse=True)
+def set_multiprocessing_start_method():
+    """Set multiprocessing start method to 'spawn' to avoid fork() warnings.
 
-    @abstractmethod
-    def __init__(self, cfg: ProcessingConfig):
-        self.config = cfg
-        self.logger = logging.getLogger(self.__class__.__name__)
-
-    @abstractmethod
-    def transform(self, data: dict[str, Any]) -> Optional[dict[str, Any]]:
-        """Transform input data."""
+    Python 3.12+ shows DeprecationWarnings when using fork() in multi-threaded
+    contexts. Using 'spawn' avoids these warnings and is safer for tests.
+    """
+    try:
+        multiprocessing.set_start_method("spawn", force=True)
+    except RuntimeError:
+        # Start method already set, which is fine
         pass
+    yield

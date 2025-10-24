@@ -60,7 +60,21 @@ class ParallelProcessor:
                     data = self.source.read_file(filename)
                     for tf in self.transformations.values():
                         data = tf.transform(data)
-                    self.sink.write(data, filename)
+                        # Check if the data is None after each transformation
+                        # Sometimes, transforms might filter out the data.
+                        if data is None:
+                            self.logger.warning(
+                                f"No data was returned by transform: {tf.__class__.__name__} "
+                                f"for file {filename}. Skipping."
+                            )
+                            break  # Stop processing this file
+
+                    # Only write if data survived all transformations
+                    if data is not None:
+                        self.sink.write(data, filename)
+                    else:
+                        self.logger.info(f"Skipping write for {filename}")
+
                 # Update progress counter.
                 with self.progress_counter.get_lock():
                     self.progress_counter.value += 1

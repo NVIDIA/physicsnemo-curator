@@ -84,6 +84,32 @@ class MockTransformation(DataTransformation):
         return data
 
 
+class MockTransformationReturnsNone(DataTransformation):
+    """Mock transformation that returns None to simulate filtering."""
+
+    def __init__(self, config: ProcessingConfig):
+        super().__init__(config)
+        self.transform_called = False
+
+    def transform(self, data):
+        self.transform_called = True
+        return None
+
+
+class MockTransformationWithTag(DataTransformation):
+    """Mock transformation that adds a tag to track execution."""
+
+    def __init__(self, config: ProcessingConfig, tag: str):
+        super().__init__(config)
+        self.transform_called = False
+        self.tag = tag
+
+    def transform(self, data):
+        self.transform_called = True
+        data[self.tag] = True
+        return data
+
+
 @pytest.fixture
 def processor_setup(tmp_path):
     """Setup a basic processor with mocked components."""
@@ -327,3 +353,141 @@ def test_cleanup_temp_files_called_before_workers_start(processor_setup):
 
     # Verify cleanup was called (at least once in the test flow)
     assert "cleanup" in call_order
+
+
+def test_transformation_returns_none(processor_setup):
+    """Test handling when a transformation returns None (filters out data)."""
+    processor = ParallelProcessor(
+        processor_setup["source"],
+        processor_setup["transform"],
+        processor_setup["sink"],
+        processor_setup["config"],
+    )
+
+    # Replace transform with one that returns None
+    none_transform = MockTransformationReturnsNone(processor_setup["config"])
+    processor.transformations = {"none_transform": none_transform}
+
+    # Process files and capture logs
+    with patch.object(processor.logger, "warning") as mock_warning:
+        with patch.object(processor.logger, "info") as mock_info:
+            processor.process_files(["file1.txt"], worker_id=0)
+
+            # Verify warning was logged about None data
+            mock_warning.assert_called_once()
+            warning_message = mock_warning.call_args[0][0]
+            assert "No data was returned by transform" in warning_message
+            assert "MockTransformationReturnsNone" in warning_message
+            assert "file1.txt" in warning_message
+
+            # Verify info log about skipping write
+            info_calls = [call[0][0] for call in mock_info.call_args_list]
+            assert any("Skipping write for file1.txt" in msg for msg in info_calls)
+
+    # Verify transform was called
+    assert none_transform.transform_called
+
+    # Verify no data was written
+    assert "file1.txt" not in processor_setup["sink"].written_data
+
+    # Verify progress counter was still incremented
+    assert processor.progress_counter.value == 1
+
+
+def test_multiple_transforms_one_returns_none(processor_setup):
+    """Test that transformation chain breaks when one transform returns None."""
+    processor = ParallelProcessor(
+        processor_setup["source"],
+        processor_setup["transform"],
+        processor_setup["sink"],
+        processor_setup["config"],
+    )
+
+    # Create chain: transform1 -> none_transform -> transform2
+    transform1 = MockTransformationWithTag(processor_setup["config"], "tag1")
+    none_transform = MockTransformationReturnsNone(processor_setup["config"])
+    transform2 = MockTransformationWithTag(processor_setup["config"], "tag2")
+
+    processor.transformations = {
+        "transform1": transform1,
+        "none_transform": none_transform,
+        "transform2": transform2,
+    }
+
+    # Process files
+    with patch.object(processor.logger, "warning"):
+        with patch.object(processor.logger, "info"):
+            processor.process_files(["file1.txt"], worker_id=0)
+
+    # Verify transform1 and none_transform were called
+    assert transform1.transform_called
+    assert none_transform.transform_called
+
+    # Verify transform2 was NOT called (chain broke after None)
+    assert not transform2.transform_called
+
+    # Verify no data was written
+    assert "file1.txt" not in processor_setup["sink"].written_data
+
+    # Verify progress counter was still incremented
+    assert processor.progress_counter.value == 1
+
+
+def test_should_skip_functionality(processor_setup):
+    """Test that files are skipped when should_skip returns True."""
+    processor = ParallelProcessor(
+        processor_setup["source"],
+        processor_setup["transform"],
+        processor_setup["sink"],
+        processor_setup["config"],
+    )
+
+    # Mark file1.txt as should be skipped
+    processor_setup["sink"].skipped_files.add("file1.txt")
+
+    # Process files
+    processor.process_files(["file1.txt", "file2.txt"], worker_id=0)
+
+    # Verify file1.txt was skipped (not in written_data)
+    assert "file1.txt" not in processor_setup["sink"].written_data
+
+    # Verify file2.txt was processed
+    assert "file2.txt" in processor_setup["sink"].written_data
+    assert "transformed" in processor_setup["sink"].written_data["file2.txt"]
+
+    # Verify progress counter includes both files
+    assert processor.progress_counter.value == 2
+
+
+def test_all_transforms_succeed_data_written(processor_setup):
+    """Test that data is written when all transformations succeed."""
+    processor = ParallelProcessor(
+        processor_setup["source"],
+        processor_setup["transform"],
+        processor_setup["sink"],
+        processor_setup["config"],
+    )
+
+    # Create chain of successful transforms
+    transform1 = MockTransformationWithTag(processor_setup["config"], "tag1")
+    transform2 = MockTransformationWithTag(processor_setup["config"], "tag2")
+
+    processor.transformations = {
+        "transform1": transform1,
+        "transform2": transform2,
+    }
+
+    # Process files
+    processor.process_files(["file1.txt"], worker_id=0)
+
+    # Verify both transforms were called
+    assert transform1.transform_called
+    assert transform2.transform_called
+
+    # Verify data was written with both tags
+    assert "file1.txt" in processor_setup["sink"].written_data
+    assert "tag1" in processor_setup["sink"].written_data["file1.txt"]
+    assert "tag2" in processor_setup["sink"].written_data["file1.txt"]
+
+    # Verify progress counter was incremented
+    assert processor.progress_counter.value == 1
