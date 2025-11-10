@@ -41,7 +41,7 @@ Current limitations:
 The instructions to get started with `PhysicsNeMo-Curator` within the `PhysicsNeMo` docker container are shown below.
 
 ```bash
-docker pull nvcr.io/nvidia/physicsnemo/physicsnemo:25.06
+docker pull nvcr.io/nvidia/physicsnemo/physicsnemo:25.08
 
 # Install from source
 git clone git@github.com:NVIDIA/physicsnemo-curator.git && cd physicsnemo-curator

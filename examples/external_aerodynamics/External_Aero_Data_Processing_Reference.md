@@ -150,7 +150,8 @@ Fields are non-dimensionalized as follows:
 
 Note: The exact fields processed depend on the `surface_variables` and
 `volume_variables` configurations provided to the data source.
-See `examples/config/external_aero_etl_drivaerml.yaml` and `examples/config/variables/*.yaml` files for examples.
+See `examples/external_aerodynamics/config/external_aero_etl_drivaerml.yaml`
+and `examples/external_aerodynamics/config/variables/*.yaml` files for examples.
 
 ### Reference Values
 
@@ -158,4 +159,4 @@ See `examples/config/external_aero_etl_drivaerml.yaml` and `examples/config/vari
 - density: Air density
 - length_scale: Characteristic length (maximum dimension of the geometry)
 
-For more details, see the configuration examples in `config/external_aero_etl_drivaerml.yaml`.
+For more details, see the configuration examples in `examples/external_aerodynamics/config/external_aero_etl_drivaerml.yaml`.

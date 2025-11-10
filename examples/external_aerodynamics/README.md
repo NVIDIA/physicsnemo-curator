@@ -62,7 +62,7 @@ Example of the command line that launches Curator configured for DrivAerML datas
 ```bash
 export PYTHONPATH=$PYTHONPATH:examples &&
 physicsnemo-curator-etl                         \
-    --config-dir=examples/config                \
+    --config-dir=examples/external_aerodynamics/config \
     --config-name=external_aero_etl_drivaerml   \
     etl.source.input_dir=/data/drivaerml/       \
     etl.sink.output_dir=/data/drivaerml.processed.surface \
@@ -74,7 +74,7 @@ To run on AhmedML dataset:
 ```bash
 export PYTHONPATH=$PYTHONPATH:examples &&
 physicsnemo-curator-etl                     \
-    --config-dir=examples/config            \
+    --config-dir=examples/external_aerodynamics/config \
     --config-name=external_aero_etl_ahmedml \
     etl.source.input_dir=/data/ahmedml/     \
     etl.sink.output_dir=/data/ahmedml.processed.surface \
@@ -91,7 +91,7 @@ physicsnemo-curator-etl                     \
     dataset.
 - **Output format**: To switch from Zarr (default) to NumPy, please use the `serialization_format=numpy` flag.
 
-Please refer to the [config file](../../../examples/config/external_aero_etl_drivaerml.yaml) for more
+Please refer to the [config file](../../../examples/external_aerodynamics/config/external_aero_etl_drivaerml.yaml) for more
 options.
 
 ### Injecting and chaining transformations
@@ -265,7 +265,7 @@ To use the filtering configuration:
 ```bash
 export PYTHONPATH=$PYTHONPATH:examples &&
 physicsnemo-curator-etl                                  \
-    --config-dir=examples/config                         \
+    --config-dir=examples/external_aerodynamics/config   \
     --config-name=external_aero_etl_drivaerml_filtering  \
     etl.source.input_dir=/data/drivaerml/                \
     etl.sink.output_dir=/data/drivaerml.processed.filtered \
@@ -330,7 +330,7 @@ This ETL pipeline is intended to be configurable. As such, you can extend it in 
 
 - Create your own transformation (use [data_transformations.py](./data_transformations.py) as a template)
 - Stack multiple transformations on top of each other.
-This is already demonstrated in [external_aero_etl_drivaerml.yaml](../../../examples/config/external_aero_etl_drivaerml.yaml),
+This is already demonstrated in [external_aero_etl_drivaerml.yaml](../../../examples/external_aerodynamics/config/external_aero_etl_drivaerml.yaml),
 where `DoMINOPreprocessingTransformation` is applied followed by `DoMINOZarrTransformation`.
 
 Please use these guidelines to create your own ETL pipeline to train a DoMINO or Transolver model
