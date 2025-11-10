@@ -35,7 +35,7 @@ from examples.external_aerodynamics.constants import (
 def get_config_path() -> Path:
     """Get the path to the config directory."""
     # Hydra requires a relative path.
-    return Path("../../examples/config")
+    return Path("../../../examples/external_aerodynamics/config")
 
 
 def test_external_aero_etl_drivaerml_config():
