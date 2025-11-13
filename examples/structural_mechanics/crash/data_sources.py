@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import logging
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -292,6 +293,7 @@ class CrashZarrDataSource(DataSource):
         overwrite_existing: bool = True,
         compression_level: int = 3,
         compression_method: str = "zstd",
+        chunk_size_mb: float = 1.0,
     ):
         """Initialize the Zarr data source.
 
@@ -301,17 +303,33 @@ class CrashZarrDataSource(DataSource):
             overwrite_existing: Whether to overwrite existing files
             compression_level: Compression level (1-9, higher = more compression)
             compression_method: Compression method
+            chunk_size_mb: Target chunk size in MB (default: 1.0)
         """
         super().__init__(cfg)
         self.output_dir = Path(output_dir)
         self.overwrite_existing = overwrite_existing
         self.compression_level = compression_level
         self.compression_method = compression_method
+        self.chunk_size_mb = chunk_size_mb
 
         # Set up compressor
         self.compressor = Blosc(
             cname=compression_method, clevel=compression_level, shuffle=Blosc.SHUFFLE
         )
+
+        # Warn if chunk size might be problematic
+        if chunk_size_mb < 0.1:
+            warnings.warn(
+                f"Chunk size of {chunk_size_mb}MB is very small. "
+                "This could lead to poor performance due to overhead.",
+                UserWarning,
+            )
+        elif chunk_size_mb > 100.0:
+            warnings.warn(
+                f"Chunk size of {chunk_size_mb}MB is very large. "
+                "This could lead to memory issues and poor random access performance.",
+                UserWarning,
+            )
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -322,6 +340,61 @@ class CrashZarrDataSource(DataSource):
     def read_file(self, filename: str) -> Dict[str, Any]:
         """Not implemented - this sink only writes."""
         raise NotImplementedError("CrashZarrDataSource only supports writing")
+
+    def _calculate_chunks(self, array: np.ndarray) -> tuple:
+        """Calculate optimal chunk sizes based on target chunk size in MB.
+
+        Args:
+            array: Array to calculate chunks for
+
+        Returns:
+            Tuple of chunk dimensions
+        """
+        target_chunk_size = int(self.chunk_size_mb * 1024 * 1024)  # Convert MB to bytes
+        item_size = array.itemsize
+        shape = array.shape
+
+        if len(shape) == 1:
+            # 1D array: chunk along the single dimension
+            chunk_size = min(shape[0], target_chunk_size // item_size)
+            return (max(1, chunk_size),)
+        elif len(shape) == 2:
+            # 2D array: try to keep rows together
+            chunk_rows = min(
+                shape[0], max(1, target_chunk_size // (item_size * shape[1]))
+            )
+            return (max(1, chunk_rows), shape[1])
+        elif len(shape) == 3:
+            # 3D array (e.g., mesh_pos with shape [T, N, 3]):
+            # Try to balance between timesteps and nodes
+            # Keep the last dimension (3 for coordinates) intact
+            elements_per_slice = shape[1] * shape[2]
+            chunk_timesteps = max(
+                1, min(shape[0], target_chunk_size // (item_size * elements_per_slice))
+            )
+
+            # If we can fit multiple timesteps, reduce node chunks
+            if chunk_timesteps >= shape[0]:
+                # All timesteps fit, chunk along nodes
+                chunk_nodes = min(
+                    shape[1],
+                    max(1, target_chunk_size // (item_size * shape[0] * shape[2])),
+                )
+                return (shape[0], max(1, chunk_nodes), shape[2])
+            else:
+                # Chunk along timesteps, keep reasonable node chunks
+                remaining_size = target_chunk_size // (
+                    item_size * chunk_timesteps * shape[2]
+                )
+                chunk_nodes = min(shape[1], max(1, remaining_size))
+                return (chunk_timesteps, max(1, chunk_nodes), shape[2])
+        else:
+            # For higher-dimensional arrays, use simple heuristic
+            # Chunk the first dimension, keep others intact
+            chunk_first = max(
+                1, min(shape[0], target_chunk_size // (item_size * np.prod(shape[1:])))
+            )
+            return (chunk_first,) + shape[1:]
 
     def _get_output_path(self, filename: str) -> Path:
         """Get the output path for the Zarr store.
@@ -366,17 +439,24 @@ class CrashZarrDataSource(DataSource):
         root.attrs["num_edges"] = len(data.edges)
         root.attrs["compression"] = self.compression_method
         root.attrs["compression_level"] = self.compression_level
+        root.attrs["chunk_size_mb"] = self.chunk_size_mb
 
-        # Calculate optimal chunks for temporal data
+        # Convert data to appropriate dtypes
         num_timesteps, num_nodes, _ = data.filtered_pos_raw.shape
-        chunk_timesteps = min(10, num_timesteps)  # Chunk along time dimension
-        chunk_nodes = min(1000, num_nodes)  # Chunk along node dimension
+        mesh_pos_data = data.filtered_pos_raw.astype(np.float32)
+        thickness_data = data.filtered_node_thickness.astype(np.float32)
+        edges_array = np.array(list(data.edges), dtype=np.int64)
+
+        # Calculate optimal chunks for each array
+        mesh_pos_chunks = self._calculate_chunks(mesh_pos_data)
+        thickness_chunks = self._calculate_chunks(thickness_data)
+        edges_chunks = self._calculate_chunks(edges_array)
 
         # Write temporal position data
         root.create_dataset(
             "mesh_pos",
-            data=data.filtered_pos_raw.astype(np.float32),
-            chunks=(chunk_timesteps, chunk_nodes, 3),
+            data=mesh_pos_data,
+            chunks=mesh_pos_chunks,
             compressor=self.compressor,
             dtype=np.float32,
         )
@@ -384,18 +464,17 @@ class CrashZarrDataSource(DataSource):
         # Write node thickness (static per node)
         root.create_dataset(
             "thickness",
-            data=data.filtered_node_thickness.astype(np.float32),
-            chunks=(chunk_nodes,),
+            data=thickness_data,
+            chunks=thickness_chunks,
             compressor=self.compressor,
             dtype=np.float32,
         )
 
         # Write edges connectivity
-        edges_array = np.array(list(data.edges), dtype=np.int64)
         root.create_dataset(
             "edges",
             data=edges_array,
-            chunks=(min(10000, len(edges_array)), 2),
+            chunks=edges_chunks,
             compressor=self.compressor,
             dtype=np.int64,
         )

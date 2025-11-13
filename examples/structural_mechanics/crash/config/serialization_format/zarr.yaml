@@ -21,3 +21,4 @@ sink:
   overwrite_existing: true
   compression_level: 3
   compression_method: "zstd"
+  chunk_size_mb: 1.0  # Target chunk size in MB (adjust based on data size)

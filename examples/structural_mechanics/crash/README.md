@@ -118,7 +118,8 @@ physicsnemo-curator-etl \
     serialization_format=zarr \
     etl.source.input_dir=/data/crash_sims \
     serialization_format.sink.output_dir=/data/crash_processed_zarr \
-    serialization_format.sink.compression_level=5
+    serialization_format.sink.compression_level=5 \
+    serialization_format.sink.chunk_size_mb=2.0
 ```
 
 **Config:** See [`config/serialization_format/zarr.yaml`](./config/serialization_format/zarr.yaml)
@@ -127,6 +128,10 @@ physicsnemo-curator-etl \
 
 - `compression_level`: Compression level (1-9, higher = more compression, default: 3)
 - `compression_method`: Compression codec (default: "zstd")
+- `chunk_size_mb`: Target chunk size in MB for automatic chunking (default: 1.0)
+  - Smaller values: Better for random access, more metadata overhead
+  - Larger values: Better for sequential reads, less metadata overhead
+  - Warnings are issued for very small (<0.1 MB) or very large (>100 MB) values
 - `overwrite_existing`: Whether to overwrite existing output stores (default: true)
 
 Output structure:

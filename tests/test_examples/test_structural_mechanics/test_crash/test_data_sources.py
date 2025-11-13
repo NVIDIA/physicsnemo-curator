@@ -455,3 +455,221 @@ def test_zarr_sink_metadata_statistics(mock_crash_data):
         assert store.attrs["thickness_min"] == 1.0
         assert store.attrs["thickness_max"] == 1.0
         assert store.attrs["thickness_mean"] == 1.0
+
+
+def test_zarr_sink_chunk_size_parameter(mock_crash_data):
+    """Test that chunk_size_mb parameter is respected."""
+    from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
+    cfg = ProcessingConfig(num_processes=1)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Test with custom chunk size
+        sink = CrashZarrDataSource(
+            cfg, temp_dir, overwrite_existing=True, chunk_size_mb=2.0
+        )
+
+        assert sink.chunk_size_mb == 2.0, "chunk_size_mb should be set to 2.0"
+
+        sink.write(mock_crash_data, "test_run")
+
+        store = zarr.open(str(Path(temp_dir) / "test_run.zarr"), mode="r")
+
+        # Check that chunk_size_mb is stored in metadata
+        assert "chunk_size_mb" in store.attrs
+        assert store.attrs["chunk_size_mb"] == 2.0
+
+
+def test_zarr_sink_chunk_size_warnings():
+    """Test that warnings are issued for problematic chunk sizes."""
+    import warnings as warnings_module
+
+    from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
+    cfg = ProcessingConfig(num_processes=1)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Test warning for very small chunk size
+        with pytest.warns(UserWarning, match="very small"):
+            CrashZarrDataSource(
+                cfg, temp_dir, overwrite_existing=True, chunk_size_mb=0.05
+            )
+
+        # Test warning for very large chunk size
+        with pytest.warns(UserWarning, match="very large"):
+            CrashZarrDataSource(
+                cfg, temp_dir, overwrite_existing=True, chunk_size_mb=150.0
+            )
+
+        # Test no warning for reasonable chunk size
+        with warnings_module.catch_warnings():
+            warnings_module.simplefilter("error")
+            # This should not raise any warnings
+            CrashZarrDataSource(
+                cfg, temp_dir, overwrite_existing=True, chunk_size_mb=1.0
+            )
+
+
+def test_zarr_sink_calculate_chunks():
+    """Test the _calculate_chunks method for different array shapes."""
+    from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
+    cfg = ProcessingConfig(num_processes=1)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sink = CrashZarrDataSource(
+            cfg, temp_dir, overwrite_existing=True, chunk_size_mb=1.0
+        )
+
+        # Test 1D array (e.g., thickness)
+        thickness_array = np.ones(1000, dtype=np.float32)
+        chunks_1d = sink._calculate_chunks(thickness_array)
+        assert len(chunks_1d) == 1, "1D chunks should have 1 dimension"
+        assert chunks_1d[0] > 0, "Chunk size should be positive"
+        assert chunks_1d[0] <= len(
+            thickness_array
+        ), "Chunk size should not exceed array size"
+
+        # Test 2D array (e.g., edges)
+        edges_array = np.ones((500, 2), dtype=np.int64)
+        chunks_2d = sink._calculate_chunks(edges_array)
+        assert len(chunks_2d) == 2, "2D chunks should have 2 dimensions"
+        assert chunks_2d[0] > 0, "First chunk dimension should be positive"
+        assert chunks_2d[1] == 2, "Second chunk dimension should match array shape"
+
+        # Test 3D array (e.g., mesh_pos)
+        mesh_pos_array = np.ones((10, 1000, 3), dtype=np.float32)
+        chunks_3d = sink._calculate_chunks(mesh_pos_array)
+        assert len(chunks_3d) == 3, "3D chunks should have 3 dimensions"
+        assert chunks_3d[0] > 0, "First chunk dimension should be positive"
+        assert chunks_3d[1] > 0, "Second chunk dimension should be positive"
+        assert (
+            chunks_3d[2] == 3
+        ), "Third chunk dimension should match coordinate dimension"
+
+
+def test_zarr_sink_chunks_stored_correctly(mock_crash_data):
+    """Test that calculated chunks are actually used in Zarr store."""
+    from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
+    cfg = ProcessingConfig(num_processes=1)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sink = CrashZarrDataSource(
+            cfg, temp_dir, overwrite_existing=True, chunk_size_mb=0.5
+        )
+        sink.write(mock_crash_data, "test_run")
+
+        store = zarr.open(str(Path(temp_dir) / "test_run.zarr"), mode="r")
+
+        # Check that arrays have chunk information
+        assert store["mesh_pos"].chunks is not None, "mesh_pos should have chunks"
+        assert store["thickness"].chunks is not None, "thickness should have chunks"
+        assert store["edges"].chunks is not None, "edges should have chunks"
+
+        # Verify chunks have correct number of dimensions
+        assert len(store["mesh_pos"].chunks) == 3, "mesh_pos chunks should be 3D"
+        assert len(store["thickness"].chunks) == 1, "thickness chunks should be 1D"
+        assert len(store["edges"].chunks) == 2, "edges chunks should be 2D"
+
+
+def test_zarr_sink_chunks_match_calculated(mock_crash_data):
+    """Test that stored chunks exactly match the calculated chunk sizes."""
+    from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
+    cfg = ProcessingConfig(num_processes=1)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sink = CrashZarrDataSource(
+            cfg, temp_dir, overwrite_existing=True, chunk_size_mb=1.0
+        )
+
+        # Calculate expected chunks BEFORE writing
+        mesh_pos_data = mock_crash_data.filtered_pos_raw.astype(np.float32)
+        thickness_data = mock_crash_data.filtered_node_thickness.astype(np.float32)
+        edges_array = np.array(list(mock_crash_data.edges), dtype=np.int64)
+
+        expected_mesh_pos_chunks = sink._calculate_chunks(mesh_pos_data)
+        expected_thickness_chunks = sink._calculate_chunks(thickness_data)
+        expected_edges_chunks = sink._calculate_chunks(edges_array)
+
+        # Write data
+        sink.write(mock_crash_data, "test_run")
+
+        # Open store and verify chunks match exactly
+        store = zarr.open(str(Path(temp_dir) / "test_run.zarr"), mode="r")
+
+        assert store["mesh_pos"].chunks == expected_mesh_pos_chunks, (
+            f"mesh_pos chunks mismatch: expected {expected_mesh_pos_chunks}, "
+            f"got {store['mesh_pos'].chunks}"
+        )
+
+        assert store["thickness"].chunks == expected_thickness_chunks, (
+            f"thickness chunks mismatch: expected {expected_thickness_chunks}, "
+            f"got {store['thickness'].chunks}"
+        )
+
+        assert store["edges"].chunks == expected_edges_chunks, (
+            f"edges chunks mismatch: expected {expected_edges_chunks}, "
+            f"got {store['edges'].chunks}"
+        )
+
+
+def test_zarr_sink_chunks_physical_layout():
+    """Test that different chunk sizes produce different physical layouts."""
+    from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
+    cfg = ProcessingConfig(num_processes=1)
+
+    # Create larger mock data to see chunk differences
+    large_pos_raw = np.random.randn(20, 2000, 3).astype(np.float32)
+    large_thickness = np.ones(2000, dtype=np.float32)
+    large_edges = {(i, i + 1) for i in range(1999)}
+
+    large_data = CrashExtractedDataInMemory(
+        metadata=CrashMetadata(filename="large_test"),
+        pos_raw=large_pos_raw,
+        mesh_connectivity=[],
+        node_thickness=large_thickness,
+        filtered_pos_raw=large_pos_raw,
+        filtered_mesh_connectivity=[],
+        filtered_node_thickness=large_thickness,
+        edges=large_edges,
+    )
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Write with small chunks
+        sink_small = CrashZarrDataSource(
+            cfg, temp_dir, overwrite_existing=True, chunk_size_mb=0.1
+        )
+        sink_small.write(large_data, "small_chunks")
+
+        # Write with large chunks
+        sink_large = CrashZarrDataSource(
+            cfg, temp_dir, overwrite_existing=True, chunk_size_mb=10.0
+        )
+        sink_large.write(large_data, "large_chunks")
+
+        # Open both stores
+        store_small = zarr.open(str(Path(temp_dir) / "small_chunks.zarr"), mode="r")
+        store_large = zarr.open(str(Path(temp_dir) / "large_chunks.zarr"), mode="r")
+
+        # Small chunks should have smaller chunk sizes than large chunks
+        # (at least for the dimensions that get chunked)
+        small_chunks = store_small["mesh_pos"].chunks
+        large_chunks = store_large["mesh_pos"].chunks
+
+        # The chunk sizes should be different
+        assert (
+            small_chunks != large_chunks
+        ), "Different chunk_size_mb should produce different chunk layouts"
+
+        # Small chunks should generally have smaller values
+        # (though the last dimension is always 3 for coordinates)
+        small_total = np.prod(small_chunks)
+        large_total = np.prod(large_chunks)
+
+        assert small_total < large_total, (
+            f"Small chunks (product={small_total}) should have smaller total size "
+            f"than large chunks (product={large_total})"
+        )
