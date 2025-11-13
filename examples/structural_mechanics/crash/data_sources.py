@@ -383,7 +383,7 @@ class CrashZarrDataSource(DataSource):
 
         # Write node thickness (static per node)
         root.create_dataset(
-            "node_thickness",
+            "thickness",
             data=data.filtered_node_thickness.astype(np.float32),
             chunks=(chunk_nodes,),
             compressor=self.compressor,
@@ -396,30 +396,6 @@ class CrashZarrDataSource(DataSource):
             "edges",
             data=edges_array,
             chunks=(min(10000, len(edges_array)), 2),
-            compressor=self.compressor,
-            dtype=np.int64,
-        )
-
-        # Write mesh connectivity (convert list of lists to ragged array representation)
-        # Store as: flat array of node indices + offsets array
-        flat_connectivity = []
-        offsets = [0]
-        for cell in data.filtered_mesh_connectivity:
-            flat_connectivity.extend(cell)
-            offsets.append(len(flat_connectivity))
-
-        root.create_dataset(
-            "mesh_connectivity_flat",
-            data=np.array(flat_connectivity, dtype=np.int64),
-            chunks=(min(10000, len(flat_connectivity)),),
-            compressor=self.compressor,
-            dtype=np.int64,
-        )
-
-        root.create_dataset(
-            "mesh_connectivity_offsets",
-            data=np.array(offsets, dtype=np.int64),
-            chunks=(min(1000, len(offsets)),),
             compressor=self.compressor,
             dtype=np.int64,
         )

@@ -386,7 +386,7 @@ def test_zarr_sink_write(mock_crash_data):
 
         # Check arrays exist
         assert "mesh_pos" in store, "mesh_pos not in Zarr store"
-        assert "node_thickness" in store, "node_thickness not in Zarr store"
+        assert "thickness" in store, "thickness not in Zarr store"
         assert "edges" in store, "edges not in Zarr store"
 
         # Check shapes
@@ -395,9 +395,9 @@ def test_zarr_sink_write(mock_crash_data):
             4,
             3,
         ), f"Expected mesh_pos shape (3, 4, 3), got {store['mesh_pos'].shape}"
-        assert store["node_thickness"].shape == (
+        assert store["thickness"].shape == (
             4,
-        ), f"Expected node_thickness shape (4,), got {store['node_thickness'].shape}"
+        ), f"Expected thickness shape (4,), got {store['thickness'].shape}"
 
         # Check metadata
         assert "filename" in store.attrs, "filename not in metadata"
