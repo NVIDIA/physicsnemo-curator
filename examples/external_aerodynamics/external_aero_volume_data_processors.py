@@ -141,6 +141,20 @@ def non_dimensionalize_volume_fields(
     )
     return data
 
+def non_dimensionalize_volume_fields_hlpw(
+    data: ExternalAerodynamicsExtractedDataInMemory,
+    pref: float = PhysicsConstants.PREF,
+    uref: float = PhysicsConstants.UREF,
+) -> ExternalAerodynamicsExtractedDataInMemory:
+    """Non-dimensionalize volume fields."""
+
+    # Pressure
+    data.volume_fields[:, :1] = data.volume_fields[:, :1] / pref
+    # Velocity
+    data.volume_fields[:, 1:] = data.volume_fields[:, 1:] / uref
+    
+    return data
+
 
 def update_volume_data_to_float32(
     data: ExternalAerodynamicsExtractedDataInMemory,

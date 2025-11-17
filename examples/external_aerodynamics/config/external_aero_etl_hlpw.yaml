@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+defaults:
+  - /external_aero_etl_drivaerml
+  - override /variables: hlpw
+  - _self_
+
+etl:
+  common:
+    kind: hlpw
+    model_type: combined  # produce data for which model? surface, volume, combined
+  
+  processing:
+    num_processes: 1
+
+  transformations:
+    surface_preprocessing:
+      surface_processors:
+
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.decimate_mesh
+          _partial_: true
+          algo: decimate_pro
+          reduction: 0.0
+          preserve_topology: false
+        
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
+          _partial_: true
+        
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields_hlpw
+          _partial_: true
+          PREF: 176.352 #update to default HLPW value
+          UREF: 2679.505
+
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
+          _partial_: true
+
+    volume_preprocessing:
+      volume_processors:
+
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields_hlpw
+          _partial_: true
+    
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
+          _partial_: true
+    
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.shuffle_volume_data
+          _partial_: true
