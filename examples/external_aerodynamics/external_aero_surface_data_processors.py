@@ -169,6 +169,10 @@ def non_dimensionalize_surface_fields(
     # Non-dimensionalize surface fields
     data.surface_fields = data.surface_fields / (air_density * stream_velocity**2.0)
 
+    # Update metadata
+    data.metadata.air_density = air_density
+    data.metadata.stream_velocity = stream_velocity
+
     return data
 
 
