@@ -16,7 +16,8 @@
 
 defaults:
   - /external_aero_etl_drivaerml
-  - override /variables: hlpw
+  - override /variables/surface: hlpw
+  - override /variables/volume: hlpw
   - _self_
 
 etl:
@@ -29,33 +30,38 @@ etl:
 
   transformations:
     surface_preprocessing:
+      # Use HLPW-specific transformation that handles N_BF field
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSurfaceTransformationHLPW
+      _convert_: all
+      nbf_field_name: "N_BF"
+      
       surface_processors:
-
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.decimate_mesh
           _partial_: true
           algo: decimate_pro
           reduction: 0.0
           preserve_topology: false
         
-        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
-          _partial_: true
+        # Note: normalize_surface_normals not needed - already done via N_BF normalization
         
+        # HLPW-specific non-dimensionalization
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields_hlpw
           _partial_: true
-          PREF: 176.352 #update to default HLPW value
-          UREF: 2679.505
+          PREF: 176.352  # HLPW reference pressure (Pa)
 
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
           _partial_: true
 
     volume_preprocessing:
       volume_processors:
-
+        # HLPW-specific volume non-dimensionalization
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields_hlpw
           _partial_: true
-    
+          PREF: 176.352  # HLPW reference pressure (Pa)
+          UREF: 2679.505  # HLPW reference velocity (m/s) - update to actual value
+        
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
           _partial_: true
-    
+        
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.shuffle_volume_data
           _partial_: true

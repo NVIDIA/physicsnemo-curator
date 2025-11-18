@@ -143,8 +143,8 @@ def non_dimensionalize_volume_fields(
 
 def non_dimensionalize_volume_fields_hlpw(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    pref: float = PhysicsConstants.PREF,
-    uref: float = PhysicsConstants.UREF,
+    pref: float,
+    uref: float,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize volume fields."""
 

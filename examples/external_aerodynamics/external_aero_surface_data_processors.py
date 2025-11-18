@@ -237,7 +237,7 @@ def non_dimensionalize_surface_fields(
 
 def non_dimensionalize_surface_fields_hlpw(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    PREF: float = 176.352,  # HLPW reference pressure (Pa)
+    pref: float = 176.352,  # HLPW reference pressure (Pa)
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """
     Non-dimensionalize surface fields using HLPW reference values.
@@ -258,7 +258,7 @@ def non_dimensionalize_surface_fields_hlpw(
         return data
     
     # Non-dimensionalize pressure (first column) by PREF
-    data.surface_fields /= PREF
+    data.surface_fields /= pref
     
     return data
 

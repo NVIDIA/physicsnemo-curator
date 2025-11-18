@@ -26,6 +26,7 @@ from examples.external_aerodynamics.external_aero_geometry_data_processors impor
 )
 from examples.external_aerodynamics.external_aero_surface_data_processors import (
     default_surface_processing_for_external_aerodynamics,
+    default_surface_processing_for_external_aerodynamics_hlpw,
 )
 from examples.external_aerodynamics.external_aero_volume_data_processors import (
     default_volume_processing_for_external_aerodynamics,
@@ -161,6 +162,59 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
             # That is - The surface data (mesh centers, normals, areas and fields) are present.
             data = default_surface_processing_for_external_aerodynamics(
                 data, self.surface_variables
+            )
+
+            if self.surface_processors is not None:
+                for processor in self.surface_processors:
+                    data = processor(data)
+
+            # Delete raw surface data to save memory
+            data.surface_polydata = None
+
+        return data
+
+
+class ExternalAerodynamicsSurfaceTransformationHLPW(DataTransformation):
+    """Transforms surface data for HLPW using N_BF field."""
+
+    def __init__(
+        self,
+        cfg: ProcessingConfig,
+        surface_variables: Optional[dict[str, str]] = None,
+        surface_processors: Optional[tuple[Callable, ...]] = None,
+        nbf_field_name: str = "N_BF",
+    ):
+        super().__init__(cfg)
+        self.logger = logging.getLogger(__name__)
+
+        self.surface_variables = surface_variables
+        self.surface_processors = surface_processors
+        self.nbf_field_name = nbf_field_name
+        self.constants = PhysicsConstants()
+
+        if surface_variables is None:
+            self.logger.error("Surface variables are empty!")
+            raise ValueError("Surface variables are empty!")
+
+        self.logger.info(
+            f"Initializing ExternalAerodynamicsSurfaceTransformationHLPW with "
+            f"surface_variables: {surface_variables}, nbf_field_name: {nbf_field_name}, "
+            f"and surface_processors: {surface_processors}"
+        )
+        self.logger.info(
+            "This will only be processed if the model_type is surface/combined."
+        )
+
+    def transform(
+        self, data: ExternalAerodynamicsExtractedDataInMemory
+    ) -> ExternalAerodynamicsExtractedDataInMemory:
+        """Transform surface data for HLPW using N_BF field."""
+
+        if data.surface_polydata is not None:
+
+            # Use HLPW-specific default processing (with N_BF field)
+            data = default_surface_processing_for_external_aerodynamics_hlpw(
+                data, self.surface_variables, self.nbf_field_name
             )
 
             if self.surface_processors is not None:

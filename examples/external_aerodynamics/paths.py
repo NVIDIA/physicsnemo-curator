@@ -140,6 +140,35 @@ class AhmedMLPaths(OpenFoamDatasetPaths):
         return car_dir / f"ahmed_{index}.stl"
 
 
+class HLPWPaths:
+    """Utility class for handling HLPW dataset file paths.
+
+    HLPW file naming pattern:
+    - Directory: geo_LHC001_AoA_16
+    - Geometry: geo_LHC001_AoA_16.stl
+    - Surface: boundary_geo_LHC001_AoA_16.vtu
+    - Volume: volume_geo_LHC001_AoA_16.vtu (NOT *_coarse.vtu)
+    """
+
+    @staticmethod
+    def geometry_path(car_dir: Path) -> Path:
+        """Returns geometry path for HLPW dataset."""
+        dirname = car_dir.name
+        return car_dir / f"{dirname}.stl"
+
+    @staticmethod
+    def surface_path(car_dir: Path) -> Path:
+        """Returns surface data path for HLPW dataset."""
+        dirname = car_dir.name
+        return car_dir / f"boundary_{dirname}.vtu"
+
+    @staticmethod
+    def volume_path(car_dir: Path) -> Path:
+        """Returns volume data path for HLPW dataset (NOT the coarse version)."""
+        dirname = car_dir.name
+        return car_dir / f"volume_{dirname}.vtu"
+
+
 def get_path_getter(kind: DatasetKind):
     """Returns path getter for a given dataset type."""
 
@@ -150,3 +179,5 @@ def get_path_getter(kind: DatasetKind):
             return DrivAerMLPaths
         case DatasetKind.DRIVESIM:
             return DriveSimPaths
+        case DatasetKind.HLPW:
+            return HLPWPaths
