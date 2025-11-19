@@ -687,8 +687,8 @@ class TestExternalAerodynamicsSurfaceTransformation:
             surface_processors=(
                 partial(
                     non_dimensionalize_surface_fields,
-                    air_density=sample_data_raw.metadata.air_density,
-                    stream_velocity=sample_data_raw.metadata.stream_velocity,
+                    air_density=1.00,
+                    stream_velocity=10.00,
                 ),
             ),
         )
@@ -697,12 +697,13 @@ class TestExternalAerodynamicsSurfaceTransformation:
         # Check that the fields were non-dimensionalized
         assert result.surface_fields.shape == sample_data_raw.surface_fields.shape
         # Verify non-dimensionalization: result = original / (rho * V^2)
-        dynamic_pressure_factor = (
-            sample_data_raw.metadata.air_density
-            * sample_data_raw.metadata.stream_velocity**2
-        )
+        dynamic_pressure_factor = 1.00 * 10.00**2  # air_density  # stream_velocity
         expected = np.array([[1.0, 0.5, 0.2, 101325.0]]) / dynamic_pressure_factor
         np.testing.assert_allclose(result.surface_fields, expected, rtol=1e-5)
+
+        # Verify that the metadata was updated
+        assert result.metadata.air_density == 1.00
+        assert result.metadata.stream_velocity == 10.00
 
     def test_transform_with_default_processor_and_filter_invalid_surface_cells(
         self, sample_data_raw
@@ -968,8 +969,8 @@ class TestExternalAerodynamicsVolumeTransformation:
             volume_processors=(
                 partial(
                     non_dimensionalize_volume_fields,
-                    air_density=sample_data_raw.metadata.air_density,
-                    stream_velocity=sample_data_raw.metadata.stream_velocity,
+                    air_density=1.00,
+                    stream_velocity=10.00,
                 ),
             ),
         )
@@ -981,14 +982,17 @@ class TestExternalAerodynamicsVolumeTransformation:
         # Pressure (column 3): divided by (rho * V^2)
         expected_velocity = (
             np.array([[30, 0, 0], [25, 0, 0], [28, 1, 0], [27, 0, 1]])
-            / sample_data_raw.metadata.stream_velocity
+            / 10.00  # stream_velocity
         )
         expected_pressure = np.array([[101325], [101300], [101320], [101310]]) / (
-            sample_data_raw.metadata.air_density
-            * sample_data_raw.metadata.stream_velocity**2
+            1.00 * 10.00**2  # air_density  # stream_velocity
         )
         expected = np.concatenate([expected_velocity, expected_pressure], axis=-1)
         np.testing.assert_allclose(result.volume_fields, expected, rtol=1e-5)
+
+        # Verify that the metadata was updated
+        assert result.metadata.air_density == 1.00
+        assert result.metadata.stream_velocity == 10.00
 
     def test_transform_with_default_processor_and_shuffle_data(self, sample_data_raw):
         """Test volume transformation with shuffle on top of the default processor."""

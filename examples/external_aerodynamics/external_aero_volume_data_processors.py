@@ -130,6 +130,15 @@ def non_dimensionalize_volume_fields(
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize volume fields."""
 
+    if data.volume_fields.shape[0] == 0:
+        logger.error(f"Volume fields are empty: {data.volume_fields}")
+        return data
+
+    if air_density <= 0:
+        logger.error(f"Air density must be > 0: {air_density}")
+    if stream_velocity <= 0:
+        logger.error(f"Stream velocity must be > 0: {stream_velocity}")
+
     stl_vertices = data.stl_polydata.points
     length_scale = np.amax(np.amax(stl_vertices, 0) - np.amin(stl_vertices, 0))
     data.volume_fields[:, :3] = data.volume_fields[:, :3] / stream_velocity
@@ -139,6 +148,11 @@ def non_dimensionalize_volume_fields(
     data.volume_fields[:, 4:] = data.volume_fields[:, 4:] / (
         stream_velocity * length_scale
     )
+
+    # Update metadata
+    data.metadata.air_density = air_density
+    data.metadata.stream_velocity = stream_velocity
+
     return data
 
 def non_dimensionalize_volume_fields_hlpw(
