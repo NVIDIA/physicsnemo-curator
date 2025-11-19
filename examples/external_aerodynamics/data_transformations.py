@@ -21,22 +21,23 @@ from typing import Callable, Optional
 import numpy as np
 from numcodecs import Blosc
 
-from examples.external_aerodynamics.external_aero_geometry_data_processors import (
-    default_geometry_processing_for_external_aerodynamics,
-)
-from examples.external_aerodynamics.external_aero_surface_data_processors import (
-    default_surface_processing_for_external_aerodynamics,
-    default_surface_processing_for_external_aerodynamics_hlpw,
-)
-from examples.external_aerodynamics.external_aero_volume_data_processors import (
-    default_volume_processing_for_external_aerodynamics,
-)
 from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 from .constants import PhysicsConstants
-from .external_aero_utils import (
-    to_float32,
+from .external_aero_geometry_data_processors import (
+    default_geometry_processing_for_external_aerodynamics,
+)
+from .external_aero_global_params_data_processors import (
+    default_global_params_processing_for_external_aerodynamics,
+)
+from .external_aero_surface_data_processors import (
+    default_surface_processing_for_external_aerodynamics,
+    default_surface_processing_for_external_aerodynamics_hlpw,
+)
+from .external_aero_utils import to_float32
+from .external_aero_volume_data_processors import (
+    default_volume_processing_for_external_aerodynamics,
 )
 from .schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
@@ -155,7 +156,6 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
         """Transform surface data for External Aerodynamics model."""
 
         if data.surface_polydata is not None:
-
             # Regardless of whether there are any additional surface processors,
             # we always apply the default surface processing.
             # This will ensure that the bare minimum criteria for surface data is met.
@@ -175,7 +175,7 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
 
 
 class ExternalAerodynamicsSurfaceTransformationHLPW(DataTransformation):
-    """Transforms surface data for HLPW using N_BF field."""
+    """Transforms surface data for HLPW and uses N_BF field for surface_area calculation"""
 
     def __init__(
         self,
@@ -211,7 +211,6 @@ class ExternalAerodynamicsSurfaceTransformationHLPW(DataTransformation):
         """Transform surface data for HLPW using N_BF field."""
 
         if data.surface_polydata is not None:
-
             # Use HLPW-specific default processing (with N_BF field)
             data = default_surface_processing_for_external_aerodynamics_hlpw(
                 data, self.surface_variables, self.nbf_field_name
@@ -256,9 +255,7 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
     def transform(
         self, data: ExternalAerodynamicsExtractedDataInMemory
     ) -> ExternalAerodynamicsExtractedDataInMemory:
-
         if data.volume_unstructured_grid is not None:
-
             # Regardless of whether there are any additional volume processors,
             # we always apply the default volume processing.
             # This will ensure that the bare minimum criteria for volume data is met.
@@ -273,6 +270,45 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
 
             # Delete raw volume data to save memory
             data.volume_unstructured_grid = None
+
+        return data
+
+
+class ExternalAerodynamicsGlobalParamsTransformation(DataTransformation):
+    """Transforms global parameters values and references for External Aerodynamics model."""
+    def __init__(
+        self,
+        cfg: ProcessingConfig,
+        global_parameters: Optional[dict] = None,
+        global_params_processors: Optional[tuple[Callable, ...]] = None,
+    ):
+        super().__init__(cfg)
+        self.global_parameters = global_parameters
+        self.global_params_processors = global_params_processors
+        self.logger = logging.getLogger(__name__)
+
+        if global_parameters is None:
+            self.logger.error("No global_parameters provided. Please provide global parameters")
+
+    def transform(
+        self, data: ExternalAerodynamicsExtractedDataInMemory
+    ) -> ExternalAerodynamicsExtractedDataInMemory:
+        """Transform global_params data for External Aerodynamics model.
+        
+        Processes global parameter references from config and extracts values from simulation data.
+        """
+
+        if self.global_parameters is not None:
+            # Apply default processing to set up reference arrays from config
+            data = default_global_params_processing_for_external_aerodynamics(
+                data, self.global_parameters
+            )
+
+            # Apply any custom processors (e.g., extract values from simulation files)
+            # Pass global_parameters so processors know the types (vector vs scalar)
+            if self.global_params_processors is not None:
+                for processor in self.global_params_processors:
+                    data = processor(data, self.global_parameters)
 
         return data
 
@@ -357,6 +393,8 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
             stl_faces=self._prepare_array(data.stl_faces),
             stl_areas=self._prepare_array(data.stl_areas),
             metadata=data.metadata,
+            global_params_values=self._prepare_array(data.metadata.global_params_values),
+            global_params_reference=self._prepare_array(data.metadata.global_params_reference),
             surface_mesh_centers=self._prepare_array(data.surface_mesh_centers),
             surface_normals=self._prepare_array(data.surface_normals),
             surface_areas=self._prepare_array(data.surface_areas),

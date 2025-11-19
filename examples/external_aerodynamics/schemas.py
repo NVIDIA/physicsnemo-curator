@@ -31,6 +31,7 @@ class ExternalAerodynamicsMetadata:
 
     Version history:
     - 1.0: Initial version with expected metadata fields.
+    - 1.1: Added AoA (Angle of Attack) field.
     """
 
     # Simulation identifiers
@@ -38,8 +39,8 @@ class ExternalAerodynamicsMetadata:
     dataset_type: ModelType
 
     # Physical parameters
-    stream_velocity: Optional[float] = None
-    air_density: Optional[float] = None
+    global_params_values: Optional[np.ndarray] = None
+    global_params_reference: Optional[np.ndarray] = None
 
     # Geometry bounds
     x_bound: Optional[tuple[float, float]] = None  # xmin, xmax
@@ -107,6 +108,7 @@ class ExternalAerodynamicsZarrDataInMemory:
 
     Version history:
     - 1.0: Initial version with prepared arrays for Zarr storage
+    - 1.1: Added global_params_values and global_params_reference as top-level datasets
     """
 
     # Metadata
@@ -117,6 +119,10 @@ class ExternalAerodynamicsZarrDataInMemory:
     stl_centers: PreparedZarrArrayInfo
     stl_faces: PreparedZarrArrayInfo
     stl_areas: PreparedZarrArrayInfo
+
+    # Global parameters
+    global_params_values: Optional[PreparedZarrArrayInfo] = None
+    global_params_reference: Optional[PreparedZarrArrayInfo] = None
 
     # Surface data
     surface_mesh_centers: Optional[PreparedZarrArrayInfo] = None
@@ -137,8 +143,8 @@ class ExternalAerodynamicsNumpyMetadata:
     """
 
     filename: str
-    stream_velocity: float
-    air_density: float
+    global_params_values: np.ndarray
+    global_params_reference: np.ndarray
 
 
 @dataclass(frozen=True)

@@ -18,6 +18,7 @@ defaults:
   - /external_aero_etl_drivaerml
   - override /variables/surface: hlpw
   - override /variables/volume: hlpw
+  - override /variables/global: hlpw
   - _self_
 
 etl:
@@ -64,4 +65,10 @@ etl:
           _partial_: true
         
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.shuffle_volume_data
+          _partial_: true
+    
+    global_params_preprocessing:
+      global_parameters: ${global_parameters}
+      global_params_processors:
+        - _target_: examples.external_aerodynamics.external_aero_global_params_data_processors.process_global_params_hlpw
           _partial_: true

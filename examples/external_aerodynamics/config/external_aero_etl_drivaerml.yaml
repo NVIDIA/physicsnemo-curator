@@ -17,6 +17,7 @@
 defaults:
   - /variables/surface: drivaerml
   - /variables/volume: drivaerml
+  - /variables/global: drivaerml
   - /serialization_format: zarr  # Default value, can be overridden via CLI
   - /override_transformations: ${serialization_format}
   - _self_
@@ -96,6 +97,16 @@ etl:
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
           _partial_: true
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.shuffle_volume_data
+          _partial_: true
+    
+    global_params_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsGlobalParamsTransformation
+      _convert_: all
+      global_parameters: ${global_parameters}
+      # Regardless of whether there are any additional global params processors,
+      # we always apply the default global params processing. This ensure that there are global params references present.
+      global_params_processors:
+        - _target_: examples.external_aerodynamics.external_aero_global_params_data_processors.process_global_params
           _partial_: true
 
     write_ready_transformation: ${override_transformations.write_ready_transformation}

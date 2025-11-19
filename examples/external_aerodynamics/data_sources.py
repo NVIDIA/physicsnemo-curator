@@ -250,6 +250,8 @@ class ExternalAerodynamicsDataSource(DataSource):
 
         # Write optional arrays if present
         for field in [
+            "global_params_values",
+            "global_params_reference",
             "surface_mesh_centers",
             "surface_normals",
             "surface_areas",

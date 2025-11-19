@@ -168,6 +168,31 @@ class HLPWPaths:
         dirname = car_dir.name
         return car_dir / f"volume_{dirname}.vtu"
 
+    @staticmethod
+    def extract_aoa(dirname: str) -> float:
+        """Extract Angle of Attack (AoA) from HLPW directory name.
+
+        Args:
+            dirname: Directory name in format 'geo_LHC001_AoA_16'
+
+        Returns:
+            Angle of Attack in degrees as a float
+
+        Raises:
+            ValueError: If AoA cannot be extracted from the filename
+        """
+        parts = dirname.split("_")
+        # Look for 'AoA' followed by the angle value
+        for i, part in enumerate(parts):
+            if part == "AoA" and i + 1 < len(parts):
+                try:
+                    return float(parts[i + 1])
+                except ValueError:
+                    raise ValueError(
+                        f"Could not parse AoA value from '{parts[i + 1]}' in directory: {dirname}"
+                    )
+        raise ValueError(f"AoA not found in directory name: {dirname}")
+
 
 def get_path_getter(kind: DatasetKind):
     """Returns path getter for a given dataset type."""
