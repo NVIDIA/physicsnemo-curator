@@ -242,6 +242,7 @@ def non_dimensionalize_surface_fields(
 def non_dimensionalize_surface_fields_hlpw(
     data: ExternalAerodynamicsExtractedDataInMemory,
     pref: float = 176.352,  # HLPW reference pressure (Pa)
+    tref: float = 518.67,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """
     Non-dimensionalize surface fields using HLPW reference values.
@@ -260,9 +261,11 @@ def non_dimensionalize_surface_fields_hlpw(
     if data.surface_fields is None or len(data.surface_fields) == 0:
         logger.error(f"Surface fields are empty: {data.surface_fields}")
         return data
-    
-    # Non-dimensionalize pressure (first column) by PREF
-    data.surface_fields /= pref
+    # Non-dimensionalize temperature by TREF
+    data.surface_fields[0:1] /= tref
+
+    # Non-dimensionalize pressure and shear stress by PREF
+    data.surface_fields[1:] /= pref
     
     return data
 

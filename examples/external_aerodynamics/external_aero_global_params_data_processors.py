@@ -133,7 +133,6 @@ def process_global_params(
 # simulation data for specific datasets. Replace process_global_params above
 # with these in your config for case-specific processing.
 
-
 def process_global_params_hlpw(
     data: ExternalAerodynamicsExtractedDataInMemory,
     global_parameters: dict,

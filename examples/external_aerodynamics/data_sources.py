@@ -235,18 +235,29 @@ class ExternalAerodynamicsDataSource(DataSource):
         zarr_store = zarr.DirectoryStore(output_path)
         root = zarr.group(store=zarr_store)
 
-        # Write metadata as attributes
-        root.attrs.update(asdict(data.metadata))
+        self.logger.info(f"Created zarr store at {output_path}")
+
+        # Write metadata as attributes (exclude numpy arrays that will be stored as datasets)
+        metadata_dict = asdict(data.metadata)
+        # Remove numpy array fields - these are stored as separate zarr datasets below
+        metadata_dict.pop('global_params_values', None)
+        metadata_dict.pop('global_params_reference', None)
+        root.attrs.update(metadata_dict)
+        self.logger.info(f"Wrote metadata attributes at {output_path}")
 
         # Write required arrays
         for field in ["stl_coordinates", "stl_centers", "stl_faces", "stl_areas"]:
             array_info = getattr(data, field)
+            self.logger.info(f"Writing required field '{field}': array_info={array_info is not None}, type={type(array_info)}")
+            if array_info is None:
+                raise ValueError(f"Required field '{field}' is None - cannot write zarr dataset")
             root.create_dataset(
                 field,
                 data=array_info.data,
                 chunks=array_info.chunks,
                 compressor=array_info.compressor,
             )
+            self.logger.info(f"Successfully wrote field '{field}' with shape {array_info.data.shape}")
 
         # Write optional arrays if present
         for field in [
@@ -267,6 +278,10 @@ class ExternalAerodynamicsDataSource(DataSource):
                     chunks=array_info.chunks,
                     compressor=array_info.compressor,
                 )
+                self.logger.info(f"Successfully wrote field '{field}' with shape {array_info.data.shape}")
+            else:
+                self.logger.warning(f"{array_info} is absent in the dataset")
+
 
     def should_skip(self, filename: str) -> bool:
         """Checks whether the file should be skipped.

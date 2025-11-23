@@ -48,7 +48,8 @@ etl:
         # HLPW-specific non-dimensionalization
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields_hlpw
           _partial_: true
-          PREF: 176.352  # HLPW reference pressure (Pa)
+          pref: 176.352  # HLPW reference pressure (Pa)
+          tref: 518.67 # HLPW reference temperature (K)
 
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
           _partial_: true
@@ -58,9 +59,10 @@ etl:
         # HLPW-specific volume non-dimensionalization
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields_hlpw
           _partial_: true
-          PREF: 176.352  # HLPW reference pressure (Pa)
-          UREF: 2679.505  # HLPW reference velocity (m/s) - update to actual value
-        
+          pref: 176.352  # HLPW reference pressure (Pa)
+          uref: 2679.505  # HLPW reference velocity (m/s)
+          tref: 518.67 # HLPW reference temperature (K)
+
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
           _partial_: true
         
@@ -68,7 +70,7 @@ etl:
           _partial_: true
     
     global_params_preprocessing:
-      global_parameters: ${global_parameters}
+      global_parameters: ${etl.global_parameters}
       global_params_processors:
         - _target_: examples.external_aerodynamics.external_aero_global_params_data_processors.process_global_params_hlpw
           _partial_: true

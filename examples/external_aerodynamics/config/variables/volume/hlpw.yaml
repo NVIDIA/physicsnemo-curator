@@ -17,4 +17,5 @@
 
 volume_variables:
   avg(P): scalar
+  avg(T): scalar
   avg(u): vector

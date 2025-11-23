@@ -102,7 +102,7 @@ etl:
     global_params_preprocessing:
       _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsGlobalParamsTransformation
       _convert_: all
-      global_parameters: ${global_parameters}
+      global_parameters: ${etl.global_parameters}
       # Regardless of whether there are any additional global params processors,
       # we always apply the default global params processing. This ensure that there are global params references present.
       global_params_processors:
