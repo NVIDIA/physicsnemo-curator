@@ -67,10 +67,8 @@ def default_global_params_processing_for_external_aerodynamics(
     global_params_reference_list = []
     for name, param_type in global_params_types.items():
         if param_type == "vector":
-            # Vector parameters should be lists - extend to flatten
             global_params_reference_list.extend(global_params_reference_dict[name])
         elif param_type == "scalar":
-            # Scalar parameters are single values - append directly
             global_params_reference_list.append(global_params_reference_dict[name])
         else:
             raise ValueError(
@@ -81,11 +79,6 @@ def default_global_params_processing_for_external_aerodynamics(
     # Convert to numpy array and store in metadata
     data.metadata.global_params_reference = np.array(
         global_params_reference_list, dtype=np.float32
-    )
-    
-    logger.info(
-        f"Processed global_params_reference: {data.metadata.global_params_reference} "
-        f"with shape {data.metadata.global_params_reference.shape}"
     )
     
     return data
@@ -114,14 +107,11 @@ def process_global_params(
         logger.warning(
             "global_params_reference not set. Skipping global_params_values processing."
         )
+        raise ValueError("global_params_reference are absent in the configuration")
         return data
     
     # Default behavior: assume simulation values match reference
     data.metadata.global_params_values = data.metadata.global_params_reference.copy()
-    
-    logger.info(
-        f"Set global_params_values to reference values: {data.metadata.global_params_values}"
-    )
     
     return data
 
@@ -140,7 +130,7 @@ def process_global_params_hlpw(
     """Extract global parameters from HLPW simulation data.
     
     For HLPW, typically:
-    - AoA (Angle of Attack) varies per simulation and can be extracted from filename or metadata
+    - AoA (Angle of Attack) varies per simulation and can be extracted from filename
     
     Args:
         data: Container with simulation data and metadata
@@ -153,6 +143,7 @@ def process_global_params_hlpw(
         logger.warning(
             "global_params_reference not set. Skipping global_params_values processing."
         )
+        raise ValueError("global_params_reference are absent in the configuration")
         return data
     
     # Build a dict of extracted values keyed by parameter name
@@ -161,7 +152,6 @@ def process_global_params_hlpw(
     # Extract AoA from filename (e.g., "geo_LHC001_AoA_16" -> 16.0)
     filename = data.metadata.filename
     if "AoA_" in filename:
-        try:
             # Extract string after "AoA_"
             # Example: "geo_LHC001_AoA_16" -> "16"
             # Example: "geo_LHC001_AoA_16_something" -> "16"
@@ -171,18 +161,11 @@ def process_global_params_hlpw(
             aoa = float(aoa_str)
             extracted_values["AoA"] = aoa
             logger.info(f"Extracted AoA={aoa} from filename: {filename}")
-        except (IndexError, ValueError) as e:
-            logger.warning(
-                f"Could not extract AoA from filename '{filename}': {e}. "
-                f"Using reference value."
-            )
-            extracted_values["AoA"] = global_parameters["AoA"]["reference"]
     else:
         # Fallback to reference if not in filename
-        logger.error(
+        raise ValueError(
             f"AoA pattern not found in filename '{filename}'."
         )
-        extracted_values["AoA"] = global_parameters["AoA"]["reference"]
     
     # Build the flattened array using the same logic as reference processing
     global_params_values_list = []
@@ -191,12 +174,8 @@ def process_global_params_hlpw(
         value = extracted_values.get(name, params["reference"])
         
         if param_type == "vector":
-            # For vectors, ensure value is a list and extend
-            if not isinstance(value, (list, tuple)):
-                value = [value]
             global_params_values_list.extend(value)
         elif param_type == "scalar":
-            # For scalars, append directly
             global_params_values_list.append(value)
         else:
             raise ValueError(
@@ -207,9 +186,5 @@ def process_global_params_hlpw(
     data.metadata.global_params_values = np.array(
         global_params_values_list, dtype=np.float32
     )
-    
-    logger.info(
-        f"Processed global_params_values for HLPW: {data.metadata.global_params_values}"
-    )
-    
+        
     return data

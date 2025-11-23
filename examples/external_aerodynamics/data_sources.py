@@ -235,15 +235,12 @@ class ExternalAerodynamicsDataSource(DataSource):
         zarr_store = zarr.DirectoryStore(output_path)
         root = zarr.group(store=zarr_store)
 
-        self.logger.info(f"Created zarr store at {output_path}")
-
-        # Write metadata as attributes (exclude numpy arrays that will be stored as datasets)
+        # Remove 'global_params_values' and `global_params_reference` that are written
+        # as part of the data itself
         metadata_dict = asdict(data.metadata)
-        # Remove numpy array fields - these are stored as separate zarr datasets below
         metadata_dict.pop('global_params_values', None)
         metadata_dict.pop('global_params_reference', None)
         root.attrs.update(metadata_dict)
-        self.logger.info(f"Wrote metadata attributes at {output_path}")
 
         # Write required arrays
         for field in ["stl_coordinates", "stl_centers", "stl_faces", "stl_areas"]:
@@ -257,7 +254,6 @@ class ExternalAerodynamicsDataSource(DataSource):
                 chunks=array_info.chunks,
                 compressor=array_info.compressor,
             )
-            self.logger.info(f"Successfully wrote field '{field}' with shape {array_info.data.shape}")
 
         # Write optional arrays if present
         for field in [

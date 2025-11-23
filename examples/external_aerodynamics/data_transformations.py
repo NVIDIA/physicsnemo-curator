@@ -374,8 +374,7 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
     def _prepare_array_no_compression(self, array: np.ndarray) -> PreparedZarrArrayInfo:
         """Prepare small array for Zarr storage without compression.
         
-        Used for small metadata arrays like global parameters where compression
-        overhead exceeds any space savings.
+        Used for small arrays like `global_params_reference` and `global_params_values`
         """
         if array is None:
             return None
@@ -411,6 +410,7 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
             stl_faces=self._prepare_array(data.stl_faces),
             stl_areas=self._prepare_array(data.stl_areas),
             metadata=data.metadata,
+            # `global_params_values` and `global_params_reference` are saved without compression
             global_params_values=self._prepare_array_no_compression(data.metadata.global_params_values),
             global_params_reference=self._prepare_array_no_compression(data.metadata.global_params_reference),
             surface_mesh_centers=self._prepare_array(data.surface_mesh_centers),
