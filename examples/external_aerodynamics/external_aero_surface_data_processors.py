@@ -218,15 +218,13 @@ def normalize_surface_normals(
 
 def non_dimensionalize_surface_fields(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    physics_constants: PhysicsConstantsCarAerodynamics,
+    air_density: PhysicsConstantsCarAerodynamics.AIR_DENSITY,
+    stream_velocity: PhysicsConstantsCarAerodynamics.STREAM_VELOCITY,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """
     Non-dimensionalize surface fields using PhysicsConstantsCarAerodynamics.
     Note: Both DriveAerML and AhmedML use the same non-dimensional constants
     """
-
-    air_density = physics_constants.AIR_DENSITY
-    stream_velocity = physics_constants.STREAM_VELOCITY
 
     if data.surface_fields.shape[0] == 0:
         logger.error(f"Surface fields are empty: {data.surface_fields}")
@@ -240,20 +238,17 @@ def non_dimensionalize_surface_fields(
     # Non-dimensionalize surface fields
     data.surface_fields = data.surface_fields / (air_density * stream_velocity**2.0)
 
-
     return data
 
 
 def non_dimensionalize_surface_fields_hlpw(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    physics_constants: PhysicsConstantsHLPW,
+    pref: PhysicsConstantsHLPW.PREF,
+    tref: PhysicsConstantsHLPW.TREF,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """
     Non-dimensionalize surface fields using PhysicsConstantsHLPW.
     """
-
-    pref = physics_constants.PREF
-    tref = physics_constants.TREF
 
     if data.surface_fields is None or len(data.surface_fields) == 0:
         logger.error(f"Surface fields are empty: {data.surface_fields}")

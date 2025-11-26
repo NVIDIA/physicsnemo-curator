@@ -129,12 +129,10 @@ def filter_volume_invalid_cells(
 
 def non_dimensionalize_volume_fields(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    physics_constants: PhysicsConstantsCarAerodynamics,
+    air_density: PhysicsConstantsCarAerodynamics.AIR_DENSITY,
+    stream_velocity: PhysicsConstantsCarAerodynamics.STREAM_VELOCITY,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize volume fields."""
-
-    air_density = physics_constants.AIR_DENSITY
-    stream_velocity = physics_constants.STREAM_VELOCITY
 
     if data.volume_fields.shape[0] == 0:
         logger.error(f"Volume fields are empty: {data.volume_fields}")
@@ -155,19 +153,16 @@ def non_dimensionalize_volume_fields(
         stream_velocity * length_scale
     )
 
-
     return data
 
 
 def non_dimensionalize_volume_fields_hlpw(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    physics_constants: PhysicsConstantsHLPW,
+    pref: PhysicsConstantsHLPW.PREF,
+    tref: PhysicsConstantsHLPW.TREF,
+    uref: PhysicsConstantsHLPW.UREF,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize volume fields."""
-
-    pref = physics_constants.PREF
-    tref = physics_constants.TREF
-    uref = physics_constants.UREF
 
     # Pressure
     data.volume_fields[:, :1] = data.volume_fields[:, :1] / pref

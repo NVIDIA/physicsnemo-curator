@@ -238,16 +238,20 @@ class ExternalAerodynamicsDataSource(DataSource):
         # Remove 'global_params_values' and `global_params_reference` that are written
         # as part of the data itself
         metadata_dict = asdict(data.metadata)
-        metadata_dict.pop('global_params_values', None)
-        metadata_dict.pop('global_params_reference', None)
+        metadata_dict.pop("global_params_values", None)
+        metadata_dict.pop("global_params_reference", None)
         root.attrs.update(metadata_dict)
 
         # Write required arrays
         for field in ["stl_coordinates", "stl_centers", "stl_faces", "stl_areas"]:
             array_info = getattr(data, field)
-            self.logger.info(f"Writing required field '{field}': array_info={array_info is not None}, type={type(array_info)}")
+            self.logger.info(
+                f"Writing required field '{field}': array_info={array_info is not None}, type={type(array_info)}"
+            )
             if array_info is None:
-                raise ValueError(f"Required field '{field}' is None - cannot write zarr dataset")
+                raise ValueError(
+                    f"Required field '{field}' is None - cannot write zarr dataset"
+                )
             root.create_dataset(
                 field,
                 data=array_info.data,
@@ -274,10 +278,11 @@ class ExternalAerodynamicsDataSource(DataSource):
                     chunks=array_info.chunks,
                     compressor=array_info.compressor,
                 )
-                self.logger.info(f"Successfully wrote field '{field}' with shape {array_info.data.shape}")
+                self.logger.info(
+                    f"Successfully wrote field '{field}' with shape {array_info.data.shape}"
+                )
             else:
                 self.logger.error(f"{field} is absent in the dataset")
-
 
     def should_skip(self, filename: str) -> bool:
         """Checks whether the file should be skipped.
