@@ -240,9 +240,6 @@ def non_dimensionalize_surface_fields(
     # Non-dimensionalize surface fields
     data.surface_fields = data.surface_fields / (air_density * stream_velocity**2.0)
 
-    # Update metadata
-    data.metadata.air_density = air_density
-    data.metadata.stream_velocity = stream_velocity
 
     return data
 
@@ -262,10 +259,10 @@ def non_dimensionalize_surface_fields_hlpw(
         logger.error(f"Surface fields are empty: {data.surface_fields}")
         return data
     # Non-dimensionalize temperature by TREF
-    data.surface_fields[0:1] /= tref
+    data.surface_fields[:, 0:1] /= tref
 
     # Non-dimensionalize pressure and shear stress by PREF
-    data.surface_fields[1:] /= pref
+    data.surface_fields[:, 1:] /= pref
 
     return data
 

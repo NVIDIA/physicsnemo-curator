@@ -16,8 +16,8 @@
 # limitations under the License.
 
 surface_variables:
-  PROJ(AVG(P)): scalar
   PROJ(AVG(T)): scalar
+  PROJ(AVG(P)): scalar
   AVG(TAU_WALL(0)): scalar
   AVG(TAU_WALL(1)): scalar
   AVG(TAU_WALL(2)): scalar

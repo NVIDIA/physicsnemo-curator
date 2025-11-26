@@ -24,7 +24,7 @@ from numcodecs import Blosc
 from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
-from .constants import PhysicsConstants
+from .constants import PhysicsConstantsCarAerodynamics
 from .external_aero_geometry_data_processors import (
     default_geometry_processing_for_external_aerodynamics,
 )
@@ -71,8 +71,8 @@ class ExternalAerodynamicsNumpyTransformation(DataTransformation):
         # Create minimal metadata
         numpy_metadata = ExternalAerodynamicsNumpyMetadata(
             filename=data.metadata.filename,
-            stream_velocity=data.metadata.stream_velocity,
-            air_density=data.metadata.air_density,
+            global_params_values=data.metadata.global_params_values,
+            global_params_reference=data.metadata.global_params_reference,
         )
 
         return ExternalAerodynamicsNumpyDataInMemory(
@@ -137,7 +137,7 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
 
         self.surface_variables = surface_variables
         self.surface_processors = surface_processors
-        self.constants = PhysicsConstants()
+        self.constants = PhysicsConstantsCarAerodynamics()
 
         if surface_variables is None:
             self.logger.error("Surface variables are empty!")
@@ -190,7 +190,7 @@ class ExternalAerodynamicsSurfaceTransformationHLPW(DataTransformation):
         self.surface_variables = surface_variables
         self.surface_processors = surface_processors
         self.nbf_field_name = nbf_field_name
-        self.constants = PhysicsConstants()
+        self.constants = PhysicsConstantsCarAerodynamics()
 
         if surface_variables is None:
             self.logger.error("Surface variables are empty!")
@@ -238,7 +238,7 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
         super().__init__(cfg)
         self.volume_variables = volume_variables
         self.volume_processors = volume_processors
-        self.constants = PhysicsConstants()
+        self.constants = PhysicsConstantsCarAerodynamics()
         self.logger = logging.getLogger(__name__)
 
         if volume_variables is None:
@@ -276,6 +276,7 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
 
 class ExternalAerodynamicsGlobalParamsTransformation(DataTransformation):
     """Transforms global parameters values and references for External Aerodynamics model."""
+
     def __init__(
         self,
         cfg: ProcessingConfig,
@@ -288,13 +289,15 @@ class ExternalAerodynamicsGlobalParamsTransformation(DataTransformation):
         self.logger = logging.getLogger(__name__)
 
         if global_parameters is None:
-            self.logger.error("No global_parameters provided. Please provide global parameters")
+            self.logger.error(
+                "No global_parameters provided. Please provide global parameters"
+            )
 
     def transform(
         self, data: ExternalAerodynamicsExtractedDataInMemory
     ) -> ExternalAerodynamicsExtractedDataInMemory:
         """Transform global_params data for External Aerodynamics model.
-        
+
         Processes global parameter references from config and extracts values from simulation data.
         """
 
@@ -373,7 +376,7 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
 
     def _prepare_array_no_compression(self, array: np.ndarray) -> PreparedZarrArrayInfo:
         """Prepare small array for Zarr storage without compression.
-        
+
         Used for small arrays like `global_params_reference` and `global_params_values`
         """
         if array is None:
@@ -411,8 +414,12 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
             stl_areas=self._prepare_array(data.stl_areas),
             metadata=data.metadata,
             # `global_params_values` and `global_params_reference` are saved without compression
-            global_params_values=self._prepare_array_no_compression(data.metadata.global_params_values),
-            global_params_reference=self._prepare_array_no_compression(data.metadata.global_params_reference),
+            global_params_values=self._prepare_array_no_compression(
+                data.metadata.global_params_values
+            ),
+            global_params_reference=self._prepare_array_no_compression(
+                data.metadata.global_params_reference
+            ),
             surface_mesh_centers=self._prepare_array(data.surface_mesh_centers),
             surface_normals=self._prepare_array(data.surface_normals),
             surface_areas=self._prepare_array(data.surface_areas),

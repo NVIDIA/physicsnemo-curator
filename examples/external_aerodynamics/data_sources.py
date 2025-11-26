@@ -276,7 +276,7 @@ class ExternalAerodynamicsDataSource(DataSource):
                 )
                 self.logger.info(f"Successfully wrote field '{field}' with shape {array_info.data.shape}")
             else:
-                self.logger.warning(f"{array_info} is absent in the dataset")
+                self.logger.error(f"{field} is absent in the dataset")
 
 
     def should_skip(self, filename: str) -> bool:

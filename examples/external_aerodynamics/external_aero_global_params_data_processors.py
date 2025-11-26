@@ -106,7 +106,6 @@ def process_global_params(
             "global_params_reference not set. Skipping global_params_values processing."
         )
         raise ValueError("global_params_reference are absent in the configuration")
-        return data
 
     # Default behavior: assume simulation values match reference
     data.metadata.global_params_values = data.metadata.global_params_reference.copy()
@@ -143,7 +142,6 @@ def process_global_params_hlpw(
             "global_params_reference not set. Skipping global_params_values processing."
         )
         raise ValueError("global_params_reference are absent in the configuration")
-        return data
 
     # Build a dict of extracted values keyed by parameter name
     extracted_values = {}

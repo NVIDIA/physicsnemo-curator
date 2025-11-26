@@ -55,6 +55,8 @@ etl:
           _partial_: true
 
     volume_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsVolumeTransformation
+      _convert_: all
       volume_processors:
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields_hlpw
           _partial_: true
@@ -69,6 +71,8 @@ etl:
           _partial_: true
     
     global_params_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsGlobalParamsTransformation
+      _convert_: all
       global_parameters: ${etl.global_parameters}
       global_params_processors:
         - _target_: examples.external_aerodynamics.external_aero_global_params_data_processors.process_global_params_hlpw

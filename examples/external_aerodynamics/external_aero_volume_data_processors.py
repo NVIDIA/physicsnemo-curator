@@ -155,9 +155,6 @@ def non_dimensionalize_volume_fields(
         stream_velocity * length_scale
     )
 
-    # Update metadata
-    data.metadata.air_density = air_density
-    data.metadata.stream_velocity = stream_velocity
 
     return data
 
