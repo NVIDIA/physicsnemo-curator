@@ -19,7 +19,11 @@ from typing import Optional
 
 import numpy as np
 
-from examples.external_aerodynamics.constants import PhysicsConstants
+from examples.external_aerodynamics.constants import (
+    PhysicsConstantsCarAerodynamics,
+    PhysicsConstantsHLPW,
+)
+
 from examples.external_aerodynamics.external_aero_utils import (
     get_volume_data,
     to_float32,
@@ -110,7 +114,7 @@ def filter_volume_invalid_cells(
 
     logger.info(
         f"Filtered {n_filtered} invalid volume cells "
-        f"({n_filtered/n_total*100:.2f}% of {n_total} total cells):"
+        f"({n_filtered / n_total * 100:.2f}% of {n_total} total cells):"
     )
     logger.info(f"  - {n_coords_filtered} cells with NaN in coordinates")
     logger.info(f"  - {n_fields_filtered} cells with NaN/inf in fields")
@@ -125,10 +129,12 @@ def filter_volume_invalid_cells(
 
 def non_dimensionalize_volume_fields(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    air_density: float = PhysicsConstants.AIR_DENSITY,
-    stream_velocity: float = PhysicsConstants.STREAM_VELOCITY,
+    physics_constants: PhysicsConstantsCarAerodynamics,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize volume fields."""
+
+    air_density = physics_constants.AIR_DENSITY
+    stream_velocity = physics_constants.STREAM_VELOCITY
 
     if data.volume_fields.shape[0] == 0:
         logger.error(f"Volume fields are empty: {data.volume_fields}")
@@ -155,13 +161,16 @@ def non_dimensionalize_volume_fields(
 
     return data
 
+
 def non_dimensionalize_volume_fields_hlpw(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    pref: float = 176.352,
-    tref: float = 518.67,
-    uref: float = 2679.505,
+    physics_constants: PhysicsConstantsHLPW,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize volume fields."""
+
+    pref = physics_constants.PREF
+    tref = physics_constants.TREF
+    uref = physics_constants.UREF
 
     # Pressure
     data.volume_fields[:, :1] = data.volume_fields[:, :1] / pref
@@ -171,7 +180,7 @@ def non_dimensionalize_volume_fields_hlpw(
 
     # Velocity
     data.volume_fields[:, 2:] = data.volume_fields[:, 2:] / uref
-    
+
     return data
 
 

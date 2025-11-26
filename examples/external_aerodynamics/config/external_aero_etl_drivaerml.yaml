@@ -75,12 +75,15 @@ etl:
           algo: decimate_pro  # can be one of {decimate_pro, decimate}
           reduction: 0.0  # 0 means no decimation.
           preserve_topology: false
+        
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
           _partial_: true
+
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
           _partial_: true
-          air_density: 1.205  # kg/m³
-          stream_velocity: 30.00  # m/s
+          physical_constants:
+            _target_: examples.external_aerodynamics.constants.PhysicsConstantsCarAerodynamics
+
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
           _partial_: true
 
@@ -94,8 +97,12 @@ etl:
       volume_processors:
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields
           _partial_: true
+          physical_constants:
+            _target_: examples.external_aerodynamics.constants.PhysicsConstantsCarAerodynamics
+
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
           _partial_: true
+
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.shuffle_volume_data
           _partial_: true
     
@@ -104,7 +111,7 @@ etl:
       _convert_: all
       global_parameters: ${etl.global_parameters}
       # Regardless of whether there are any additional global params processors,
-      # we always apply the default global params processing. This ensure that there are global params references present.
+      # We always apply the default global params processing. This ensure that there are global params references present.
       global_params_processors:
         - _target_: examples.external_aerodynamics.external_aero_global_params_data_processors.process_global_params
           _partial_: true

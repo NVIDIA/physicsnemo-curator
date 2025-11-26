@@ -23,11 +23,20 @@ from enum import Enum
 
 
 @dataclass(frozen=True)
-class PhysicsConstants:
-    """Physical constants used in the simulation."""
+class PhysicsConstantsCarAerodynamics:
+    """Physical constants used in the simulation in DriveAerML."""
 
     AIR_DENSITY: float = 1.205  # kg/m³
     STREAM_VELOCITY: float = 30.00  # m/s
+
+
+@dataclass(frozen=True)
+class PhysicsConstantsHLPW:
+    """Physical constants used in the simulation for HLPW dataset."""
+
+    PREF: float = 176.352  # HLPW reference pressure
+    UREF: float = 2679.505  # HLPW reference velocity
+    TREF: float = 518.67  # HLPW reference temperature
 
 
 class ModelType(str, Enum):
