@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import logging
+import multiprocessing
 
 
 def setup_logger():
@@ -25,3 +26,12 @@ def setup_logger():
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     return logging.getLogger(__name__)
+
+
+def setup_multiprocessing():
+    """Configure multiprocessing start method."""
+    try:
+        multiprocessing.set_start_method("spawn")
+    except RuntimeError:
+        # Start method already set, skip.
+        pass

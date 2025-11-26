@@ -24,42 +24,41 @@ import numpy as np
 import pytest
 import pyvista as pv
 import vtk
-
-from examples.external_aerodynamics.constants import (
-    ModelType,
-)
-from examples.external_aerodynamics.data_transformations import (
+from constants import ModelType
+from data_transformations import (
     ExternalAerodynamicsNumpyTransformation,
     ExternalAerodynamicsSTLTransformation,
     ExternalAerodynamicsSurfaceTransformation,
     ExternalAerodynamicsVolumeTransformation,
     ExternalAerodynamicsZarrTransformation,
 )
-from examples.external_aerodynamics.external_aero_geometry_data_processors import (
+from external_aero_geometry_data_processors import (
     filter_geometry_invalid_faces,
     update_geometry_data_to_float32,
 )
-from examples.external_aerodynamics.external_aero_surface_data_processors import (
+from external_aero_surface_data_processors import (
     filter_invalid_surface_cells,
     non_dimensionalize_surface_fields,
     normalize_surface_normals,
     update_surface_data_to_float32,
     validate_surface_sample_quality,
 )
-from examples.external_aerodynamics.external_aero_volume_data_processors import (
+from external_aero_utils import get_volume_data
+from external_aero_volume_data_processors import (
     filter_volume_invalid_cells,
     non_dimensionalize_volume_fields,
     shuffle_volume_data,
     update_volume_data_to_float32,
     validate_volume_sample_quality,
 )
-from examples.external_aerodynamics.schemas import (
+from schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
     ExternalAerodynamicsMetadata,
     ExternalAerodynamicsNumpyDataInMemory,
     ExternalAerodynamicsZarrDataInMemory,
     PreparedZarrArrayInfo,
 )
+
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 
@@ -1007,8 +1006,6 @@ class TestExternalAerodynamicsVolumeTransformation:
         )
 
         # Get original volume data for comparison
-        from examples.external_aerodynamics.external_aero_utils import get_volume_data
-
         original_centers, original_fields = get_volume_data(
             sample_data_raw.volume_unstructured_grid,
             {"UMeanTrim": "vector", "pMeanTrim": "scalar"},

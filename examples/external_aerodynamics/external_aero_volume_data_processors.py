@@ -32,9 +32,7 @@ from examples.external_aerodynamics.external_aero_validation_utils import (
     check_field_statistics,
     check_volume_physics_bounds,
 )
-from examples.external_aerodynamics.schemas import (
-    ExternalAerodynamicsExtractedDataInMemory,
-)
+from schemas import ExternalAerodynamicsExtractedDataInMemory
 
 logging.basicConfig(
     format="%(asctime)s - Process %(process)d - %(levelname)s - %(message)s",

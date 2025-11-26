@@ -79,12 +79,16 @@ PhysicsNeMo-Curator can process your data through the following approaches:
 
 **Next Steps:**
 
-1. Organize your converted data according to one of the [supported dataset formats](examples/external_aerodynamics/External_Aero_Data_Processing_Reference.md#input-data-structure)
-2. Use the built-in [External Aerodynamics ETL pipeline](examples/external_aerodynamics/README.md)
+1. Organize your converted data according to one of the supported dataset formats:
+   - [External Aerodynamics Data Processing](./examples/external_aerodynamics/External_Aero_Data_Processing_Reference.md#input-data-structure)
+   - [Crash Data Processing](./examples/structural_mechanics/crash/Crash_Data_Processing_Reference.md)
+2. Use the built-in [External Aerodynamics ETL pipeline](examples/external_aerodynamics/README.md) or [Crash ETL pipeline](./examples/structural_mechanics/crash/README.md)
 to convert your data to an AI model training ready format.
-This built-in pipeline produces a dataset that can be used to train both DoMINO and Transolver models in PhysicsNeMo!
-3. Train your External Aerodynamics Model on your own data by following the [DoMINO example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/domino)
-or the [Transolver example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/transolver)!
+This built-in pipeline produces a dataset that can be used to train both models in PhysicsNeMo!
+3. Train your model on your own data by following these guides:
+   - [DoMINO External Aerodynamics example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/domino)
+   - [Transolver External Aerodynamics example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/transolver)
+   - [Structural Mechanics Crash example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/structural_mechanics/crash)
 
 #### Option 2: Extend the Framework for Custom Formats
 
@@ -94,9 +98,12 @@ demonstrates creating a complete pipeline that reads in HDF5 data and converts i
 
 #### Getting Help
 
-- **Domain-Specific Examples**: Check if your use case matches our [automotive aerodynamics pipeline](./physicsnemo_curator/examples/external_aerodynamics/README.md).
-This provides an example ETL pipeline for training DoMINO/Transolver models for automotive aerodynamics applications.
-For more questions about the formats, please refer to [Data Processing Reference](./physicsnemo_curator/examples/external_aerodynamics/External_Aero_Data_Processing_Reference.md)
+- **Domain-Specific Examples**:
+  - [External aerodynamics pipeline](./examples/external_aerodynamics/README.md)
+  provides an example ETL pipeline for training DoMINO/Transolver models for automotive aerodynamics applications.
+  For more questions about the formats, please refer to [Data Processing Reference](./physicsnemo_curator/examples/external_aerodynamics/External_Aero_Data_Processing_Reference.md)
+  - [Structural Mechanics / Crash pipeline](./examples/structural_mechanics/crash/README.md)
+  provides an example ETL pipeline for training models for structural mechanics/crash applications.
 - **Architecture Questions**: See the [Tutorial](./examples/tutorials/etl_hdf5_to_zarr/hdf5_to_zarr.ipynb)
 for framework concepts, and to understand how to extend the pipeline
 - **Anything else**: Please open a GitHub issue and we'll engage with you to answer the questions!

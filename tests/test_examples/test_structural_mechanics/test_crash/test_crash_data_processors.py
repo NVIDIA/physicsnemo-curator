@@ -19,8 +19,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
-from examples.structural_mechanics.crash.crash_data_processors import (
+from crash_data_processors import (
     build_edges_from_mesh_connectivity,
     compute_node_thickness,
     compute_node_type,

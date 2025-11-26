@@ -22,19 +22,15 @@ from pathlib import Path
 from typing import Optional
 
 import vtk
+from constants import DatasetKind, ModelType
+from paths import get_path_getter
 
-from examples.external_aerodynamics.constants import (
-    DatasetKind,
-    ModelType,
-)
 from physicsnemo_curator.etl.dataset_validators import (
     DatasetValidator,
     ValidationError,
     ValidationLevel,
 )
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
-
-from .paths import get_path_getter
 
 
 class ExternalAerodynamicsDatasetValidator(DatasetValidator):

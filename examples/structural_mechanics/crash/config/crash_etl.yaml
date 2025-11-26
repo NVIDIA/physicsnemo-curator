@@ -23,13 +23,13 @@ etl:
     num_processes: 12  # Process 4 runs in parallel
 
   source:
-    _target_: examples.structural_mechanics.crash.data_sources.CrashD3PlotDataSource
+    _target_: data_sources.CrashD3PlotDataSource
     _convert_: all
     input_dir: ???
 
   transformations:
     crash_transform:
-      _target_: examples.structural_mechanics.crash.data_transformations.CrashDataTransformation
+      _target_: data_transformations.CrashDataTransformation
       _convert_: all
       wall_threshold: 1.0
 

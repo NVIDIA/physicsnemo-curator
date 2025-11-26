@@ -17,8 +17,7 @@
 from pathlib import Path
 
 import pytest
-
-from examples.external_aerodynamics.paths import (
+from paths import (
     DrivAerMLPaths,
     DriveSimPaths,
     VTKPaths,

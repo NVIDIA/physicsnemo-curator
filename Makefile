@@ -32,7 +32,9 @@ doctest:
 
 pytest:
 	pip install -e ".[dev]" && \
-	pytest
+	pytest tests/test_etl/
+	pytest tests/test_examples/test_external_aerodynamics/
+	pytest tests/test_examples/test_structural_mechanics/
 
 coverage:
 	echo "Not implemented"

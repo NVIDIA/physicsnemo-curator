@@ -23,20 +23,11 @@ import numpy as np
 import pytest
 import pyvista as pv
 import vtk
+from constants import DatasetKind, ModelType
+from data_sources import ExternalAerodynamicsDataSource
 from numcodecs import Blosc
-
-from examples.external_aerodynamics.constants import (
-    DatasetKind,
-    ModelType,
-)
-from examples.external_aerodynamics.data_sources import (
-    ExternalAerodynamicsDataSource,
-)
-from examples.external_aerodynamics.paths import (
-    DrivAerMLPaths,
-    DriveSimPaths,
-)
-from examples.external_aerodynamics.schemas import (
+from paths import DrivAerMLPaths, DriveSimPaths
+from schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
     ExternalAerodynamicsMetadata,
     ExternalAerodynamicsNumpyDataInMemory,
@@ -44,6 +35,7 @@ from examples.external_aerodynamics.schemas import (
     ExternalAerodynamicsZarrDataInMemory,
     PreparedZarrArrayInfo,
 )
+
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 from .utils import create_mock_stl, create_mock_surface_vtk, create_mock_volume_vtk

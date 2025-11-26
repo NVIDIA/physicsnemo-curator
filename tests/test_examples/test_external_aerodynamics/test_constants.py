@@ -14,16 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import dataclasses
 
 import pytest
-
-from examples.external_aerodynamics.constants import (
-    DatasetKind,
-    ModelType,
-    PhysicsConstants,
-)
+from constants import DatasetKind, ModelType, PhysicsConstants
 
 
 def test_physics_constants_immutability():

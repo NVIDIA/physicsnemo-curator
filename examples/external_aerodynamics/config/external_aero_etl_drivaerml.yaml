@@ -33,13 +33,13 @@ etl:
     args: {}
 
   validator:
-    _target_: examples.external_aerodynamics.dataset_validator.ExternalAerodynamicsDatasetValidator
+    _target_: dataset_validator.ExternalAerodynamicsDatasetValidator
     _convert_: all
 
     validation_level: "fields"  # One of "structure" or "fields"
 
   source:
-    _target_: examples.external_aerodynamics.data_sources.ExternalAerodynamicsDataSource
+    _target_: data_sources.ExternalAerodynamicsDataSource
     _convert_: all
 
     input_dir: ???  # Path to input dataset directory (required)
@@ -52,25 +52,25 @@ etl:
     # These take in the raw geometry, volume and surface data, and apply DoMINO specific preprocessing transformations.
     # Variable names are piped in from the variables/drivaerml.yaml or variables/ahmedml.yaml file.
     stl_preprocessing:
-      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSTLTransformation
+      _target_: data_transformations.ExternalAerodynamicsSTLTransformation
       _convert_: all
       # Regardless of whether there are any additional geometry processors,
       # we always apply the default geometry processing.
       # This will ensure that the bare minimum criteria for geometry data is met.
       # That is - The geometry data (vertices, faces, areas and centers) are present.
       geometry_processors:
-        - _target_: examples.external_aerodynamics.external_aero_geometry_data_processors.update_geometry_data_to_float32
+        - _target_: external_aero_geometry_data_processors.update_geometry_data_to_float32
           _partial_: true
 
     surface_preprocessing:
-      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSurfaceTransformation
+      _target_: data_transformations.ExternalAerodynamicsSurfaceTransformation
       _convert_: all
       # Regardless of whether there are any additional surface processors,
       # we always apply the default surface processing.
       # This will ensure that the bare minimum criteria for surface data is met.
       # That is - The surface data (mesh centers, normals, areas and fields) are present.
       surface_processors:
-        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.decimate_mesh
+        - _target_: external_aero_surface_data_processors.decimate_mesh
           _partial_: true
           algo: decimate_pro  # can be one of {decimate_pro, decimate}
           reduction: 0.0  # 0 means no decimation.
@@ -88,14 +88,14 @@ etl:
           _partial_: true
 
     volume_preprocessing:
-      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsVolumeTransformation
+      _target_: data_transformations.ExternalAerodynamicsVolumeTransformation
       _convert_: all
       # Regardless of whether there are any additional volume processors,
       # we always apply the default volume processing.
       # This will ensure that the bare minimum criteria for volume data is met.
       # That is - The volume data (mesh centers and fields) are present.
       volume_processors:
-        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields
+        - _target_: external_aero_volume_data_processors.non_dimensionalize_volume_fields
           _partial_: true
           physical_constants:
             _target_: examples.external_aerodynamics.constants.PhysicsConstantsCarAerodynamics
@@ -119,7 +119,7 @@ etl:
     write_ready_transformation: ${override_transformations.write_ready_transformation}
 
   sink:
-    _target_: examples.external_aerodynamics.data_sources.ExternalAerodynamicsDataSource
+    _target_: data_sources.ExternalAerodynamicsDataSource
     _convert_: all
 
     output_dir: ???  # Path to output directory (required)

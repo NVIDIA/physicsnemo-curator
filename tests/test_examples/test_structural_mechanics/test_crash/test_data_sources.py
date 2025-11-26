@@ -22,16 +22,8 @@ import numpy as np
 import pytest
 import pyvista as pv
 import zarr
-
-from examples.structural_mechanics.crash.data_sources import (
-    CrashD3PlotDataSource,
-    CrashVTPDataSource,
-    CrashZarrDataSource,
-)
-from examples.structural_mechanics.crash.schemas import (
-    CrashExtractedDataInMemory,
-    CrashMetadata,
-)
+from data_sources import CrashD3PlotDataSource, CrashVTPDataSource, CrashZarrDataSource
+from schemas import CrashExtractedDataInMemory, CrashMetadata
 
 
 @pytest.fixture
@@ -133,9 +125,7 @@ def test_d3plot_source_read_file():
         mock_part_ids = np.array([1])
         mock_actual_part_ids = np.array([0, 1])
 
-        with patch(
-            "examples.structural_mechanics.crash.data_sources.load_d3plot_data"
-        ) as mock_load:
+        with patch("data_sources.load_d3plot_data") as mock_load:
             mock_load.return_value = (
                 mock_coords,
                 mock_pos_raw,
@@ -182,9 +172,7 @@ def test_d3plot_source_read_file_no_k_file():
         mock_part_ids = np.array([1])
         mock_actual_part_ids = None
 
-        with patch(
-            "examples.structural_mechanics.crash.data_sources.load_d3plot_data"
-        ) as mock_load:
+        with patch("data_sources.load_d3plot_data") as mock_load:
             mock_load.return_value = (
                 mock_coords,
                 mock_pos_raw,

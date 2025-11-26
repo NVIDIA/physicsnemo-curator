@@ -23,18 +23,17 @@ import numpy as np
 import pyvista as pv
 import vtk
 import zarr
-
-from physicsnemo_curator.etl.data_sources import DataSource
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
-
-from .constants import DatasetKind, ModelType
-from .paths import get_path_getter
-from .schemas import (
+from constants import DatasetKind, ModelType
+from paths import get_path_getter
+from schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
     ExternalAerodynamicsMetadata,
     ExternalAerodynamicsNumpyDataInMemory,
     ExternalAerodynamicsZarrDataInMemory,
 )
+
+from physicsnemo_curator.etl.data_sources import DataSource
+from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 
 class ExternalAerodynamicsDataSource(DataSource):
