@@ -68,7 +68,7 @@ def default_surface_processing_for_external_aerodynamics_hlpw(
     Default surface processing for HLPW dataset.
 
     Uses the N_BF (Normal Boundary Faces) field for computing normals and areas,
-    which is more accurate than computing them separately with PyVista.
+    which is faster than computing them separately with PyVista for HLPW dataset.
 
     Important: Converts point data to cell data before processing, as HLPW
     data may be stored at vertices rather than cell centers.

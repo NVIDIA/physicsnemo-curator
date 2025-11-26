@@ -48,9 +48,8 @@ etl:
         # HLPW-specific non-dimensionalization
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields_hlpw
           _partial_: true
-          physical_constants:
-            _target_: examples.external_aerodynamics.constants.PhysicsConstantsHLPW
-
+          pref: 176.352
+          tref: 518.67
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
           _partial_: true
 
@@ -60,13 +59,11 @@ etl:
       volume_processors:
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields_hlpw
           _partial_: true
-          physical_constants:
-            _target_: examples.external_aerodynamics.constants.PhysicsConstantsHLPW
-
-
+          pref: 176.352
+          tref: 518.67
+          uref: 2679.505
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
           _partial_: true
-        
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.shuffle_volume_data
           _partial_: true
     

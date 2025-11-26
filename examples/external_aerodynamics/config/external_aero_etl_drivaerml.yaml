@@ -78,12 +78,10 @@ etl:
         
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
           _partial_: true
-
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
           _partial_: true
           air_density: 1.205
           stream_velocity: 30.00
-
         - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
           _partial_: true
 
@@ -99,10 +97,8 @@ etl:
           _partial_: true
           air_density: 1.205
           stream_velocity: 30.00
-
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
           _partial_: true
-
         - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.shuffle_volume_data
           _partial_: true
     
