@@ -21,7 +21,7 @@ This module contains the path definitions for the External Aerodynamics dataset.
 from enum import Enum
 from pathlib import Path
 
-from .constants import DatasetKind
+from constants import DatasetKind
 
 
 class VTKPaths(str, Enum):

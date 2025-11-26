@@ -17,11 +17,8 @@
 import logging
 
 import numpy as np
-
-from examples.external_aerodynamics.external_aero_utils import to_float32
-from examples.external_aerodynamics.schemas import (
-    ExternalAerodynamicsExtractedDataInMemory,
-)
+from external_aero_utils import to_float32
+from schemas import ExternalAerodynamicsExtractedDataInMemory
 
 logging.basicConfig(
     format="%(asctime)s - Process %(process)d - %(levelname)s - %(message)s",

@@ -19,12 +19,11 @@ import logging
 from typing import Callable, Optional
 
 import numpy as np
+from crash_data_processors import build_edges_from_mesh_connectivity, compute_node_type
+from schemas import CrashExtractedDataInMemory
 
 from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
-
-from .crash_data_processors import build_edges_from_mesh_connectivity, compute_node_type
-from .schemas import CrashExtractedDataInMemory
 
 
 class CrashDataTransformation(DataTransformation):

@@ -60,8 +60,7 @@ while the full version contain 500 runs.
 Example of the command line that launches Curator configured for DrivAerML dataset:
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:examples &&
-physicsnemo-curator-etl                         \
+python run_etl.py                                      \
     --config-dir=examples/external_aerodynamics/config \
     --config-name=external_aero_etl_drivaerml   \
     etl.source.input_dir=/data/drivaerml/       \
@@ -72,8 +71,7 @@ physicsnemo-curator-etl                         \
 To run on AhmedML dataset:
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:examples &&
-physicsnemo-curator-etl                     \
+python run_etl.py                                      \
     --config-dir=examples/external_aerodynamics/config \
     --config-name=external_aero_etl_ahmedml \
     etl.source.input_dir=/data/ahmedml/     \
@@ -134,9 +132,9 @@ default processing.
 
 ```yaml
 surface_preprocessing:
-  _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSurfaceTransformation
+  _target_: data_transformations.ExternalAerodynamicsSurfaceTransformation
   surface_processors:
-    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
+    - _target_: external_aero_surface_data_processors.normalize_surface_normals
       _partial_: true
 ```
 
@@ -145,7 +143,7 @@ surface_preprocessing:
 ```yaml
 surface_preprocessing:
   surface_processors:
-    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
+    - _target_: external_aero_surface_data_processors.non_dimensionalize_surface_fields
       _partial_: true
       air_density: 1.205  # kg/m³
       stream_velocity: 30.0  # m/s
@@ -157,15 +155,15 @@ surface_preprocessing:
 surface_preprocessing:
   surface_processors:
     # 1. Normalize normals
-    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
+    - _target_: external_aero_surface_data_processors.normalize_surface_normals
       _partial_: true
     # 2. Then non-dimensionalize fields
-    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
+    - _target_: external_aero_surface_data_processors.non_dimensionalize_surface_fields
       _partial_: true
       air_density: 1.205
       stream_velocity: 30.0
     # 3. Finally convert to float32
-    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
+    - _target_: external_aero_surface_data_processors.update_surface_data_to_float32
       _partial_: true
 ```
 
@@ -174,7 +172,7 @@ surface_preprocessing:
 You can create your own processors by writing functions that follow this signature:
 
 ```python
-from examples.external_aerodynamics.schemas import ExternalAerodynamicsExtractedDataInMemory
+from schemas import ExternalAerodynamicsExtractedDataInMemory
 
 def my_custom_processor(
     data: ExternalAerodynamicsExtractedDataInMemory,
@@ -236,22 +234,22 @@ for a complete example with filtering enabled:
 surface_preprocessing:
   surface_processors:
     # ... other processors ...
-    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
+    - _target_: external_aero_surface_data_processors.non_dimensionalize_surface_fields
       _partial_: true
       air_density: 1.205
       stream_velocity: 30.0
     # Apply filter AFTER non-dimensionalization
-    - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.validate_surface_sample_quality
+    - _target_: external_aero_surface_data_processors.validate_surface_sample_quality
       _partial_: true
       statistical_tolerance: 7.0  # Filter outliers beyond mean ± 7σ
       pressure_max: 4.0           # Max non-dimensional pressure
 
 volume_preprocessing:
   volume_processors:
-    - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields
+    - _target_: external_aero_volume_data_processors.non_dimensionalize_volume_fields
       _partial_: true
     # Apply filter AFTER non-dimensionalization
-    - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.validate_volume_sample_quality
+    - _target_: external_aero_volume_data_processors.validate_volume_sample_quality
       _partial_: true
       statistical_tolerance: 7.0  # Filter outliers beyond mean ± 7σ
       velocity_max: 3.5           # Max non-dimensional velocity magnitude
@@ -263,8 +261,7 @@ volume_preprocessing:
 To use the filtering configuration:
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:examples &&
-physicsnemo-curator-etl                                  \
+python run_etl.py                                        \
     --config-dir=examples/external_aerodynamics/config   \
     --config-name=external_aero_etl_drivaerml_filtering  \
     etl.source.input_dir=/data/drivaerml/                \

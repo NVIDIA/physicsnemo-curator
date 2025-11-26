@@ -18,18 +18,12 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import data_sources
+import data_transformations
+import dataset_validator
+from constants import DatasetKind, ModelType
 from hydra import compose, initialize
 from hydra.utils import instantiate
-
-from examples.external_aerodynamics import (
-    data_sources,
-    data_transformations,
-    dataset_validator,
-)
-from examples.external_aerodynamics.constants import (
-    DatasetKind,
-    ModelType,
-)
 
 
 def get_config_path() -> Path:

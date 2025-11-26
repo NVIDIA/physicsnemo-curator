@@ -47,6 +47,9 @@ from .schemas import (
     PreparedZarrArrayInfo,
 )
 
+from physicsnemo_curator.etl.data_transformations import DataTransformation
+from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
 
 class ExternalAerodynamicsNumpyTransformation(DataTransformation):
     """Transforms External Aerodynamics data for NumPy storage format (legacy support)."""

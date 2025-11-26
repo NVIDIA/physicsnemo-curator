@@ -57,6 +57,3 @@ lint.ignore = ["E501", "S311", "S603", "S607"]
 addopts = "-v --cov=physicsnemo_curator --cov-report=term-missing"
 testpaths = ["tests"]
 python_files = "test_*.py"
-
-[project.scripts]
-physicsnemo-curator-etl = "physicsnemo_curator:run_etl.main"

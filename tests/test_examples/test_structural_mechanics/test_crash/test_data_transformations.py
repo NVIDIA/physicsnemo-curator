@@ -16,14 +16,9 @@
 
 import numpy as np
 import pytest
+from data_transformations import CrashDataTransformation
+from schemas import CrashExtractedDataInMemory, CrashMetadata
 
-from examples.structural_mechanics.crash.data_transformations import (
-    CrashDataTransformation,
-)
-from examples.structural_mechanics.crash.schemas import (
-    CrashExtractedDataInMemory,
-    CrashMetadata,
-)
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 

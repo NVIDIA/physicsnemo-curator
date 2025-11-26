@@ -14,20 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import logging
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+import dataset_validator
 import pytest
+from constants import DatasetKind, ModelType
 
-from examples.external_aerodynamics.constants import (
-    DatasetKind,
-    ModelType,
-)
-from examples.external_aerodynamics.dataset_validator import (
-    ExternalAerodynamicsDatasetValidator,
-)
 from physicsnemo_curator.etl.dataset_validators import ValidationLevel
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
@@ -58,7 +52,7 @@ def basic_config():
 
 def test_validator_init(basic_config):
     """Test validator initialization."""
-    validator = ExternalAerodynamicsDatasetValidator(
+    validator = dataset_validator.ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=Path("/test"),
         kind=DatasetKind.DRIVAERML,
@@ -75,7 +69,7 @@ def test_validator_init(basic_config):
 
 def test_structure_validation(mock_input_dir, basic_config):
     """Test basic structure validation."""
-    validator = ExternalAerodynamicsDatasetValidator(
+    validator = dataset_validator.ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,
@@ -89,7 +83,7 @@ def test_structure_validation(mock_input_dir, basic_config):
 
 def test_missing_directory(basic_config):
     """Test validation of non-existent directory."""
-    validator = ExternalAerodynamicsDatasetValidator(
+    validator = dataset_validator.ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=Path("/nonexistent"),
         kind=DatasetKind.DRIVAERML,
@@ -107,7 +101,7 @@ def test_invalid_case_name(mock_input_dir, basic_config):
     invalid_case = mock_input_dir / "invalid_name"
     invalid_case.mkdir()
 
-    validator = ExternalAerodynamicsDatasetValidator(
+    validator = dataset_validator.ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,
@@ -134,7 +128,7 @@ def test_field_validation(mock_reader, mock_input_dir, basic_config):
     mock_reader_instance.GetOutput.return_value = mock_data
     mock_reader.return_value = mock_reader_instance
 
-    validator = ExternalAerodynamicsDatasetValidator(
+    validator = dataset_validator.ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,
@@ -153,7 +147,7 @@ def test_field_validation(mock_reader, mock_input_dir, basic_config):
 
 def test_combined_model_validation(mock_input_dir, basic_config):
     """Test validation with combined model type."""
-    validator = ExternalAerodynamicsDatasetValidator(
+    validator = dataset_validator.ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,
@@ -175,7 +169,7 @@ def test_combined_model_validation(mock_input_dir, basic_config):
 def test_validation_logging(mock_input_dir, basic_config, caplog):
     """Test validation logging messages."""
     with caplog.at_level(logging.INFO):
-        validator = ExternalAerodynamicsDatasetValidator(
+        validator = dataset_validator.ExternalAerodynamicsDatasetValidator(
             basic_config,
             input_dir=mock_input_dir,
             kind=DatasetKind.DRIVAERML,
@@ -188,8 +182,8 @@ def test_validation_logging(mock_input_dir, basic_config, caplog):
     assert "Validation completed successfully" in caplog.text
 
 
-@patch("examples.external_aerodynamics.dataset_validator.ProcessPoolExecutor")
-@patch("examples.external_aerodynamics.dataset_validator.as_completed")
+@patch("dataset_validator.ProcessPoolExecutor")
+@patch("dataset_validator.as_completed")
 def test_parallel_validation(
     mock_as_completed, mock_executor, mock_input_dir, basic_config
 ):
@@ -214,7 +208,7 @@ def test_parallel_validation(
     # Mock as_completed to return our future
     mock_as_completed.return_value = [mock_future]
 
-    validator = ExternalAerodynamicsDatasetValidator(
+    validator = dataset_validator.ExternalAerodynamicsDatasetValidator(
         basic_config,
         input_dir=mock_input_dir,
         kind=DatasetKind.DRIVAERML,

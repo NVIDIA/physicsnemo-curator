@@ -15,7 +15,7 @@
 # limitations under the License.
 
 sink:
-  _target_: examples.structural_mechanics.crash.data_sources.CrashZarrDataSource
+  _target_: data_sources.CrashZarrDataSource
   _convert_: all
   output_dir: ???
   overwrite_existing: true

@@ -18,13 +18,10 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import data_sources
+import data_transformations
 from hydra import compose, initialize
 from hydra.utils import instantiate
-
-from examples.structural_mechanics.crash import (
-    data_sources,
-    data_transformations,
-)
 
 
 def get_config_path() -> Path:
@@ -180,10 +177,7 @@ def test_serialization_format_switching():
                 "serialization_format.sink.output_dir=/path/to/output",
             ],
         )
-        assert (
-            cfg_vtp.etl.sink._target_
-            == "examples.structural_mechanics.crash.data_sources.CrashVTPDataSource"
-        )
+        assert cfg_vtp.etl.sink._target_ == "data_sources.CrashVTPDataSource"
         assert "time_step" in cfg_vtp.etl.sink
         assert "compression_level" not in cfg_vtp.etl.sink
 
@@ -196,10 +190,7 @@ def test_serialization_format_switching():
                 "serialization_format.sink.output_dir=/path/to/output",
             ],
         )
-        assert (
-            cfg_zarr.etl.sink._target_
-            == "examples.structural_mechanics.crash.data_sources.CrashZarrDataSource"
-        )
+        assert cfg_zarr.etl.sink._target_ == "data_sources.CrashZarrDataSource"
         assert "compression_level" in cfg_zarr.etl.sink
         assert "time_step" not in cfg_zarr.etl.sink
 
@@ -228,10 +219,7 @@ def test_zarr_sink_config():
             assert m.call_count == 1
 
         # Verify sink configuration
-        assert (
-            cfg.etl.sink._target_
-            == "examples.structural_mechanics.crash.data_sources.CrashZarrDataSource"
-        )
+        assert cfg.etl.sink._target_ == "data_sources.CrashZarrDataSource"
         assert cfg.etl.sink.output_dir == "/path/to/output"
         assert cfg.etl.sink.compression_level == 5
         assert cfg.etl.sink.overwrite_existing is True

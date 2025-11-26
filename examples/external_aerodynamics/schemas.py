@@ -21,8 +21,7 @@ import numcodecs
 import numpy as np
 import pyvista as pv
 import vtk
-
-from .constants import ModelType
+from constants import ModelType
 
 
 @dataclass

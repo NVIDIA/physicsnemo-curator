@@ -15,8 +15,7 @@
 # limitations under the License.
 
 import numpy as np
-
-from examples.external_aerodynamics.external_aero_validation_utils import (
+from external_aero_validation_utils import (
     check_field_statistics,
     check_surface_physics_bounds,
     check_volume_physics_bounds,

@@ -22,18 +22,17 @@ from typing import Any, Dict, List
 import numpy as np
 import pyvista as pv
 import zarr
-from numcodecs import Blosc
-
-from physicsnemo_curator.etl.data_sources import DataSource
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
-
-from .crash_data_processors import (
+from crash_data_processors import (
     compute_node_thickness,
     find_k_file,
     load_d3plot_data,
     parse_k_file,
 )
-from .schemas import CrashExtractedDataInMemory, CrashMetadata
+from numcodecs import Blosc
+from schemas import CrashExtractedDataInMemory, CrashMetadata
+
+from physicsnemo_curator.etl.data_sources import DataSource
+from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 
 class CrashD3PlotDataSource(DataSource):
@@ -46,11 +45,6 @@ class CrashD3PlotDataSource(DataSource):
     ):
         super().__init__(cfg)
         self.input_dir = Path(input_dir)
-        logging.basicConfig(
-            format="%(asctime)s - Process %(process)d - %(levelname)s - %(message)s",
-            level=logging.INFO,
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
         self.logger = logging.getLogger(__name__)
 
         if not self.input_dir.exists():
