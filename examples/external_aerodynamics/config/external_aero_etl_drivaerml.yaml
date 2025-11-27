@@ -76,13 +76,13 @@ etl:
           reduction: 0.0  # 0 means no decimation.
           preserve_topology: false
         
-        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
+        - _target_: external_aero_surface_data_processors.normalize_surface_normals
           _partial_: true
-        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
+        - _target_: external_aero_surface_data_processors.non_dimensionalize_surface_fields
           _partial_: true
           air_density: 1.205
           stream_velocity: 30.00
-        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
+        - _target_: external_aero_surface_data_processors.update_surface_data_to_float32
           _partial_: true
 
     volume_preprocessing:
@@ -95,21 +95,21 @@ etl:
       volume_processors:
         - _target_: external_aero_volume_data_processors.non_dimensionalize_volume_fields
           _partial_: true
-          air_density: 1.205
-          stream_velocity: 30.00
-        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
+          air_density: 1.205 # kg/m³
+          stream_velocity: 30.00 # m/s
+        - _target_: external_aero_volume_data_processors.update_volume_data_to_float32
           _partial_: true
-        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.shuffle_volume_data
+        - _target_: external_aero_volume_data_processors.shuffle_volume_data
           _partial_: true
     
     global_params_preprocessing:
-      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsGlobalParamsTransformation
+      _target_: data_transformations.ExternalAerodynamicsGlobalParamsTransformation
       _convert_: all
       global_parameters: ${etl.global_parameters}
       # Regardless of whether there are any additional global params processors,
       # We always apply the default global params processing. This ensure that there are global params references present.
       global_params_processors:
-        - _target_: examples.external_aerodynamics.external_aero_global_params_data_processors.process_global_params
+        - _target_: external_aero_global_params_data_processors.process_global_params
           _partial_: true
 
     write_ready_transformation: ${override_transformations.write_ready_transformation}
