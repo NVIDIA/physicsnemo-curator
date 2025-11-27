@@ -18,17 +18,12 @@ import logging
 from typing import Optional
 
 import numpy as np
-
-from examples.external_aerodynamics.constants import (
+from constants import (
     PhysicsConstantsCarAerodynamics,
     PhysicsConstantsHLPW,
 )
-
-from examples.external_aerodynamics.external_aero_utils import (
-    get_volume_data,
-    to_float32,
-)
-from examples.external_aerodynamics.external_aero_validation_utils import (
+from external_aero_utils import get_volume_data, to_float32
+from external_aero_validation_utils import (
     check_field_statistics,
     check_volume_physics_bounds,
 )
