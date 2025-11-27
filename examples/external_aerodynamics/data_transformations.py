@@ -70,8 +70,6 @@ class ExternalAerodynamicsNumpyTransformation(DataTransformation):
         # Create minimal metadata
         numpy_metadata = ExternalAerodynamicsNumpyMetadata(
             filename=data.metadata.filename,
-            global_params_values=data.metadata.global_params_values,
-            global_params_reference=data.metadata.global_params_reference,
         )
 
         return ExternalAerodynamicsNumpyDataInMemory(
@@ -86,6 +84,8 @@ class ExternalAerodynamicsNumpyTransformation(DataTransformation):
             surface_fields=to_float32(data.surface_fields),
             volume_mesh_centers=to_float32(data.volume_mesh_centers),
             volume_fields=to_float32(data.volume_fields),
+            global_params_values=to_float32(data.global_params_values),
+            global_params_reference=to_float32(data.global_params_reference),
         )
 
 
@@ -414,10 +414,10 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
             metadata=data.metadata,
             # `global_params_values` and `global_params_reference` are saved without compression
             global_params_values=self._prepare_array_no_compression(
-                data.metadata.global_params_values
+                data.global_params_values
             ),
             global_params_reference=self._prepare_array_no_compression(
-                data.metadata.global_params_reference
+                data.global_params_reference
             ),
             surface_mesh_centers=self._prepare_array(data.surface_mesh_centers),
             surface_normals=self._prepare_array(data.surface_normals),

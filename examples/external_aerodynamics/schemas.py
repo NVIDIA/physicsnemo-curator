@@ -30,16 +30,18 @@ class ExternalAerodynamicsMetadata:
 
     Version history:
     - 1.0: Initial version with expected metadata fields.
-    - 1.1: Added AoA (Angle of Attack) field.
+    - 1.1: Added physics_constants dict for pipeline-specific constants.
     """
 
     # Simulation identifiers
     filename: str
     dataset_type: ModelType
 
-    # Physical parameters
-    global_params_values: Optional[np.ndarray] = None
-    global_params_reference: Optional[np.ndarray] = None
+    # Physics constants - populated based on dataset kind from config
+    # Keys/values vary by pipeline, e.g.:
+    #   CarAerodynamics: {"air_density": 1.205, "stream_velocity": 30.0}
+    #   HLPW: {"pref": 176.352, "uref": 2679.505, "tref": 518.67}
+    physics_constants: Optional[dict[str, float]] = None
 
     # Geometry bounds
     x_bound: Optional[tuple[float, float]] = None  # xmin, xmax
@@ -86,6 +88,10 @@ class ExternalAerodynamicsExtractedDataInMemory:
     # Processed volume data
     volume_mesh_centers: Optional[np.ndarray] = None
     volume_fields: Optional[np.ndarray] = None
+
+    # Global parameters (physical conditions for training)
+    global_params_values: Optional[np.ndarray] = None
+    global_params_reference: Optional[np.ndarray] = None
 
 
 @dataclass(frozen=True)
@@ -142,8 +148,6 @@ class ExternalAerodynamicsNumpyMetadata:
     """
 
     filename: str
-    global_params_values: np.ndarray
-    global_params_reference: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -173,3 +177,7 @@ class ExternalAerodynamicsNumpyDataInMemory:
     # Volume data
     volume_mesh_centers: Optional[np.ndarray] = None
     volume_fields: Optional[np.ndarray] = None
+
+    # Global parameters
+    global_params_values: Optional[np.ndarray] = None
+    global_params_reference: Optional[np.ndarray] = None

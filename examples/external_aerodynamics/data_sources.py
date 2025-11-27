@@ -23,7 +23,7 @@ import numpy as np
 import pyvista as pv
 import vtk
 import zarr
-from constants import DatasetKind, ModelType
+from constants import DatasetKind, ModelType, get_physics_constants
 from paths import get_path_getter
 from schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
@@ -124,6 +124,7 @@ class ExternalAerodynamicsDataSource(DataSource):
         metadata = ExternalAerodynamicsMetadata(
             filename=dirname,
             dataset_type=self.model_type,  # surface, volume, combined
+            physics_constants=get_physics_constants(self.kind),
         )
 
         return ExternalAerodynamicsExtractedDataInMemory(
@@ -234,12 +235,8 @@ class ExternalAerodynamicsDataSource(DataSource):
         zarr_store = zarr.DirectoryStore(output_path)
         root = zarr.group(store=zarr_store)
 
-        # Remove 'global_params_values' and `global_params_reference` that are written
-        # as part of the data itself
-        metadata_dict = asdict(data.metadata)
-        metadata_dict.pop("global_params_values", None)
-        metadata_dict.pop("global_params_reference", None)
-        root.attrs.update(metadata_dict)
+        # Write metadata as root attributes
+        root.attrs.update(asdict(data.metadata))
 
         # Write required arrays
         for field in ["stl_coordinates", "stl_centers", "stl_faces", "stl_areas"]:

@@ -168,6 +168,7 @@ class HLPWPaths:
         dirname = car_dir.name
         return car_dir / f"volume_{dirname}.vtu"
 
+
 def get_path_getter(kind: DatasetKind):
     """Returns path getter for a given dataset type."""
 

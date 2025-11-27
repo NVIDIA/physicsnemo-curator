@@ -17,10 +17,7 @@
 import logging
 
 import numpy as np
-
-from examples.external_aerodynamics.schemas import (
-    ExternalAerodynamicsExtractedDataInMemory,
-)
+from schemas import ExternalAerodynamicsExtractedDataInMemory
 
 logging.basicConfig(
     format="%(asctime)s - Process %(process)d - %(levelname)s - %(message)s",
@@ -50,7 +47,7 @@ def default_global_params_processing_for_external_aerodynamics(
             }
 
     Returns:
-        Updated data with global_params_reference set in metadata
+        Updated data with global_params_reference set
     """
     # Build dictionaries for types and reference values
     global_params_types = {
@@ -74,8 +71,8 @@ def default_global_params_processing_for_external_aerodynamics(
                 f"Must be 'vector' or 'scalar'."
             )
 
-    # Convert to numpy array and store in metadata
-    data.metadata.global_params_reference = np.array(
+    # Convert to numpy array and store in data container
+    data.global_params_reference = np.array(
         global_params_reference_list, dtype=np.float32
     )
 
@@ -99,16 +96,16 @@ def process_global_params(
         global_parameters: Dict from config with parameter definitions
 
     Returns:
-        Updated data with global_params_values set in metadata
+        Updated data with global_params_values set
     """
-    if data.metadata.global_params_reference is None:
+    if data.global_params_reference is None:
         logger.warning(
             "global_params_reference not set. Skipping global_params_values processing."
         )
         raise ValueError("global_params_reference are absent in the configuration")
 
     # Default behavior: assume simulation values match reference
-    data.metadata.global_params_values = data.metadata.global_params_reference.copy()
+    data.global_params_values = data.global_params_reference.copy()
 
     return data
 
@@ -137,7 +134,7 @@ def process_global_params_hlpw(
     Returns:
         Updated data with global_params_values extracted from simulation
     """
-    if data.metadata.global_params_reference is None:
+    if data.global_params_reference is None:
         logger.warning(
             "global_params_reference not set. Skipping global_params_values processing."
         )
@@ -178,8 +175,6 @@ def process_global_params_hlpw(
                 f"Must be 'vector' or 'scalar'."
             )
 
-    data.metadata.global_params_values = np.array(
-        global_params_values_list, dtype=np.float32
-    )
+    data.global_params_values = np.array(global_params_values_list, dtype=np.float32)
 
     return data
