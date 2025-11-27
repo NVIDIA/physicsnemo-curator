@@ -47,8 +47,9 @@ def default_global_params_processing_for_external_aerodynamics(
             }
 
     Returns:
-        Updated data with global_params_reference set
+        Updated `data` with global_params_reference set
     """
+
     # Build dictionaries for types and reference values
     global_params_types = {
         name: params["type"] for name, params in global_parameters.items()
@@ -96,7 +97,7 @@ def process_global_params(
         global_parameters: Dict from config with parameter definitions
 
     Returns:
-        Updated data with global_params_values set
+        Updated `data` with global_params_values set
     """
     # Default behavior: assume simulation values match reference
     data.global_params_values = data.global_params_reference.copy()
@@ -126,7 +127,7 @@ def process_global_params_hlpw(
         global_parameters: Dict from config with parameter definitions
 
     Returns:
-        Updated data with global_params_values extracted from simulation
+        Updated `data` with global_params_values extracted from simulation
     """
 
     # Build a dict of extracted values keyed by parameter name
