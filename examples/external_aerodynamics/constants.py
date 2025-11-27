@@ -24,7 +24,7 @@ from enum import Enum
 
 @dataclass(frozen=True)
 class PhysicsConstantsCarAerodynamics:
-    """Physical constants used in the simulation in DriveAerML."""
+    """Physical constants used in the simulation in DriveAerML or AhmedML"""
 
     AIR_DENSITY: float = 1.205  # kg/m³
     STREAM_VELOCITY: float = 30.00  # m/s
