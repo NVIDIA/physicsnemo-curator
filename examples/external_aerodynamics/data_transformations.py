@@ -19,27 +19,23 @@ import warnings
 from typing import Callable, Optional
 
 import numpy as np
-from numcodecs import Blosc
-
-from physicsnemo_curator.etl.data_transformations import DataTransformation
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
-
-from .constants import PhysicsConstantsCarAerodynamics
-from .external_aero_geometry_data_processors import (
+from constants import PhysicsConstantsCarAerodynamics
+from external_aero_geometry_data_processors import (
     default_geometry_processing_for_external_aerodynamics,
 )
-from .external_aero_global_params_data_processors import (
+from external_aero_global_params_data_processors import (
     default_global_params_processing_for_external_aerodynamics,
 )
-from .external_aero_surface_data_processors import (
+from external_aero_surface_data_processors import (
     default_surface_processing_for_external_aerodynamics,
     default_surface_processing_for_external_aerodynamics_hlpw,
 )
-from .external_aero_utils import to_float32
-from .external_aero_volume_data_processors import (
+from external_aero_utils import to_float32
+from external_aero_volume_data_processors import (
     default_volume_processing_for_external_aerodynamics,
 )
-from .schemas import (
+from numcodecs import Blosc
+from schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
     ExternalAerodynamicsNumpyDataInMemory,
     ExternalAerodynamicsNumpyMetadata,
