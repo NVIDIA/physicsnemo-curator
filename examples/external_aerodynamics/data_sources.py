@@ -192,19 +192,23 @@ class ExternalAerodynamicsDataSource(DataSource):
         """
         # Convert to dict for numpy storage
         save_dict = {
-            # Arrays
+            # Required arrays
             "stl_coordinates": data.stl_coordinates,
             "stl_centers": data.stl_centers,
             "stl_faces": data.stl_faces,
             "stl_areas": data.stl_areas,
             # Basic metadata
             "filename": data.metadata.filename,
-            "stream_velocity": data.metadata.stream_velocity,
-            "air_density": data.metadata.air_density,
         }
 
-        # Add optional arrays if present
+        # Add physics constants if present (pipeline-specific keys)
+        if data.metadata.physics_constants:
+            save_dict.update(data.metadata.physics_constants)
+
+        # Add optional arrays if present (same fields as Zarr I/O)
         for field in [
+            "global_params_values",
+            "global_params_reference",
             "surface_mesh_centers",
             "surface_normals",
             "surface_areas",
@@ -241,13 +245,6 @@ class ExternalAerodynamicsDataSource(DataSource):
         # Write required arrays
         for field in ["stl_coordinates", "stl_centers", "stl_faces", "stl_areas"]:
             array_info = getattr(data, field)
-            self.logger.info(
-                f"Writing required field '{field}': array_info={array_info is not None}, type={type(array_info)}"
-            )
-            if array_info is None:
-                raise ValueError(
-                    f"Required field '{field}' is None - cannot write zarr dataset"
-                )
             root.create_dataset(
                 field,
                 data=array_info.data,
@@ -273,9 +270,6 @@ class ExternalAerodynamicsDataSource(DataSource):
                     data=array_info.data,
                     chunks=array_info.chunks,
                     compressor=array_info.compressor,
-                )
-                self.logger.info(
-                    f"Successfully wrote field '{field}' with shape {array_info.data.shape}"
                 )
             else:
                 self.logger.error(f"{field} is absent in the dataset")

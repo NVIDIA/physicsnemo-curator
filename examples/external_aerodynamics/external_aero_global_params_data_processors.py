@@ -98,12 +98,6 @@ def process_global_params(
     Returns:
         Updated data with global_params_values set
     """
-    if data.global_params_reference is None:
-        logger.warning(
-            "global_params_reference not set. Skipping global_params_values processing."
-        )
-        raise ValueError("global_params_reference are absent in the configuration")
-
     # Default behavior: assume simulation values match reference
     data.global_params_values = data.global_params_reference.copy()
 
@@ -124,7 +118,7 @@ def process_global_params_hlpw(
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Extract global parameters from HLPW simulation data.
 
-    For HLPW, typically:
+    For HLPW, :
     - AoA (Angle of Attack) varies per simulation and can be extracted from filename
 
     Args:
@@ -134,11 +128,6 @@ def process_global_params_hlpw(
     Returns:
         Updated data with global_params_values extracted from simulation
     """
-    if data.global_params_reference is None:
-        logger.warning(
-            "global_params_reference not set. Skipping global_params_values processing."
-        )
-        raise ValueError("global_params_reference are absent in the configuration")
 
     # Build a dict of extracted values keyed by parameter name
     extracted_values = {}
@@ -156,14 +145,17 @@ def process_global_params_hlpw(
         extracted_values["AoA"] = aoa
         logger.info(f"Extracted AoA={aoa} from filename: {filename}")
     else:
-        # Fallback to reference if not in filename
         raise ValueError(f"AoA pattern not found in filename '{filename}'.")
 
     # Build the flattened array using the same logic as reference processing
     global_params_values_list = []
     for name, params in global_parameters.items():
         param_type = params["type"]
-        value = extracted_values.get(name, params["reference"])
+        if name not in extracted_values:
+            raise ValueError(
+                f"Global parameter '{name}' was not extracted from simulation data."
+            )
+        value = extracted_values[name]
 
         if param_type == "vector":
             global_params_values_list.extend(value)

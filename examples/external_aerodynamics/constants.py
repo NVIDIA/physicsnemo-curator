@@ -67,7 +67,7 @@ class DefaultVariables:
 def get_physics_constants(kind: DatasetKind) -> dict[str, float]:
     """Get physics constants dict based on dataset kind. Add a branch
     to the if-elif pipeline below to populate metadata with values
-    used for non-dimensionalization
+    used for non-dimensionalization.
 
     Args:
         kind: The dataset kind (from config etl.common.kind)

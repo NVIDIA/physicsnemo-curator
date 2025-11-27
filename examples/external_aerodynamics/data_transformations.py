@@ -285,11 +285,10 @@ class ExternalAerodynamicsGlobalParamsTransformation(DataTransformation):
         super().__init__(cfg)
         self.global_parameters = global_parameters
         self.global_params_processors = global_params_processors
-        self.logger = logging.getLogger(__name__)
 
         if global_parameters is None:
-            self.logger.error(
-                "No global_parameters provided. Please provide global parameters"
+            raise ValueError(
+                "global_parameters is required but was not provided in config"
             )
 
     def transform(
@@ -299,18 +298,16 @@ class ExternalAerodynamicsGlobalParamsTransformation(DataTransformation):
 
         Processes global parameter references from config and extracts values from simulation data.
         """
+        # Apply default processing to set up reference arrays from config
+        data = default_global_params_processing_for_external_aerodynamics(
+            data, self.global_parameters
+        )
 
-        if self.global_parameters is not None:
-            # Apply default processing to set up reference arrays from config
-            data = default_global_params_processing_for_external_aerodynamics(
-                data, self.global_parameters
-            )
-
-            # Apply any custom processors (e.g., extract values from simulation files)
-            # Pass global_parameters so processors know the types (vector vs scalar)
-            if self.global_params_processors is not None:
-                for processor in self.global_params_processors:
-                    data = processor(data, self.global_parameters)
+        # Apply any custom processors (e.g., extract values from simulation files)
+        # Pass global_parameters so processors know the types (vector vs scalar)
+        if self.global_params_processors is not None:
+            for processor in self.global_params_processors:
+                data = processor(data, self.global_parameters)
 
         return data
 
