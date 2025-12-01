@@ -18,11 +18,10 @@
 global_parameters:
   inlet_velocity:
     type: vector
-    reference: [30.0]  # Inlet velocity vector in m/s
+    reference: [30.0]  # Inlet velocity vector in m/s, if a 2D vector, give [30, 30], if a 3D vector give [30, 30, 30]
   air_density:
     type: scalar
     reference: 1.205  # Air density in kg/m³
   pressure:
     type: scalar
     reference: 101325.0  # Reference pressure in Pa
-

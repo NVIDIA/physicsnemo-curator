@@ -272,7 +272,7 @@ class ExternalAerodynamicsDataSource(DataSource):
                     compressor=array_info.compressor,
                 )
             else:
-                self.logger.error(f"{field} is absent in the dataset")
+                self.logger.warning(f"{field} is absent in the dataset")
 
     def should_skip(self, filename: str) -> bool:
         """Checks whether the file should be skipped.

@@ -185,6 +185,8 @@ def sample_data_processed():
         surface_fields=np.array([[1.0, 0.0, 0.0]], dtype=np.float64),
         volume_mesh_centers=np.array([[0, 0, 0]], dtype=np.float64),
         volume_fields=np.array([[1.0, 0.0, 0.0]], dtype=np.float64),
+        global_params_values=np.array([30.0, 1.205], dtype=np.float32),
+        global_params_reference=np.array([30.0, 1.205], dtype=np.float32),
     )
 
 
@@ -225,6 +227,15 @@ class TestExternalAerodynamicsNumpyTransformation:
         )
         np.testing.assert_array_equal(
             result.volume_fields, sample_data_processed.volume_fields
+        )
+
+        # Check global params fields
+        np.testing.assert_array_equal(
+            result.global_params_values, sample_data_processed.global_params_values
+        )
+        np.testing.assert_array_equal(
+            result.global_params_reference,
+            sample_data_processed.global_params_reference,
         )
 
 
@@ -277,6 +288,20 @@ class TestExternalAerodynamicsZarrTransformation:
         )
         assert result.volume_mesh_centers.chunks == (1, 3)
         assert result.volume_mesh_centers.compressor == transform.compressor
+
+        # Check global params fields (no compression for small 1xN arrays)
+        assert isinstance(result.global_params_values, PreparedZarrArrayInfo)
+        np.testing.assert_array_equal(
+            result.global_params_values.data, sample_data_processed.global_params_values
+        )
+        assert result.global_params_values.compressor is None
+
+        assert isinstance(result.global_params_reference, PreparedZarrArrayInfo)
+        np.testing.assert_array_equal(
+            result.global_params_reference.data,
+            sample_data_processed.global_params_reference,
+        )
+        assert result.global_params_reference.compressor is None
 
     def test_prepare_array(self):
         """Test array preparation for Zarr storage."""

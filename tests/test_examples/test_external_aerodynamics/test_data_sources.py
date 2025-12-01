@@ -185,6 +185,8 @@ class TestExternalAerodynamicsDataSource:
             stl_centers=np.array([[0.5, 0.5, 0.5]]),
             stl_faces=np.array([[0, 1, 2]]),
             stl_areas=np.array([1.0]),
+            global_params_values=np.array([30.0, 1.225], dtype=np.float32),
+            global_params_reference=np.array([30.0, 1.225], dtype=np.float32),
         )
         source.write(test_data, "test_case")
         assert (temp_dir / "test_case.npz").exists()
@@ -234,6 +236,17 @@ class TestExternalAerodynamicsDataSource:
                 num_faces=3,
                 decimation_reduction=0.5,
                 decimation_algo="decimate_pro",
+            ),
+            # Global parameters (no compression for small 1xN arrays)
+            global_params_values=PreparedZarrArrayInfo(
+                data=np.array([30.0, 1.225], dtype=np.float32),
+                chunks=(2,),
+                compressor=None,
+            ),
+            global_params_reference=PreparedZarrArrayInfo(
+                data=np.array([30.0, 1.225], dtype=np.float32),
+                chunks=(2,),
+                compressor=None,
             ),
             # Surface data
             surface_mesh_centers=PreparedZarrArrayInfo(
@@ -427,6 +440,8 @@ class TestExternalAerodynamicsDataSource:
             stl_centers=np.array([[0.5, 0.5, 0.5]]),
             stl_faces=np.array([[0, 1, 2]]),
             stl_areas=np.array([1.0]),
+            global_params_values=np.array([30.0, 1.225], dtype=np.float32),
+            global_params_reference=np.array([30.0, 1.225], dtype=np.float32),
         )
 
         # Write should create final file, not temp file
@@ -477,6 +492,17 @@ class TestExternalAerodynamicsDataSource:
                 air_density=1.225,
                 filename="test_case",
                 dataset_type=ModelType.COMBINED,
+            ),
+            # Global parameters (no compression for small 1xN arrays)
+            global_params_values=PreparedZarrArrayInfo(
+                data=np.array([30.0, 1.225], dtype=np.float32),
+                chunks=(2,),
+                compressor=None,
+            ),
+            global_params_reference=PreparedZarrArrayInfo(
+                data=np.array([30.0, 1.225], dtype=np.float32),
+                chunks=(2,),
+                compressor=None,
             ),
         )
 
