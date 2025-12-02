@@ -23,8 +23,6 @@ import numpy as np
 import pyvista as pv
 import vtk
 import zarr
-from zarr.storage import LocalStore
-
 from constants import DatasetKind, ModelType
 from paths import get_path_getter
 from schemas import (
@@ -33,6 +31,7 @@ from schemas import (
     ExternalAerodynamicsNumpyDataInMemory,
     ExternalAerodynamicsZarrDataInMemory,
 )
+from zarr.storage import LocalStore
 
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig

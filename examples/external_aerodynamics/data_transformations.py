@@ -20,7 +20,6 @@ from typing import Callable, Optional
 
 import numpy as np
 import zarr
-
 from constants import PhysicsConstants
 from external_aero_geometry_data_processors import (
     default_geometry_processing_for_external_aerodynamics,

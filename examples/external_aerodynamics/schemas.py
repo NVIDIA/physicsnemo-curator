@@ -21,7 +21,6 @@ import numpy as np
 import pyvista as pv
 import vtk
 import zarr
-
 from constants import ModelType
 
 

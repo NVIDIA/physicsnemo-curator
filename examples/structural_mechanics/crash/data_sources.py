@@ -22,8 +22,6 @@ from typing import Any, Dict, List
 import numpy as np
 import pyvista as pv
 import zarr
-from zarr.storage import LocalStore
-
 from crash_data_processors import (
     compute_node_thickness,
     find_k_file,
@@ -31,6 +29,7 @@ from crash_data_processors import (
     parse_k_file,
 )
 from schemas import CrashExtractedDataInMemory, CrashMetadata
+from zarr.storage import LocalStore
 
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig

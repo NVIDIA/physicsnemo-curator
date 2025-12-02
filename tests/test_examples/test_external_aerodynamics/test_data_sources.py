@@ -24,7 +24,6 @@ import pytest
 import pyvista as pv
 import vtk
 import zarr
-
 from constants import DatasetKind, ModelType
 from data_sources import ExternalAerodynamicsDataSource
 from paths import DrivAerMLPaths, DriveSimPaths

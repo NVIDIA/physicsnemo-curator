@@ -25,7 +25,6 @@ import pytest
 import pyvista as pv
 import vtk
 import zarr
-
 from constants import ModelType
 from data_transformations import (
     ExternalAerodynamicsNumpyTransformation,
