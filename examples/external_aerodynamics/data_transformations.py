@@ -20,6 +20,7 @@ from typing import Callable, Optional
 
 import numpy as np
 from constants import PhysicsConstantsCarAerodynamics
+import zarr
 from external_aero_geometry_data_processors import (
     default_geometry_processing_for_external_aerodynamics,
 )
@@ -34,7 +35,6 @@ from external_aero_utils import to_float32
 from external_aero_volume_data_processors import (
     default_volume_processing_for_external_aerodynamics,
 )
-from numcodecs import Blosc
 from schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
     ExternalAerodynamicsNumpyDataInMemory,
@@ -321,14 +321,17 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
         compression_method: str = "zstd",
         compression_level: int = 5,
         chunk_size_mb: float = 1.0,  # Default 1MB chunk size
+        chunks_per_shard: int = 1000,  # Number of chunks per shard (~1GB shards with 1MB chunks)
     ):
         super().__init__(cfg)
-        self.compressor = Blosc(
+        # Zarr 3 codec configuration
+        self.compressor = zarr.codecs.BloscCodec(
             cname=compression_method,
             clevel=compression_level,
-            shuffle=Blosc.SHUFFLE,
+            shuffle=zarr.codecs.BloscShuffle.shuffle,
         )
         self.chunk_size_mb = chunk_size_mb
+        self.chunks_per_shard = chunks_per_shard
 
         # Warn if chunk size might be problematic
         if chunk_size_mb < 1.0:
@@ -345,7 +348,11 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
             )
 
     def _prepare_array(self, array: np.ndarray) -> PreparedZarrArrayInfo:
-        """Prepare array for Zarr storage with compression and chunking."""
+        """Prepare array for Zarr storage with compression, chunking, and sharding.
+
+        Sharding is always enabled to reduce the number of files created on disk.
+        Each shard contains approximately chunks_per_shard chunks (~1GB per shard by default).
+        """
         if array is None:
             return None
 
@@ -357,17 +364,38 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
         if len(shape) == 1:
             chunk_size = min(shape[0], target_chunk_size // item_size)
             chunks = (chunk_size,)
+            # For 1D arrays: shard contains chunks_per_shard chunks
+            # Ensure shard size is a multiple of chunk size
+            ideal_shard_size = chunks[0] * self.chunks_per_shard
+            if shape[0] <= ideal_shard_size:
+                # Array fits in one shard - round up to nearest chunk multiple
+                num_chunks = (shape[0] + chunks[0] - 1) // chunks[0]
+                shard_size = num_chunks * chunks[0]
+            else:
+                shard_size = ideal_shard_size
+            shards = (shard_size,)
         else:
             # For 2D arrays, try to keep rows together
             chunk_rows = min(
                 shape[0], max(1, target_chunk_size // (item_size * shape[1]))
             )
             chunks = (chunk_rows, shape[1])
+            # For 2D arrays: extend along first dimension to group multiple chunk-rows
+            # Ensure shard rows is a multiple of chunk rows
+            ideal_shard_rows = chunks[0] * self.chunks_per_shard
+            if shape[0] <= ideal_shard_rows:
+                # Array fits in one shard - round up to nearest chunk multiple
+                num_chunks = (shape[0] + chunks[0] - 1) // chunks[0]
+                shard_rows = num_chunks * chunks[0]
+            else:
+                shard_rows = ideal_shard_rows
+            shards = (shard_rows, shape[1])
 
         return PreparedZarrArrayInfo(
             data=np.float32(array),
             chunks=chunks,
             compressor=self.compressor,
+            shards=shards,
         )
 
     def _prepare_array_no_compression(self, array: np.ndarray) -> PreparedZarrArrayInfo:

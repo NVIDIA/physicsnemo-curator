@@ -28,8 +28,8 @@ from crash_data_processors import (
     load_d3plot_data,
     parse_k_file,
 )
-from numcodecs import Blosc
 from schemas import CrashExtractedDataInMemory, CrashMetadata
+from zarr.storage import LocalStore
 
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
@@ -307,8 +307,10 @@ class CrashZarrDataSource(DataSource):
         self.chunk_size_mb = chunk_size_mb
 
         # Set up compressor
-        self.compressor = Blosc(
-            cname=compression_method, clevel=compression_level, shuffle=Blosc.SHUFFLE
+        self.compressor = zarr.codecs.BloscCodec(
+            cname=compression_method,
+            clevel=compression_level,
+            shuffle=zarr.codecs.BloscShuffle.shuffle,
         )
 
         # Warn if chunk size might be problematic
@@ -423,7 +425,7 @@ class CrashZarrDataSource(DataSource):
         )
 
         # Create Zarr store
-        zarr_store = zarr.DirectoryStore(output_path)
+        zarr_store = LocalStore(output_path)
         root = zarr.group(store=zarr_store)
 
         # Write metadata as root attributes
@@ -447,30 +449,27 @@ class CrashZarrDataSource(DataSource):
         edges_chunks = self._calculate_chunks(edges_array)
 
         # Write temporal position data
-        root.create_dataset(
-            "mesh_pos",
+        root.create_array(
+            name="mesh_pos",
             data=mesh_pos_data,
             chunks=mesh_pos_chunks,
-            compressor=self.compressor,
-            dtype=np.float32,
+            compressors=(self.compressor,),
         )
 
         # Write node thickness (static per node)
-        root.create_dataset(
-            "thickness",
+        root.create_array(
+            name="thickness",
             data=thickness_data,
             chunks=thickness_chunks,
-            compressor=self.compressor,
-            dtype=np.float32,
+            compressors=(self.compressor,),
         )
 
         # Write edges connectivity
-        root.create_dataset(
-            "edges",
+        root.create_array(
+            name="edges",
             data=edges_array,
             chunks=edges_chunks,
-            compressor=self.compressor,
-            dtype=np.int64,
+            compressors=(self.compressor,),
         )
 
         # Add some statistics as metadata

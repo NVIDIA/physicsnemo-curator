@@ -31,6 +31,7 @@ from schemas import (
     ExternalAerodynamicsNumpyDataInMemory,
     ExternalAerodynamicsZarrDataInMemory,
 )
+from zarr.storage import LocalStore
 
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
@@ -238,20 +239,22 @@ class ExternalAerodynamicsDataSource(DataSource):
             output_path: Path where the .zarr directory should be written
         """
         # Create store
-        zarr_store = zarr.DirectoryStore(output_path)
-        root = zarr.group(store=zarr_store)
+        zarr_store = LocalStore(output_path)
+        root = zarr.open_group(store=zarr_store, mode="w")
 
-        # Write metadata as root attributes
+        # Write metadata as attributes
+        data.metadata.zarr_format = zarr.__version__
         root.attrs.update(asdict(data.metadata))
 
         # Write required arrays
         for field in ["stl_coordinates", "stl_centers", "stl_faces", "stl_areas"]:
             array_info = getattr(data, field)
-            root.create_dataset(
-                field,
+            root.create_array(
+                name=field,
                 data=array_info.data,
                 chunks=array_info.chunks,
-                compressor=array_info.compressor,
+                shards=array_info.shards,
+                compressors=array_info.compressor if array_info.compressor else None,
             )
 
         # Write optional arrays if present
@@ -267,11 +270,14 @@ class ExternalAerodynamicsDataSource(DataSource):
         ]:
             array_info = getattr(data, field)
             if array_info is not None:
-                root.create_dataset(
-                    field,
+                root.create_array(
+                    name=field,
                     data=array_info.data,
                     chunks=array_info.chunks,
-                    compressor=array_info.compressor,
+                    shards=array_info.shards,
+                    compressors=(
+                        array_info.compressor if array_info.compressor else None
+                    ),
                 )
             else:
                 self.logger.warning(f"{field} is absent in the dataset")

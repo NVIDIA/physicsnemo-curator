@@ -17,10 +17,10 @@
 from dataclasses import dataclass
 from typing import Optional
 
-import numcodecs
 import numpy as np
 import pyvista as pv
 import vtk
+import zarr
 from constants import ModelType
 
 
@@ -55,6 +55,9 @@ class ExternalAerodynamicsMetadata:
     # Processing parameters
     decimation_reduction: Optional[float] = None
     decimation_algo: Optional[str] = None
+
+    # Zarr format version
+    zarr_format: Optional[int] = None
 
 
 @dataclass
@@ -100,11 +103,13 @@ class PreparedZarrArrayInfo:
 
     Version history:
     - 1.0: Initial version with compression and chunking info
+    - 2.0: Updated to use Zarr 3 codecs
     """
 
     data: np.ndarray
     chunks: tuple[int, ...]
-    compressor: numcodecs.abc.Codec
+    compressor: zarr.abc.codec
+    shards: Optional[tuple[int, ...]] = None
 
 
 @dataclass(frozen=True)

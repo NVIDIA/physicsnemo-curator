@@ -24,6 +24,7 @@ import numpy as np
 import pytest
 import pyvista as pv
 import vtk
+import zarr
 from constants import ModelType
 from data_transformations import (
     ExternalAerodynamicsNumpyTransformation,
@@ -245,7 +246,7 @@ class TestExternalAerodynamicsZarrTransformation:
         config = ProcessingConfig(num_processes=1)
         transform = ExternalAerodynamicsZarrTransformation(config)
         assert transform.config == config
-        assert transform.compressor.cname == "zstd"
+        assert transform.compressor.cname == zarr.codecs.BloscCname.zstd
         assert transform.compressor.clevel == 5
 
     def test_transform(self, sample_data_processed):
@@ -405,6 +406,188 @@ class TestExternalAerodynamicsZarrTransformation:
         # 1 chunk; (2.4 MB array size / 10.0 MB chunk size)
         large_data_num_chunks = np.ceil(100000 / large_data_elements_per_chunk)
         assert large_data_num_chunks == 1
+
+    def test_sharding_always_enabled(self, sample_data_processed):
+        """Test that sharding is always enabled for all arrays."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=1000,
+        )
+
+        result = transform.transform(sample_data_processed)
+
+        # All arrays should have sharding enabled
+        assert result.stl_coordinates.shards is not None
+        assert result.stl_centers.shards is not None
+        assert result.stl_faces.shards is not None
+        assert result.stl_areas.shards is not None
+        assert result.surface_mesh_centers.shards is not None
+        assert result.surface_normals.shards is not None
+        assert result.surface_areas.shards is not None
+        assert result.surface_fields.shards is not None
+        assert result.volume_mesh_centers.shards is not None
+        assert result.volume_fields.shards is not None
+
+    def test_sharding_shape_for_large_arrays(self):
+        """Test that sharding shape is calculated correctly for large arrays."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=1000,
+        )
+
+        # Create a large array > 1GB
+        # For float32, 1 GB = 1024^3 / 4 = 268,435,456 elements
+        # Create a 2D array: 300M elements / 3 columns = 100M rows
+        # This is 300M * 4 bytes = 1.2 GB
+        large_array = np.random.rand(100_000_000, 3).astype(np.float64)
+
+        metadata = ExternalAerodynamicsMetadata(
+            filename="test_large",
+            dataset_type=ModelType.COMBINED,
+            stream_velocity=30.0,
+            air_density=1.205,
+        )
+
+        large_data = ExternalAerodynamicsExtractedDataInMemory(
+            metadata=metadata,
+            stl_coordinates=np.array([[0, 0, 0], [1, 1, 1]], dtype=np.float64),
+            stl_centers=np.array([[0.5, 0.5, 0.5]], dtype=np.float64),
+            stl_faces=np.array([[0, 1, 2]], dtype=np.int32),
+            stl_areas=np.array([1.0], dtype=np.float64),
+            volume_fields=large_array,  # Large array
+        )
+
+        result = transform.transform(large_data)
+
+        # All arrays should have sharding enabled
+        assert result.stl_coordinates.shards is not None
+        assert result.stl_centers.shards is not None
+
+        # Check large array shard shape
+        assert result.volume_fields.shards is not None
+        assert len(result.volume_fields.shards) == 2  # 2D array
+        assert (
+            result.volume_fields.shards[1] == 3
+        )  # Second dimension should match array
+        # First dimension should be chunk_rows * chunks_per_shard (or array size if smaller)
+        expected_shard_rows = min(100_000_000, result.volume_fields.chunks[0] * 1000)
+        assert result.volume_fields.shards[0] == expected_shard_rows
+
+    def test_sharding_calculation_1d_array(self):
+        """Test correct shard shape calculation for 1D arrays."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=100,  # Use smaller value for easier testing
+        )
+
+        # Create 1D array (400MB as float64, 200MB as float32)
+        # 50M elements * 8 bytes = 400 MB
+        large_1d_array = np.random.rand(50_000_000).astype(np.float64)
+
+        result = transform._prepare_array(large_1d_array)
+
+        # Check that sharding is enabled
+        assert result.shards is not None
+        assert len(result.shards) == 1
+
+        # For 1D array: shard_size = chunks[0] * chunks_per_shard
+        # With 1MB chunks and float32 (4 bytes): chunk_size = 1MB / 4 = 262144 elements
+        # So shards should be ~26,214,400 elements (100 chunks)
+        expected_shard_size = result.chunks[0] * 100
+        assert result.shards[0] == expected_shard_size
+
+    def test_sharding_calculation_2d_array(self):
+        """Test correct shard shape calculation for 2D arrays."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=50,  # Use smaller value for easier testing
+        )
+
+        # Create 2D array (2.4GB as float64, 1.2GB as float32)
+        # 100M rows * 3 cols * 8 bytes = 2.4 GB
+        large_2d_array = np.random.rand(100_000_000, 3).astype(np.float64)
+
+        result = transform._prepare_array(large_2d_array)
+
+        # Check that sharding is enabled
+        assert result.shards is not None
+        assert len(result.shards) == 2
+
+        # For 2D arrays: shard_rows = chunk_rows * chunks_per_shard
+        # Second dimension should match array shape
+        expected_shard_rows = result.chunks[0] * 50
+        assert result.shards[0] == expected_shard_rows
+        assert result.shards[1] == 3  # Matches second dimension
+
+    def test_sharding_initialization_defaults(self):
+        """Test that default sharding parameters are set correctly."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(config)
+
+        # Check defaults match Zarr recommendations
+        assert transform.chunks_per_shard == 1000  # Zarr recommended (~1GB shards)
+        assert transform.chunk_size_mb == 1.0
+
+    def test_sharding_divisibility_requirement(self):
+        """Test that shard shapes are always divisible by chunk shapes."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=1000,
+        )
+
+        # Test with various array sizes that might not divide evenly
+        test_cases = [
+            (1234, 3),  # Odd number of rows
+            (999, 5),  # Another odd number
+            (1000000, 4),  # Large array
+            (50, 3),  # Very small array
+            (262144 + 100, 3),  # Just over one chunk
+        ]
+
+        for rows, cols in test_cases:
+            array = np.random.rand(rows, cols).astype(np.float64)
+            result = transform._prepare_array(array)
+
+            # Check that shards are divisible by chunks in each dimension
+            assert result.shards[0] % result.chunks[0] == 0, (
+                f"Shard rows {result.shards[0]} not divisible by chunk rows {result.chunks[0]} "
+                f"for array shape ({rows}, {cols})"
+            )
+            assert (
+                result.shards[1] == result.chunks[1]
+            ), f"Shard cols {result.shards[1]} should equal chunk cols {result.chunks[1]}"
+
+    def test_sharding_small_array_one_shard(self):
+        """Test that small arrays fit into a single shard with proper rounding."""
+        config = ProcessingConfig(num_processes=1)
+        transform = ExternalAerodynamicsZarrTransformation(
+            config,
+            chunk_size_mb=1.0,
+            chunks_per_shard=1000,
+        )
+
+        # Create small array that would need multiple chunks but < chunks_per_shard
+        # With 1MB chunks and float64: ~262144 elements per chunk for 1D
+        # Create array with 500,000 elements (needs ~2 chunks)
+        small_array = np.random.rand(500_000).astype(np.float64)
+        result = transform._prepare_array(small_array)
+
+        # Should have 1 shard that contains all chunks
+        num_chunks_needed = (500_000 + result.chunks[0] - 1) // result.chunks[0]
+        expected_shard_size = num_chunks_needed * result.chunks[0]
+        assert result.shards[0] == expected_shard_size
+        assert result.shards[0] >= 500_000  # Shard is big enough for array
+        assert result.shards[0] % result.chunks[0] == 0  # Properly divisible
 
 
 class TestExternalAerodynamicsSTLTransformation:
