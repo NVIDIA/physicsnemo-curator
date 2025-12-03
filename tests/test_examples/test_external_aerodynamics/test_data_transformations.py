@@ -138,8 +138,7 @@ def sample_data_raw(temp_dir):
         metadata=ExternalAerodynamicsMetadata(
             filename="test_sample",
             dataset_type=ModelType.COMBINED,
-            stream_velocity=30.0,
-            air_density=1.205,
+            physics_constants={"stream_velocity": 30.0, "air_density": 1.205},
         ),
         stl_polydata=stl_polydata,
         surface_polydata=surface_polydata,
@@ -165,8 +164,7 @@ def sample_data_processed():
         metadata=ExternalAerodynamicsMetadata(
             filename="run_1234",
             dataset_type=ModelType.COMBINED,
-            stream_velocity=30.0,
-            air_density=1.205,
+            physics_constants={"stream_velocity": 30.0, "air_density": 1.205},
             x_bound=(0.0, 1.0),
             y_bound=(0.0, 1.0),
             z_bound=(0.0, 1.0),
@@ -721,13 +719,9 @@ class TestExternalAerodynamicsSurfaceTransformation:
         # Check that the fields were non-dimensionalized
         assert result.surface_fields.shape == sample_data_raw.surface_fields.shape
         # Verify non-dimensionalization: result = original / (rho * V^2)
-        dynamic_pressure_factor = 1.00 * 10.00**2  # air_density  # stream_velocity
+        dynamic_pressure_factor = 1.00 * 10.00**2  # air_density * stream_velocity^2
         expected = np.array([[1.0, 0.5, 0.2, 101325.0]]) / dynamic_pressure_factor
         np.testing.assert_allclose(result.surface_fields, expected, rtol=1e-5)
-
-        # Verify that the metadata was updated
-        assert result.metadata.air_density == 1.00
-        assert result.metadata.stream_velocity == 10.00
 
     def test_transform_with_default_processor_and_filter_invalid_surface_cells(
         self, sample_data_raw
@@ -820,8 +814,12 @@ class TestExternalAerodynamicsSurfaceTransformation:
             surface_processors=(
                 partial(
                     non_dimensionalize_surface_fields,
-                    air_density=sample_data_raw.metadata.air_density,
-                    stream_velocity=sample_data_raw.metadata.stream_velocity,
+                    air_density=sample_data_raw.metadata.physics_constants[
+                        "air_density"
+                    ],
+                    stream_velocity=sample_data_raw.metadata.physics_constants[
+                        "stream_velocity"
+                    ],
                 ),
             ),
         )
@@ -846,8 +844,6 @@ class TestExternalAerodynamicsSurfaceTransformation:
         metadata = ExternalAerodynamicsMetadata(
             filename="test_extreme",
             dataset_type=ModelType.SURFACE,
-            stream_velocity=30.0,
-            air_density=1.205,
         )
 
         data = ExternalAerodynamicsExtractedDataInMemory(metadata=metadata)
@@ -1009,14 +1005,10 @@ class TestExternalAerodynamicsVolumeTransformation:
             / 10.00  # stream_velocity
         )
         expected_pressure = np.array([[101325], [101300], [101320], [101310]]) / (
-            1.00 * 10.00**2  # air_density  # stream_velocity
+            1.00 * 10.00**2  # air_density * stream_velocity^2
         )
         expected = np.concatenate([expected_velocity, expected_pressure], axis=-1)
         np.testing.assert_allclose(result.volume_fields, expected, rtol=1e-5)
-
-        # Verify that the metadata was updated
-        assert result.metadata.air_density == 1.00
-        assert result.metadata.stream_velocity == 10.00
 
     def test_transform_with_default_processor_and_shuffle_data(self, sample_data_raw):
         """Test volume transformation with shuffle on top of the default processor."""
@@ -1147,8 +1139,12 @@ class TestExternalAerodynamicsVolumeTransformation:
             volume_processors=(
                 partial(
                     non_dimensionalize_volume_fields,
-                    air_density=sample_data_raw.metadata.air_density,
-                    stream_velocity=sample_data_raw.metadata.stream_velocity,
+                    air_density=sample_data_raw.metadata.physics_constants[
+                        "air_density"
+                    ],
+                    stream_velocity=sample_data_raw.metadata.physics_constants[
+                        "stream_velocity"
+                    ],
                 ),
             ),
         )
@@ -1179,8 +1175,6 @@ class TestExternalAerodynamicsVolumeTransformation:
         metadata = ExternalAerodynamicsMetadata(
             filename="test_outliers_velocity",
             dataset_type=ModelType.VOLUME,
-            stream_velocity=30.0,
-            air_density=1.205,
         )
 
         data = ExternalAerodynamicsExtractedDataInMemory(metadata=metadata)
@@ -1213,8 +1207,6 @@ class TestExternalAerodynamicsVolumeTransformation:
         metadata = ExternalAerodynamicsMetadata(
             filename="test_extreme",
             dataset_type=ModelType.VOLUME,
-            stream_velocity=30.0,
-            air_density=1.205,
         )
 
         data = ExternalAerodynamicsExtractedDataInMemory(metadata=metadata)

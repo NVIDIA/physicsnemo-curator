@@ -202,8 +202,10 @@ class ExternalAerodynamicsDataSource(DataSource):
         }
 
         # Add physics constants if present (pipeline-specific keys)
-        if data.metadata.physics_constants:
-            save_dict.update(data.metadata.physics_constants)
+        # Use getattr since ExternalAerodynamicsNumpyMetadata doesn't have physics_constants
+        physics_constants = getattr(data.metadata, "physics_constants", None)
+        if physics_constants:
+            save_dict.update(physics_constants)
 
         # Add optional arrays if present (same fields as Zarr I/O)
         for field in [

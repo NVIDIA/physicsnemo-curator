@@ -178,8 +178,6 @@ class TestExternalAerodynamicsDataSource:
         test_data = ExternalAerodynamicsNumpyDataInMemory(
             metadata=ExternalAerodynamicsNumpyMetadata(
                 filename="test_case",
-                stream_velocity=[30.0, 0.0, 0.0],
-                air_density=1.225,
             ),
             stl_coordinates=np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]),
             stl_centers=np.array([[0.5, 0.5, 0.5]]),
@@ -225,10 +223,9 @@ class TestExternalAerodynamicsDataSource:
                 compressor=compressor_for_test,
             ),
             metadata=ExternalAerodynamicsMetadata(
-                stream_velocity=[30.0, 0.0, 0.0],
-                air_density=1.225,
                 filename="test_case",
                 dataset_type=ModelType.COMBINED,
+                physics_constants={"stream_velocity": 30.0, "air_density": 1.225},
                 x_bound=(0.0, 1.0),
                 y_bound=(0.0, 1.0),
                 z_bound=(0.0, 1.0),
@@ -433,8 +430,6 @@ class TestExternalAerodynamicsDataSource:
         test_data = ExternalAerodynamicsNumpyDataInMemory(
             metadata=ExternalAerodynamicsNumpyMetadata(
                 filename="test_case",
-                stream_velocity=[30.0, 0.0, 0.0],
-                air_density=1.225,
             ),
             stl_coordinates=np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]),
             stl_centers=np.array([[0.5, 0.5, 0.5]]),
@@ -488,10 +483,9 @@ class TestExternalAerodynamicsDataSource:
                 compressor=compressor_for_test,
             ),
             metadata=ExternalAerodynamicsMetadata(
-                stream_velocity=[30.0, 0.0, 0.0],
-                air_density=1.225,
                 filename="test_case",
                 dataset_type=ModelType.COMBINED,
+                physics_constants={"stream_velocity": 30.0, "air_density": 1.225},
             ),
             # Global parameters (no compression for small 1xN arrays)
             global_params_values=PreparedZarrArrayInfo(
