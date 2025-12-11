@@ -37,7 +37,7 @@ class ExternalAerodynamicsMetadata:
     filename: str
     dataset_type: ModelType
 
-    # Physics constants - populated based on dataset kind from config
+    # Physics constants - populated based on dataset kind from config.
     # Keys/values vary by pipeline, e.g.:
     #   CarAerodynamics: {"air_density": 1.205, "stream_velocity": 30.0}
     #   HLPW: {"pref": 176.352, "uref": 2679.505, "tref": 518.67}
@@ -92,7 +92,12 @@ class ExternalAerodynamicsExtractedDataInMemory:
     volume_mesh_centers: Optional[np.ndarray] = None
     volume_fields: Optional[np.ndarray] = None
 
-    # Global parameters (global simulation parameters used for training)
+    # Global parameters - simulation-wide global quantities used as conditioning inputs
+    # for ML models. These capture operating global conditions that affect the entire flow field.
+
+    # global_params_values: Actual values of global parameters for this simulation
+    #  Example: [stream_velocity, air_density, ...].
+    # global_params_reference: Reference/normalization values for `global_params_values`,
     global_params_values: Optional[np.ndarray] = None
     global_params_reference: Optional[np.ndarray] = None
 
@@ -130,10 +135,6 @@ class ExternalAerodynamicsZarrDataInMemory:
     stl_faces: PreparedZarrArrayInfo
     stl_areas: PreparedZarrArrayInfo
 
-    # Global parameters
-    global_params_values: Optional[PreparedZarrArrayInfo] = None
-    global_params_reference: Optional[PreparedZarrArrayInfo] = None
-
     # Surface data
     surface_mesh_centers: Optional[PreparedZarrArrayInfo] = None
     surface_normals: Optional[PreparedZarrArrayInfo] = None
@@ -143,6 +144,12 @@ class ExternalAerodynamicsZarrDataInMemory:
     # Volume data
     volume_mesh_centers: Optional[PreparedZarrArrayInfo] = None
     volume_fields: Optional[PreparedZarrArrayInfo] = None
+
+    # Global parameters
+    # Refer to the description provided in dataclass
+    # ExternalAerodynamicsExtractedDataInMemory above
+    global_params_values: Optional[PreparedZarrArrayInfo] = None
+    global_params_reference: Optional[PreparedZarrArrayInfo] = None
 
 
 @dataclass(frozen=True)
