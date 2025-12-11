@@ -98,7 +98,7 @@ etl:
           _partial_: true
         - _target_: external_aero_volume_data_processors.shuffle_volume_data
           _partial_: true
-    
+
     global_params_preprocessing:
       _target_: data_transformations.ExternalAerodynamicsGlobalParamsTransformation
       _convert_: all

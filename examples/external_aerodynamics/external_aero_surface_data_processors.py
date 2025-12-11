@@ -66,7 +66,7 @@ def default_surface_processing_for_external_aerodynamics_hlpw(
     """
     Default surface processing for HLPW dataset.
 
-    Uses the N_BF (Normal Boundary Faces) field for computing normals and areas,
+    Uses the N_BF flag field for computing normals and areas,
     which is faster than computing them separately with PyVista for HLPW dataset.
 
     Important: Converts point data to cell data before processing, as HLPW
@@ -105,7 +105,8 @@ def default_surface_processing_for_external_aerodynamics_hlpw(
             f"HLPW processing requires N_BF field for accurate normal and area computation."
         )
 
-    # Use N_BF (area-weighted normal vectors) - HLPW-specific
+    # Use N_BF - HLPW-specific
+    # data.surface_polydata.cell_data['N_BF'] contains the area vector of each cell
     surface_normals_area = np.array(
         data.surface_polydata.cell_data[nbf_field_name]
     ).astype(np.float32)
@@ -215,8 +216,8 @@ def normalize_surface_normals(
 
 def non_dimensionalize_surface_fields(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    air_density: PhysicsConstantsCarAerodynamics.AIR_DENSITY,
-    stream_velocity: PhysicsConstantsCarAerodynamics.STREAM_VELOCITY,
+    air_density: float = PhysicsConstantsCarAerodynamics.AIR_DENSITY,
+    stream_velocity: float = PhysicsConstantsCarAerodynamics.STREAM_VELOCITY,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """
     Non-dimensionalize surface fields using PhysicsConstantsCarAerodynamics.
@@ -240,8 +241,8 @@ def non_dimensionalize_surface_fields(
 
 def non_dimensionalize_surface_fields_hlpw(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    pref: PhysicsConstantsHLPW.PREF,
-    tref: PhysicsConstantsHLPW.TREF,
+    pref: float = PhysicsConstantsHLPW.PREF,
+    tref: float = PhysicsConstantsHLPW.TREF,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """
     Non-dimensionalize surface fields using PhysicsConstantsHLPW.

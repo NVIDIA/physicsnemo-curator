@@ -19,8 +19,8 @@ import warnings
 from typing import Callable, Optional
 
 import numpy as np
-from constants import PhysicsConstantsCarAerodynamics
 import zarr
+from constants import PhysicsConstantsCarAerodynamics
 from external_aero_geometry_data_processors import (
     default_geometry_processing_for_external_aerodynamics,
 )
@@ -183,6 +183,15 @@ class ExternalAerodynamicsSurfaceTransformationHLPW(DataTransformation):
         surface_processors: Optional[tuple[Callable, ...]] = None,
         nbf_field_name: str = "N_BF",
     ):
+        """Initialize the HLPW surface transformation.
+
+        Args:
+            cfg: Processing configuration object.
+            surface_variables: Mapping of variable names for surface data.
+            surface_processors: Optional tuple of callable processors to apply.
+            nbf_field_name: Name of the field containing the area vector of cells
+                in the surface mesh. Defaults to "N_BF".
+        """
         super().__init__(cfg)
         self.logger = logging.getLogger(__name__)
 
@@ -207,10 +216,11 @@ class ExternalAerodynamicsSurfaceTransformationHLPW(DataTransformation):
     def transform(
         self, data: ExternalAerodynamicsExtractedDataInMemory
     ) -> ExternalAerodynamicsExtractedDataInMemory:
-        """Transform surface data for HLPW using N_BF field."""
+        """Transform surface data for HLPW using N_BF field.
+        The meaning of `N_BF` field is described above.
+        """
 
         if data.surface_polydata is not None:
-            # Use HLPW-specific default processing (with N_BF field)
             data = default_surface_processing_for_external_aerodynamics_hlpw(
                 data, self.surface_variables, self.nbf_field_name
             )

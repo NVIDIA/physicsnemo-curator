@@ -92,7 +92,7 @@ class ExternalAerodynamicsExtractedDataInMemory:
     volume_mesh_centers: Optional[np.ndarray] = None
     volume_fields: Optional[np.ndarray] = None
 
-    # Global parameters (physical conditions for training)
+    # Global parameters (global simulation parameters used for training)
     global_params_values: Optional[np.ndarray] = None
     global_params_reference: Optional[np.ndarray] = None
 

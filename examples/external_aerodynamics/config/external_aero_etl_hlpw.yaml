@@ -24,10 +24,10 @@ defaults:
 etl:
   common:
     kind: hlpw
-    model_type: combined  # produce data for which model? surface, volume, combined
-  
+    model_type: surface  # produce data for which model? surface, volume, combined
+
   processing:
-    num_processes: 1
+    num_processes: 12
 
   transformations:
     surface_preprocessing:
@@ -35,16 +35,16 @@ etl:
       _target_: data_transformations.ExternalAerodynamicsSurfaceTransformationHLPW
       _convert_: all
       nbf_field_name: "N_BF"
-      
+
       surface_processors:
         - _target_: external_aero_surface_data_processors.decimate_mesh
           _partial_: true
           algo: decimate_pro
           reduction: 0.0
           preserve_topology: false
-        
+
         # Note: normalize_surface_normals not needed - already done via N_BF normalization
-        
+
         # HLPW-specific non-dimensionalization
         - _target_: external_aero_surface_data_processors.non_dimensionalize_surface_fields_hlpw
           _partial_: true
@@ -66,7 +66,7 @@ etl:
           _partial_: true
         - _target_: external_aero_volume_data_processors.shuffle_volume_data
           _partial_: true
-    
+
     global_params_preprocessing:
       _target_: data_transformations.ExternalAerodynamicsGlobalParamsTransformation
       _convert_: all
