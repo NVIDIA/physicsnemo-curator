@@ -448,8 +448,7 @@ class TestExternalAerodynamicsZarrTransformation:
         metadata = ExternalAerodynamicsMetadata(
             filename="test_large",
             dataset_type=ModelType.COMBINED,
-            stream_velocity=30.0,
-            air_density=1.205,
+            physics_constants={"stream_velocity": 30.0, "air_density": 1.205},
         )
 
         large_data = ExternalAerodynamicsExtractedDataInMemory(
