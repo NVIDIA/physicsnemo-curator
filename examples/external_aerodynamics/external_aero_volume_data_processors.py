@@ -18,7 +18,10 @@ import logging
 from typing import Optional
 
 import numpy as np
-from constants import PhysicsConstants
+from constants import (
+    PhysicsConstantsCarAerodynamics,
+    PhysicsConstantsHLPW,
+)
 from external_aero_utils import get_volume_data, to_float32
 from external_aero_validation_utils import (
     check_field_statistics,
@@ -104,7 +107,7 @@ def filter_volume_invalid_cells(
 
     logger.info(
         f"Filtered {n_filtered} invalid volume cells "
-        f"({n_filtered/n_total*100:.2f}% of {n_total} total cells):"
+        f"({n_filtered / n_total * 100:.2f}% of {n_total} total cells):"
     )
     logger.info(f"  - {n_coords_filtered} cells with NaN in coordinates")
     logger.info(f"  - {n_fields_filtered} cells with NaN/inf in fields")
@@ -119,8 +122,8 @@ def filter_volume_invalid_cells(
 
 def non_dimensionalize_volume_fields(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    air_density: float = PhysicsConstants.AIR_DENSITY,
-    stream_velocity: float = PhysicsConstants.STREAM_VELOCITY,
+    air_density: PhysicsConstantsCarAerodynamics.AIR_DENSITY,
+    stream_velocity: PhysicsConstantsCarAerodynamics.STREAM_VELOCITY,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize volume fields."""
 
@@ -143,9 +146,25 @@ def non_dimensionalize_volume_fields(
         stream_velocity * length_scale
     )
 
-    # Update metadata
-    data.metadata.air_density = air_density
-    data.metadata.stream_velocity = stream_velocity
+    return data
+
+
+def non_dimensionalize_volume_fields_hlpw(
+    data: ExternalAerodynamicsExtractedDataInMemory,
+    pref: PhysicsConstantsHLPW.PREF,
+    tref: PhysicsConstantsHLPW.TREF,
+    uref: PhysicsConstantsHLPW.UREF,
+) -> ExternalAerodynamicsExtractedDataInMemory:
+    """Non-dimensionalize volume fields."""
+
+    # Pressure
+    data.volume_fields[:, :1] = data.volume_fields[:, :1] / pref
+
+    # Temperature
+    data.volume_fields[:, 1:2] = data.volume_fields[:, 1:2] / tref
+
+    # Velocity
+    data.volume_fields[:, 2:] = data.volume_fields[:, 2:] / uref
 
     return data
 

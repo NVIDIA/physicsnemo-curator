@@ -95,6 +95,8 @@ For more information, see the [Zarr project website](https://zarr.dev/).
     ├── stl_centers              # Cell centers
     ├── stl_coordinates          # Vertex coordinates
     ├── stl_faces                # Face connectivity
+    ├── global_params_values     # Simulation-specific global parameters (optional)
+    ├── global_params_reference  # Reference values for global parameters (optional)
     ├── surface_areas            # Cell areas (surface, optional)
     ├── surface_fields           # Field data (surface, optional)
     ├── surface_mesh_centers     # Cell centers (surface, optional)

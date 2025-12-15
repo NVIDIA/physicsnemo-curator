@@ -19,7 +19,10 @@ import warnings
 from typing import Optional
 
 import numpy as np
-from constants import PhysicsConstants
+from constants import (
+    PhysicsConstantsCarAerodynamics,
+    PhysicsConstantsHLPW,
+)
 from external_aero_utils import to_float32
 from external_aero_validation_utils import (
     check_field_statistics,
@@ -51,6 +54,70 @@ def default_surface_processing_for_external_aerodynamics(
         length=False, area=True, volume=False
     )
     data.surface_areas = np.array(data.surface_areas.cell_data["Area"])
+
+    return data
+
+
+def default_surface_processing_for_external_aerodynamics_hlpw(
+    data: ExternalAerodynamicsExtractedDataInMemory,
+    surface_variables: list[str],
+    nbf_field_name: str = "N_BF",
+) -> ExternalAerodynamicsExtractedDataInMemory:
+    """
+    Default surface processing for HLPW dataset.
+
+    Uses the N_BF flag field for computing normals and areas,
+    which is faster than computing them separately with PyVista for HLPW dataset.
+
+    Important: Converts point data to cell data before processing, as HLPW
+    data may be stored at vertices rather than cell centers.
+
+    Args:
+        data: External aerodynamics data with surface polydata
+        surface_variables: List of variable names to extract from surface data
+        nbf_field_name: Name of the area-weighted normal field (default: "N_BF")
+
+    Returns:
+        Data with surface fields, mesh centers, normals, and areas extracted
+    """
+
+    # Convert point data to cell data (important for HLPW!)
+    # Data might be stored at vertices, need to move to cell centers
+    data.surface_polydata = data.surface_polydata.point_data_to_cell_data()
+
+    # Extract surface fields (pressure, wall shear stress, etc.)
+    cell_data = (data.surface_polydata.cell_data[k] for k in surface_variables)
+    data.surface_fields = np.concatenate(
+        [d if d.ndim > 1 else d[:, np.newaxis] for d in cell_data], axis=-1
+    )
+
+    # Extract mesh centers
+    data.surface_mesh_centers = np.array(data.surface_polydata.cell_centers().points)
+
+    # Check if N_BF field exists - REQUIRED for HLPW
+    if nbf_field_name not in data.surface_polydata.cell_data:
+        logger.error(
+            f"Field '{nbf_field_name}' not found in surface cell_data. "
+            f"Available fields: {list(data.surface_polydata.cell_data.keys())}"
+        )
+        raise ValueError(
+            f"Required field '{nbf_field_name}' not found in surface data. "
+            f"HLPW processing requires N_BF field for accurate normal and area computation."
+        )
+
+    # Use N_BF - HLPW-specific
+    # data.surface_polydata.cell_data['N_BF'] contains the area vector of each cell
+    surface_normals_area = np.array(
+        data.surface_polydata.cell_data[nbf_field_name]
+    ).astype(np.float32)
+
+    # Compute areas as magnitude of N_BF
+    data.surface_areas = np.linalg.norm(surface_normals_area, axis=1).astype(np.float32)
+
+    # Compute unit normals by normalizing N_BF
+    data.surface_normals = surface_normals_area / np.reshape(
+        data.surface_areas, (-1, 1)
+    )
 
     return data
 
@@ -114,7 +181,7 @@ def filter_invalid_surface_cells(
 
     logger.info(
         f"Filtered {n_filtered} invalid surface cells "
-        f"({n_filtered/n_total*100:.2f}% of {n_total} total cells):"
+        f"({n_filtered / n_total * 100:.2f}% of {n_total} total cells):"
     )
     logger.info(f"  - {n_area_filtered} cells with area <= {tolerance}")
     logger.info(f"  - {n_normal_filtered} cells with normal L2-norm <= {tolerance}")
@@ -149,10 +216,13 @@ def normalize_surface_normals(
 
 def non_dimensionalize_surface_fields(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    air_density: float = PhysicsConstants.AIR_DENSITY,
-    stream_velocity: float = PhysicsConstants.STREAM_VELOCITY,
+    air_density: float = PhysicsConstantsCarAerodynamics.AIR_DENSITY,
+    stream_velocity: float = PhysicsConstantsCarAerodynamics.STREAM_VELOCITY,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
-    """Non-dimensionalize surface fields."""
+    """
+    Non-dimensionalize surface fields using PhysicsConstantsCarAerodynamics.
+    Note: Both DriveAerML and AhmedML use the same non-dimensional constants
+    """
 
     if data.surface_fields.shape[0] == 0:
         logger.error(f"Surface fields are empty: {data.surface_fields}")
@@ -166,9 +236,26 @@ def non_dimensionalize_surface_fields(
     # Non-dimensionalize surface fields
     data.surface_fields = data.surface_fields / (air_density * stream_velocity**2.0)
 
-    # Update metadata
-    data.metadata.air_density = air_density
-    data.metadata.stream_velocity = stream_velocity
+    return data
+
+
+def non_dimensionalize_surface_fields_hlpw(
+    data: ExternalAerodynamicsExtractedDataInMemory,
+    pref: float = PhysicsConstantsHLPW.PREF,
+    tref: float = PhysicsConstantsHLPW.TREF,
+) -> ExternalAerodynamicsExtractedDataInMemory:
+    """
+    Non-dimensionalize surface fields using PhysicsConstantsHLPW.
+    """
+
+    if data.surface_fields is None or len(data.surface_fields) == 0:
+        logger.error(f"Surface fields are empty: {data.surface_fields}")
+        return data
+    # Non-dimensionalize temperature by TREF
+    data.surface_fields[:, 0:1] /= tref
+
+    # Non-dimensionalize pressure and shear stress by PREF
+    data.surface_fields[:, 1:] /= pref
 
     return data
 

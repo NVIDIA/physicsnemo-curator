@@ -178,13 +178,13 @@ class TestExternalAerodynamicsDataSource:
         test_data = ExternalAerodynamicsNumpyDataInMemory(
             metadata=ExternalAerodynamicsNumpyMetadata(
                 filename="test_case",
-                stream_velocity=[30.0, 0.0, 0.0],
-                air_density=1.225,
             ),
             stl_coordinates=np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]),
             stl_centers=np.array([[0.5, 0.5, 0.5]]),
             stl_faces=np.array([[0, 1, 2]]),
             stl_areas=np.array([1.0]),
+            global_params_values=np.array([30.0, 1.225], dtype=np.float32),
+            global_params_reference=np.array([30.0, 1.225], dtype=np.float32),
         )
         source.write(test_data, "test_case")
         assert (temp_dir / "test_case.npz").exists()
@@ -224,10 +224,9 @@ class TestExternalAerodynamicsDataSource:
                 compressor=compressor_for_test,
             ),
             metadata=ExternalAerodynamicsMetadata(
-                stream_velocity=[30.0, 0.0, 0.0],
-                air_density=1.225,
                 filename="test_case",
                 dataset_type=ModelType.COMBINED,
+                physics_constants={"stream_velocity": 30.0, "air_density": 1.225},
                 x_bound=(0.0, 1.0),
                 y_bound=(0.0, 1.0),
                 z_bound=(0.0, 1.0),
@@ -235,6 +234,17 @@ class TestExternalAerodynamicsDataSource:
                 num_faces=3,
                 decimation_reduction=0.5,
                 decimation_algo="decimate_pro",
+            ),
+            # Global parameters (no compression for small 1xN arrays)
+            global_params_values=PreparedZarrArrayInfo(
+                data=np.array([30.0, 1.225], dtype=np.float32),
+                chunks=(2,),
+                compressor=None,
+            ),
+            global_params_reference=PreparedZarrArrayInfo(
+                data=np.array([30.0, 1.225], dtype=np.float32),
+                chunks=(2,),
+                compressor=None,
             ),
             # Surface data
             surface_mesh_centers=PreparedZarrArrayInfo(
@@ -421,13 +431,13 @@ class TestExternalAerodynamicsDataSource:
         test_data = ExternalAerodynamicsNumpyDataInMemory(
             metadata=ExternalAerodynamicsNumpyMetadata(
                 filename="test_case",
-                stream_velocity=[30.0, 0.0, 0.0],
-                air_density=1.225,
             ),
             stl_coordinates=np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]),
             stl_centers=np.array([[0.5, 0.5, 0.5]]),
             stl_faces=np.array([[0, 1, 2]]),
             stl_areas=np.array([1.0]),
+            global_params_values=np.array([30.0, 1.225], dtype=np.float32),
+            global_params_reference=np.array([30.0, 1.225], dtype=np.float32),
         )
 
         # Write should create final file, not temp file
@@ -478,10 +488,20 @@ class TestExternalAerodynamicsDataSource:
                 compressor=compressor_for_test,
             ),
             metadata=ExternalAerodynamicsMetadata(
-                stream_velocity=[30.0, 0.0, 0.0],
-                air_density=1.225,
                 filename="test_case",
                 dataset_type=ModelType.COMBINED,
+                physics_constants={"stream_velocity": 30.0, "air_density": 1.225},
+            ),
+            # Global parameters (no compression for small 1xN arrays)
+            global_params_values=PreparedZarrArrayInfo(
+                data=np.array([30.0, 1.225], dtype=np.float32),
+                chunks=(2,),
+                compressor=None,
+            ),
+            global_params_reference=PreparedZarrArrayInfo(
+                data=np.array([30.0, 1.225], dtype=np.float32),
+                chunks=(2,),
+                compressor=None,
             ),
         )
 

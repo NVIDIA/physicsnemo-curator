@@ -114,7 +114,7 @@ def filter_geometry_invalid_faces(
 
     logger.info(
         f"Filtered {n_filtered_faces} invalid geometry faces "
-        f"({n_filtered_faces/n_total_faces*100:.2f}% of {n_total_faces} total faces):"
+        f"({n_filtered_faces / n_total_faces * 100:.2f}% of {n_total_faces} total faces):"
     )
     logger.info(f"  - {n_filtered_faces} faces with area <= {tolerance}")
 

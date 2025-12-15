@@ -23,7 +23,7 @@ import numpy as np
 import pyvista as pv
 import vtk
 import zarr
-from constants import DatasetKind, ModelType
+from constants import DatasetKind, ModelType, get_physics_constants
 from paths import get_path_getter
 from schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
@@ -125,6 +125,7 @@ class ExternalAerodynamicsDataSource(DataSource):
         metadata = ExternalAerodynamicsMetadata(
             filename=dirname,
             dataset_type=self.model_type,  # surface, volume, combined
+            physics_constants=get_physics_constants(self.kind),
         )
 
         return ExternalAerodynamicsExtractedDataInMemory(
@@ -192,19 +193,25 @@ class ExternalAerodynamicsDataSource(DataSource):
         """
         # Convert to dict for numpy storage
         save_dict = {
-            # Arrays
+            # Required arrays
             "stl_coordinates": data.stl_coordinates,
             "stl_centers": data.stl_centers,
             "stl_faces": data.stl_faces,
             "stl_areas": data.stl_areas,
             # Basic metadata
             "filename": data.metadata.filename,
-            "stream_velocity": data.metadata.stream_velocity,
-            "air_density": data.metadata.air_density,
         }
 
-        # Add optional arrays if present
+        # Add physics constants if present (pipeline-specific keys)
+        # Use getattr since ExternalAerodynamicsNumpyMetadata doesn't have physics_constants
+        physics_constants = getattr(data.metadata, "physics_constants", None)
+        if physics_constants:
+            save_dict.update(physics_constants)
+
+        # Add optional arrays if present (same fields as Zarr I/O)
         for field in [
+            "global_params_values",
+            "global_params_reference",
             "surface_mesh_centers",
             "surface_normals",
             "surface_areas",
@@ -252,6 +259,8 @@ class ExternalAerodynamicsDataSource(DataSource):
 
         # Write optional arrays if present
         for field in [
+            "global_params_values",
+            "global_params_reference",
             "surface_mesh_centers",
             "surface_normals",
             "surface_areas",
@@ -270,6 +279,8 @@ class ExternalAerodynamicsDataSource(DataSource):
                         array_info.compressor if array_info.compressor else None
                     ),
                 )
+            else:
+                self.logger.warning(f"{field} is absent in the dataset")
 
     def should_skip(self, filename: str) -> bool:
         """Checks whether the file should be skipped.

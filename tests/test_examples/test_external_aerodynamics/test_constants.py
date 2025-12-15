@@ -17,13 +17,45 @@
 import dataclasses
 
 import pytest
-from constants import DatasetKind, ModelType, PhysicsConstants
+from constants import (
+    DatasetKind,
+    ModelType,
+    PhysicsConstantsCarAerodynamics,
+    PhysicsConstantsHLPW,
+    get_physics_constants,
+)
 
 
-def test_physics_constants_immutability():
-    """Test that PhysicsConstants cannot be modified."""
+def test_physics_constants_car_aerodynamics_immutability():
+    """Test that PhysicsConstantsCarAerodynamics cannot be modified."""
     with pytest.raises(dataclasses.FrozenInstanceError):
-        PhysicsConstants().AIR_DENSITY = 2.0
+        PhysicsConstantsCarAerodynamics().AIR_DENSITY = 2.0
+
+
+def test_physics_constants_hlpw_immutability():
+    """Test that PhysicsConstantsHLPW cannot be modified."""
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        PhysicsConstantsHLPW().PREF = 200.0
+
+
+def test_get_physics_constants_drivaerml():
+    """Test get_physics_constants returns correct dict for car aero datasets."""
+    result = get_physics_constants(DatasetKind.DRIVAERML)
+    assert "air_density" in result
+    assert "stream_velocity" in result
+    assert result["air_density"] == PhysicsConstantsCarAerodynamics.AIR_DENSITY
+    assert result["stream_velocity"] == PhysicsConstantsCarAerodynamics.STREAM_VELOCITY
+
+
+def test_get_physics_constants_hlpw():
+    """Test get_physics_constants returns correct dict for HLPW dataset."""
+    result = get_physics_constants(DatasetKind.HLPW)
+    assert "pref" in result
+    assert "uref" in result
+    assert "tref" in result
+    assert result["pref"] == PhysicsConstantsHLPW.PREF
+    assert result["uref"] == PhysicsConstantsHLPW.UREF
+    assert result["tref"] == PhysicsConstantsHLPW.TREF
 
 
 def test_model_type_validation():

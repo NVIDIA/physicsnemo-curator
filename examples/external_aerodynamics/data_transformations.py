@@ -20,12 +20,16 @@ from typing import Callable, Optional
 
 import numpy as np
 import zarr
-from constants import PhysicsConstants
+from constants import PhysicsConstantsCarAerodynamics
 from external_aero_geometry_data_processors import (
     default_geometry_processing_for_external_aerodynamics,
 )
+from external_aero_global_params_data_processors import (
+    default_global_params_processing_for_external_aerodynamics,
+)
 from external_aero_surface_data_processors import (
     default_surface_processing_for_external_aerodynamics,
+    default_surface_processing_for_external_aerodynamics_hlpw,
 )
 from external_aero_utils import to_float32
 from external_aero_volume_data_processors import (
@@ -66,8 +70,6 @@ class ExternalAerodynamicsNumpyTransformation(DataTransformation):
         # Create minimal metadata
         numpy_metadata = ExternalAerodynamicsNumpyMetadata(
             filename=data.metadata.filename,
-            stream_velocity=data.metadata.stream_velocity,
-            air_density=data.metadata.air_density,
         )
 
         return ExternalAerodynamicsNumpyDataInMemory(
@@ -82,6 +84,8 @@ class ExternalAerodynamicsNumpyTransformation(DataTransformation):
             surface_fields=to_float32(data.surface_fields),
             volume_mesh_centers=to_float32(data.volume_mesh_centers),
             volume_fields=to_float32(data.volume_fields),
+            global_params_values=to_float32(data.global_params_values),
+            global_params_reference=to_float32(data.global_params_reference),
         )
 
 
@@ -132,7 +136,7 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
 
         self.surface_variables = surface_variables
         self.surface_processors = surface_processors
-        self.constants = PhysicsConstants()
+        self.constants = PhysicsConstantsCarAerodynamics()
 
         if surface_variables is None:
             self.logger.error("Surface variables are empty!")
@@ -151,13 +155,74 @@ class ExternalAerodynamicsSurfaceTransformation(DataTransformation):
         """Transform surface data for External Aerodynamics model."""
 
         if data.surface_polydata is not None:
-
             # Regardless of whether there are any additional surface processors,
             # we always apply the default surface processing.
             # This will ensure that the bare minimum criteria for surface data is met.
             # That is - The surface data (mesh centers, normals, areas and fields) are present.
             data = default_surface_processing_for_external_aerodynamics(
                 data, self.surface_variables
+            )
+
+            if self.surface_processors is not None:
+                for processor in self.surface_processors:
+                    data = processor(data)
+
+            # Delete raw surface data to save memory
+            data.surface_polydata = None
+
+        return data
+
+
+class ExternalAerodynamicsSurfaceTransformationHLPW(DataTransformation):
+    """Transforms surface data for HLPW and uses N_BF field for surface_area calculation"""
+
+    def __init__(
+        self,
+        cfg: ProcessingConfig,
+        surface_variables: Optional[dict[str, str]] = None,
+        surface_processors: Optional[tuple[Callable, ...]] = None,
+        nbf_field_name: str = "N_BF",
+    ):
+        """Initialize the HLPW surface transformation.
+
+        Args:
+            cfg: Processing configuration object.
+            surface_variables: Mapping of variable names for surface data.
+            surface_processors: Optional tuple of callable processors to apply.
+            nbf_field_name: Name of the field containing the area vector of cells
+                in the surface mesh. Defaults to "N_BF".
+        """
+        super().__init__(cfg)
+        self.logger = logging.getLogger(__name__)
+
+        self.surface_variables = surface_variables
+        self.surface_processors = surface_processors
+        self.nbf_field_name = nbf_field_name
+        self.constants = PhysicsConstantsCarAerodynamics()
+
+        if surface_variables is None:
+            self.logger.error("Surface variables are empty!")
+            raise ValueError("Surface variables are empty!")
+
+        self.logger.info(
+            f"Initializing ExternalAerodynamicsSurfaceTransformationHLPW with "
+            f"surface_variables: {surface_variables}, nbf_field_name: {nbf_field_name}, "
+            f"and surface_processors: {surface_processors}"
+        )
+        self.logger.info(
+            "This will only be processed if the model_type is surface/combined."
+        )
+
+    def transform(
+        self, data: ExternalAerodynamicsExtractedDataInMemory
+    ) -> ExternalAerodynamicsExtractedDataInMemory:
+        """Transform surface data for HLPW using N_BF field.
+        The meaning of `N_BF` field is described above.
+        """
+
+        if data.surface_polydata is not None:
+            data = default_surface_processing_for_external_aerodynamics_hlpw(
+                data, self.surface_variables, self.nbf_field_name
             )
 
             if self.surface_processors is not None:
@@ -182,7 +247,7 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
         super().__init__(cfg)
         self.volume_variables = volume_variables
         self.volume_processors = volume_processors
-        self.constants = PhysicsConstants()
+        self.constants = PhysicsConstantsCarAerodynamics()
         self.logger = logging.getLogger(__name__)
 
         if volume_variables is None:
@@ -199,9 +264,7 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
     def transform(
         self, data: ExternalAerodynamicsExtractedDataInMemory
     ) -> ExternalAerodynamicsExtractedDataInMemory:
-
         if data.volume_unstructured_grid is not None:
-
             # Regardless of whether there are any additional volume processors,
             # we always apply the default volume processing.
             # This will ensure that the bare minimum criteria for volume data is met.
@@ -216,6 +279,45 @@ class ExternalAerodynamicsVolumeTransformation(DataTransformation):
 
             # Delete raw volume data to save memory
             data.volume_unstructured_grid = None
+
+        return data
+
+
+class ExternalAerodynamicsGlobalParamsTransformation(DataTransformation):
+    """Transforms global parameters values and references for External Aerodynamics model."""
+
+    def __init__(
+        self,
+        cfg: ProcessingConfig,
+        global_parameters: Optional[dict] = None,
+        global_params_processors: Optional[tuple[Callable, ...]] = None,
+    ):
+        super().__init__(cfg)
+        self.global_parameters = global_parameters
+        self.global_params_processors = global_params_processors
+
+        if global_parameters is None:
+            raise ValueError(
+                "global_parameters is required but was not provided in config"
+            )
+
+    def transform(
+        self, data: ExternalAerodynamicsExtractedDataInMemory
+    ) -> ExternalAerodynamicsExtractedDataInMemory:
+        """Transform global_params data for External Aerodynamics model.
+
+        Processes global parameter references from config and extracts values from simulation data.
+        """
+        # Apply default processing to set up reference arrays from config
+        data = default_global_params_processing_for_external_aerodynamics(
+            data, self.global_parameters
+        )
+
+        # Apply any custom processors (e.g., extract values from simulation files)
+        # Pass global_parameters so processors know the types (vector vs scalar)
+        if self.global_params_processors is not None:
+            for processor in self.global_params_processors:
+                data = processor(data, self.global_parameters)
 
         return data
 
@@ -306,6 +408,23 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
             shards=shards,
         )
 
+    def _prepare_array_no_compression(self, array: np.ndarray) -> PreparedZarrArrayInfo:
+        """Prepare small array for Zarr storage without compression.
+
+        Used for small arrays like `global_params_reference` and `global_params_values`
+        """
+        if array is None:
+            return None
+
+        # Store entire array in a single chunk (no chunking for small arrays)
+        chunks = array.shape
+
+        return PreparedZarrArrayInfo(
+            data=np.float32(array),
+            chunks=chunks,
+            compressor=None,  # No compression
+        )
+
     def transform(
         self, data: ExternalAerodynamicsExtractedDataInMemory
     ) -> ExternalAerodynamicsZarrDataInMemory:
@@ -328,6 +447,13 @@ class ExternalAerodynamicsZarrTransformation(DataTransformation):
             stl_faces=self._prepare_array(data.stl_faces),
             stl_areas=self._prepare_array(data.stl_areas),
             metadata=data.metadata,
+            # `global_params_values` and `global_params_reference` are saved without compression
+            global_params_values=self._prepare_array_no_compression(
+                data.global_params_values
+            ),
+            global_params_reference=self._prepare_array_no_compression(
+                data.global_params_reference
+            ),
             surface_mesh_centers=self._prepare_array(data.surface_mesh_centers),
             surface_normals=self._prepare_array(data.surface_normals),
             surface_areas=self._prepare_array(data.surface_areas),
