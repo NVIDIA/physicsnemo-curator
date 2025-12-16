@@ -2,7 +2,7 @@
 
 ## Overview
 
-This tutorial demonstrates how to use **PhysicsNeMo-Curator** to prepare training-ready datasets from Ansys Solvers using the PyAnsys libraries[cite: 1]. The pipeline implements an ETL (Extract, Transform, Load) process to:
+This tutorial demonstrates how to use **PhysicsNeMo-Curator** to prepare training-ready datasets from Ansys Solvers using the [Ansys DPF library](https://github.com/ansys/pydpf-core) from [PyAnsys libraries](https://github.com/ansys) The pipeline implements an ETL (Extract, Transform, Load) process to:
 
 1.  **Extract** data from Ansys `.rst` files.
 2.  **Transform** the data into an optimized, AI-ready format (Zarr).
@@ -17,7 +17,7 @@ pip install -e "../../[dev]" ansys-dpf-core --user
 ````
 
 **Note on Real vs. Mock Data:**
-This tutorial uses a script to generate **mock data** (pickled python files mimicking `.rst` structure) to avoid licensing requirements. To use real Ansys `.rst` files, you require:
+This tutorial uses a script to generate **mock data** (pickled python files mimicking `.rst` structure). To use real Ansys `.rst` files, you require:
 
   * Ansys installation (2021 R1+).
   * A valid Ansys license.
@@ -31,8 +31,8 @@ The ETL pipeline consists of three main components:
 
 Reads the input simulation files.
 
-  * [cite_start]**Input:** Directory containing `.rst` files.
-  * [cite_start]**Function:** extracts coordinates, temperature fields, and heat flux data.
+  * **Input:** Directory containing `.rst` files.
+  * **Function:** extracts coordinates, temperature fields, and heat flux data.
 
 ### 2\. Transformation: `RstToZarrTransformation`
 
