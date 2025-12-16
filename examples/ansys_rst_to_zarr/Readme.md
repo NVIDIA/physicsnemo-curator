@@ -114,7 +114,7 @@ output_zarr/
 
 ## Customizing to Ansys Solver Outputs
 
-To process real Ansys `.rst` files, modify the `RstDataSource.read_file` method to use `ansys.dpf.core. To process other Ansys solver output formats, you can extend and customize this recipe to the appropriate format such as xxx.
+To process real Ansys `.rst` files, modify the `RstDataSource.read_file` method to use `ansys.dpf.core. To process other Ansys solver output formats, you can extend and customize this recipe to the appropriate format such as CGNS, EnSight or project files like flprj.
 
 ```python
 from ansys.dpf import core as dpf
