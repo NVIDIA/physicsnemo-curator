@@ -1,0 +1,151 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from typing import Any, Dict
+
+import numpy as np
+import zarr
+
+from physicsnemo_curator.etl.data_transformations import DataTransformation
+from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
+
+class CGNSToZarrTransformation(DataTransformation):
+    """Transform CGNS data into Zarr-optimized format."""
+
+    def __init__(
+        self, cfg: ProcessingConfig, chunk_size: int = 500, compression_level: int = 3
+    ):
+        """Initialize the transformation.
+
+        Args:
+            cfg: Processing configuration
+            chunk_size: Chunk size for Zarr arrays (number of points per chunk)
+            compression_level: Compression level (1-9, higher = more compression)
+        """
+        super().__init__(cfg)
+        self.chunk_size = chunk_size
+        self.compression_level = compression_level
+
+        # Set up Zarr 3 compression codec
+        self.compressor = zarr.codecs.BloscCodec(
+            cname="zstd",
+            clevel=self.compression_level,
+            shuffle=zarr.codecs.BloscShuffle.shuffle,
+        )
+
+    def transform(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Transform CGNS data to Zarr-optimized format.
+
+        Args:
+            data: Dictionary from CGNSDataSource.read_file()
+
+        Returns:
+            Dictionary with Zarr-optimized arrays and metadata
+        """
+        self.logger.info(f"Transforming {data['filename']} for Zarr storage")
+
+        # Get the number of points to determine chunking
+        num_points = len(data["coordinates"])
+
+        # Calculate optimal chunks (don't exceed chunk_size)
+        chunk_points = min(self.chunk_size, num_points)
+
+        # Prepare arrays that will be written to Zarr stores
+        zarr_data = {
+            "coordinates": {},
+            "faces": {},
+        }
+
+        # Coordinates (2D array: points x 3 dimensions)
+        zarr_data["coordinates"] = {
+            "data": data["coordinates"].astype(np.float32),
+            "chunks": (chunk_points, 3),
+            "compressor": self.compressor,
+            "dtype": np.float32,
+        }
+
+        # Faces/connectivity (2D array: cells x 3 for triangles)
+        if "faces" in data:
+            num_cells = len(data["faces"])
+            chunk_cells = min(self.chunk_size, num_cells)
+            zarr_data["faces"] = {
+                "data": data["faces"].astype(np.int32),
+                "chunks": (chunk_cells, 3),
+                "compressor": self.compressor,
+                "dtype": np.int32,
+            }
+
+        # Process all point data fields (e.g., pressure, velocity, temperature, etc.)
+        for field_name, field_data in data.items():
+            if field_name in ["coordinates", "faces", "metadata", "filename"]:
+                continue  # Skip already processed fields
+            
+            if isinstance(field_data, np.ndarray):
+                self.logger.info(f"Processing field: {field_name} with shape {field_data.shape}")
+                
+                # Handle scalar fields (1D)
+                if field_data.ndim == 1:
+                    zarr_data[field_name] = {
+                        "data": field_data.astype(np.float32),
+                        "chunks": (chunk_points,),
+                        "compressor": self.compressor,
+                        "dtype": np.float32,
+                    }
+                # Handle vector fields (2D)
+                elif field_data.ndim == 2:
+                    zarr_data[field_name] = {
+                        "data": field_data.astype(np.float32),
+                        "chunks": (chunk_points, field_data.shape[1]),
+                        "compressor": self.compressor,
+                        "dtype": np.float32,
+                    }
+
+        # Add computed metadata useful for Zarr
+        metadata = data.get("metadata", {})
+        metadata["num_points"] = num_points
+        metadata["chunk_size"] = chunk_points
+        metadata["compression"] = "zstd"
+        metadata["compression_level"] = self.compression_level
+
+        # Add statistics for each field
+        for field_name, field_data in data.items():
+            if field_name in ["coordinates", "faces", "metadata", "filename"]:
+                continue
+            
+            if isinstance(field_data, np.ndarray) and field_data.ndim == 1:
+                # Add statistics for scalar fields
+                metadata[f"{field_name}_min"] = float(np.min(field_data))
+                metadata[f"{field_name}_max"] = float(np.max(field_data))
+                metadata[f"{field_name}_mean"] = float(np.mean(field_data))
+            elif isinstance(field_data, np.ndarray) and field_data.ndim == 2:
+                # For vector fields, compute magnitude statistics
+                magnitude = np.linalg.norm(field_data, axis=1)
+                metadata[f"{field_name}_magnitude_max"] = float(np.max(magnitude))
+                metadata[f"{field_name}_magnitude_mean"] = float(np.mean(magnitude))
+                
+                # Store magnitude as a separate field
+                zarr_data[f"{field_name}_magnitude"] = {
+                    "data": magnitude.astype(np.float32),
+                    "chunks": (chunk_points,),
+                    "compressor": self.compressor,
+                    "dtype": np.float32,
+                }
+
+        zarr_data["metadata"] = metadata
+
+        return zarr_data
+
