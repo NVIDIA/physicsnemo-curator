@@ -1,0 +1,91 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+defaults:
+  - /variables/surface: luminary_suv
+  - /variables/volume: luminary_suv
+  - /serialization_format: zarr
+  - /override_transformations: ${serialization_format}
+  - _self_
+
+etl:
+  common:
+    kind: luminary_suv
+    model_type: combined
+
+  processing:
+    num_processes: 64
+    args: {}
+
+  validator:
+    _target_: examples.external_aerodynamics.dataset_validator.ExternalAerodynamicsDatasetValidator
+    _convert_: all
+    validation_level: "fields"
+
+  source:
+    _target_: examples.external_aerodynamics.data_sources.ExternalAerodynamicsDataSource
+    _convert_: all
+    input_dir: ???
+    kind: ${etl.common.kind}
+    model_type: ${etl.common.model_type}
+
+  transformations:
+    stl_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSTLTransformation
+      _convert_: all
+      geometry_processors:
+        - _target_: examples.external_aerodynamics.external_aero_geometry_data_processors.update_geometry_data_to_float32
+          _partial_: true
+
+    surface_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSurfaceTransformation
+      _convert_: all
+      surface_processors:
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.decimate_mesh
+          _partial_: true
+          algo: decimate_pro
+          reduction: 0.0
+          preserve_topology: false
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
+          _partial_: true
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
+          _partial_: true
+          air_density: 1.225  # kg/m³ - adjust to match your simulation
+          stream_velocity: 30.00  # m/s - adjust to match your simulation
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
+          _partial_: true
+
+    volume_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsVolumeTransformation
+      _convert_: all
+      volume_processors:
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields
+          _partial_: true
+          air_density: 1.225  # kg/m³ - adjust to match your simulation
+          stream_velocity: 30.00  # m/s - adjust to match your simulation
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
+          _partial_: true
+
+    write_ready_transformation: ${override_transformations.write_ready_transformation}
+
+  sink:
+    _target_: examples.external_aerodynamics.data_sources.ExternalAerodynamicsDataSource
+    _convert_: all
+    output_dir: ???
+    kind: ${etl.common.kind}
+    serialization_method: ${serialization_format.serialization_method}
+    overwrite_existing: true
+

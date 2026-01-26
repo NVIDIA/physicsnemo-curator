@@ -25,6 +25,21 @@ from examples.external_aerodynamics.schemas import (
     ExternalAerodynamicsExtractedDataInMemory,
 )
 
+import logging
+from examples.external_aerodynamics.constants import PhysicsConstants
+from examples.external_aerodynamics.external_aero_utils import to_float32
+from examples.external_aerodynamics.schemas import (
+    ExternalAerodynamicsExtractedDataInMemory,
+)
+
+# Add these lines:
+logging.basicConfig(
+    format="%(asctime)s - Process %(process)d - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)  # ← ADD THIS
+
 
 def default_volume_processing_for_external_aerodynamics(
     data: ExternalAerodynamicsExtractedDataInMemory,
@@ -40,20 +55,45 @@ def default_volume_processing_for_external_aerodynamics(
 
 def non_dimensionalize_volume_fields(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    air_density: float = PhysicsConstants.AIR_DENSITY,
-    stream_velocity: float = PhysicsConstants.STREAM_VELOCITY,
+    air_density: float = None,  # do not use physics constants here
+    stream_velocity: float = None,  # do not use physics constants here
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize volume fields."""
 
+     # Prefer metadata values (from params.json), fall back to config parameters
+    rho = data.metadata.air_density if data.metadata.air_density is not None else air_density
+    V = data.metadata.stream_velocity if data.metadata.stream_velocity is not None else stream_velocity
+
+    logger.info(f"Volume, using air density: {rho} kg/m^3")
+    logger.info(f"Volume, using stream velocity: {V} m/s")
+
+    if rho <= 0:
+        logger.error(f"Air density must be > 0: {rho}")
+        return data
+    if V <= 0:
+        logger.error(f"Stream velocity must be > 0: {V}")
+        return data
+
     stl_vertices = data.stl_polydata.points
     length_scale = np.amax(np.amax(stl_vertices, 0) - np.amin(stl_vertices, 0))
-    data.volume_fields[:, :3] = data.volume_fields[:, :3] / stream_velocity
-    data.volume_fields[:, 3:4] = data.volume_fields[:, 3:4] / (
-        air_density * stream_velocity**2.0
-    )
-    data.volume_fields[:, 4:] = data.volume_fields[:, 4:] / (
-        stream_velocity * length_scale
-    )
+
+    num_fields = data.volume_fields.shape[1]
+
+    # Normalize velocity (columns 0-2)
+    if num_fields >= 3:
+        data.volume_fields[:, :3] = data.volume_fields[:, :3] / V
+
+    # Normalize pressure (column 3)
+    if num_fields >= 4:
+        data.volume_fields[:, 3:4] = data.volume_fields[:, 3:4] / (rho * V**2.0)
+
+    # Normalize turbulent viscosity (column 4+) if present
+    if num_fields > 4:
+        data.volume_fields[:, 4:] = data.volume_fields[:, 4:] / (V * length_scale)
+        logger.info(f"Normalized {num_fields - 4} turbulent viscosity field(s)")
+    else:
+        logger.info("No turbulent viscosity field found, skipping normalization")
+   
     return data
 
 

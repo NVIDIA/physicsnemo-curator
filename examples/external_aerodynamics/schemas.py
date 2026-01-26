@@ -40,6 +40,8 @@ class ExternalAerodynamicsMetadata:
     # Physical parameters
     stream_velocity: Optional[float] = None
     air_density: Optional[float] = None
+    mach_number: Optional[float] = None
+    angle_of_attack: Optional[float] = None  # in degrees
 
     # Geometry bounds
     x_bound: Optional[tuple[float, float]] = None  # xmin, xmax
@@ -139,6 +141,8 @@ class ExternalAerodynamicsNumpyMetadata:
     filename: str
     stream_velocity: float
     air_density: float
+    angle_of_attack: Optional[float] = None  # in degrees
+    mach_number: Optional[float] = None
 
 
 @dataclass(frozen=True)

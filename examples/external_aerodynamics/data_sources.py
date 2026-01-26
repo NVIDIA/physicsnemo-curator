@@ -35,6 +35,7 @@ from .schemas import (
     ExternalAerodynamicsNumpyDataInMemory,
     ExternalAerodynamicsZarrDataInMemory,
 )
+import json
 
 
 class ExternalAerodynamicsDataSource(DataSource):
@@ -122,9 +123,50 @@ class ExternalAerodynamicsDataSource(DataSource):
 
             surface_polydata = pv.read(surface_path)
 
+        #metadata = ExternalAerodynamicsMetadata(
+        #    filename=dirname,
+        #    dataset_type=self.model_type,  # surface, volume, combined
+        #)
+
+        # new feature for luminary wing
+
+        # Read simulation parameters from params.json for specific datasets
+        # Only read params.json for Luminary Wing dataset (has varying Mach numbers)
+        stream_velocity = None
+        air_density = None
+        angle_of_attack = None
+        mach_number = None
+        
+        if self.kind == DatasetKind.LUMINARY_WING:
+            params_path = car_dir / "params.json"
+
+            if params_path.exists():
+                try:
+                    with open(params_path, 'r') as f:
+                        params = json.load(f)
+                    stream_velocity = params.get("stream_velocity")
+                    air_density = params.get("air_density")
+                    mach_number = params.get("mach")
+                    angle_of_attack = params.get("alpha")
+                    self.logger.info(
+                        f"Loaded params for {dirname}: "
+                        f"stream_velocity={stream_velocity}, air_density={air_density}, mach_number={mach_number}, angle_of_attack={angle_of_attack}"
+                    )
+                except (json.JSONDecodeError, IOError) as e:
+                    self.logger.warning(f"Failed to read params.json in {car_dir}: {e}")
+            else:
+                self.logger.warning(
+                    f"No params.json found in {car_dir}. "
+                    f"Will use config defaults for non-dimensionalization."
+                )
+
         metadata = ExternalAerodynamicsMetadata(
             filename=dirname,
-            dataset_type=self.model_type,  # surface, volume, combined
+            dataset_type=self.model_type,
+            stream_velocity=stream_velocity,
+            air_density=air_density,
+            mach_number=mach_number,
+            angle_of_attack=angle_of_attack,
         )
 
         return ExternalAerodynamicsExtractedDataInMemory(

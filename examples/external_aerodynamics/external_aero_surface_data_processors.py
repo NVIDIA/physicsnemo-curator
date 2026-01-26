@@ -73,8 +73,8 @@ def normalize_surface_normals(
 
 def non_dimensionalize_surface_fields(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    air_density: float = PhysicsConstants.AIR_DENSITY,
-    stream_velocity: float = PhysicsConstants.STREAM_VELOCITY,
+    air_density: float = None,  # do not use physics constants here
+    stream_velocity: float = None,  # do not use physics constants here
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize surface fields."""
 
@@ -82,13 +82,21 @@ def non_dimensionalize_surface_fields(
         logger.error(f"Surface fields are empty: {data.surface_fields}")
         return data
 
-    if air_density <= 0:
+    # new feature for luminary wing
+    # Prefer metadata values (from params.json), fall back to config parameters
+    rho = data.metadata.air_density if data.metadata.air_density is not None else air_density
+    V = data.metadata.stream_velocity if data.metadata.stream_velocity is not None else stream_velocity
+
+    logger.info(f"Surface, using air density: {rho} kg/m^3")
+    logger.info(f"Surface, using stream velocity: {V} m/s")
+
+    if rho <= 0:
         logger.error(f"Air density must be > 0: {air_density}")
-    if stream_velocity <= 0:
+    if V <= 0:
         logger.error(f"Stream velocity must be > 0: {stream_velocity}")
 
     # Non-dimensionalize surface fields
-    data.surface_fields = data.surface_fields / (air_density * stream_velocity**2.0)
+    data.surface_fields = data.surface_fields / (rho * V**2.0)
 
     return data
 

@@ -1,0 +1,108 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+defaults:
+  - /variables/surface: drivaerml
+  - /variables/volume: drivaerml
+  - /serialization_format: zarr  # Default value, can be overridden via CLI
+  - /override_transformations: ${serialization_format}
+  - _self_
+
+etl:
+  # Common settings used across components
+  common:
+    kind: drivaerml  # must be either drivesim, drivaerml or ahmedml
+    model_type: surface  # produce data for which model? surface, volume, combined
+
+  processing:
+    num_processes: 12
+    args: {}
+
+  validator:
+    _target_: examples.external_aerodynamics.dataset_validator.ExternalAerodynamicsDatasetValidator
+    _convert_: all
+
+    validation_level: "fields"  # One of "structure" or "fields"
+
+  source:
+    _target_: examples.external_aerodynamics.data_sources.ExternalAerodynamicsDataSource
+    _convert_: all
+
+    input_dir: ???  # Path to input dataset directory (required)
+    kind: ${etl.common.kind}
+    model_type: ${etl.common.model_type}
+
+  transformations:
+
+    # Preprocessing transformations.
+    # These take in the raw geometry, volume and surface data, and apply DoMINO specific preprocessing transformations.
+    # Variable names are piped in from the variables/drivaerml.yaml or variables/ahmedml.yaml file.
+    stl_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSTLTransformation
+      _convert_: all
+      # Regardless of whether there are any additional geometry processors,
+      # we always apply the default geometry processing.
+      # This will ensure that the bare minimum criteria for geometry data is met.
+      # That is - The geometry data (vertices, faces, areas and centers) are present.
+      geometry_processors:
+        - _target_: examples.external_aerodynamics.external_aero_geometry_data_processors.update_geometry_data_to_float32
+          _partial_: true
+
+    surface_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsSurfaceTransformation
+      _convert_: all
+      # Regardless of whether there are any additional surface processors,
+      # we always apply the default surface processing.
+      # This will ensure that the bare minimum criteria for surface data is met.
+      # That is - The surface data (mesh centers, normals, areas and fields) are present.
+      surface_processors:
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.decimate_mesh
+          _partial_: true
+          algo: decimate_pro  # can be one of {decimate_pro, decimate}
+          reduction: 0.0  # 0 means no decimation.
+          preserve_topology: false
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.normalize_surface_normals
+          _partial_: true
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.non_dimensionalize_surface_fields
+          _partial_: true
+          air_density: 1.205  # kg/m³
+          stream_velocity: 30.00  # m/s
+        - _target_: examples.external_aerodynamics.external_aero_surface_data_processors.update_surface_data_to_float32
+          _partial_: true
+
+    volume_preprocessing:
+      _target_: examples.external_aerodynamics.data_transformations.ExternalAerodynamicsVolumeTransformation
+      _convert_: all
+      # Regardless of whether there are any additional volume processors,
+      # we always apply the default volume processing.
+      # This will ensure that the bare minimum criteria for volume data is met.
+      # That is - The volume data (mesh centers and fields) are present.
+      volume_processors:
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.non_dimensionalize_volume_fields
+          _partial_: true
+        - _target_: examples.external_aerodynamics.external_aero_volume_data_processors.update_volume_data_to_float32
+          _partial_: true
+
+    write_ready_transformation: ${override_transformations.write_ready_transformation}
+
+  sink:
+    _target_: examples.external_aerodynamics.data_sources.ExternalAerodynamicsDataSource
+    _convert_: all
+
+    output_dir: ???  # Path to output directory (required)
+    kind: ${etl.common.kind}
+    serialization_method: ${serialization_format.serialization_method}
+    overwrite_existing: true

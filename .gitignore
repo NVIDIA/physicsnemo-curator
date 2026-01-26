@@ -5,3 +5,6 @@
 .coverage*
 .pytest_cache*
 .ruff_cache*
+
+*.err
+*.out

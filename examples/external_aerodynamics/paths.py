@@ -140,6 +140,45 @@ class AhmedMLPaths(OpenFoamDatasetPaths):
         return car_dir / f"ahmed_{index}.stl"
 
 
+class LuminarySUVPaths:
+    """Path getter for your dataset with fixed filenames."""
+
+    @staticmethod
+    def geometry_path(car_dir: Path) -> Path:
+        """Get path to the STL geometry file."""
+        # Use the filled version (typically more complete)
+        return car_dir / "merged_surfaces_filled.stl"
+
+    @staticmethod
+    def surface_path(car_dir: Path) -> Path:
+        """Get path to the surface data file."""
+        return car_dir / "merged_surfaces.vtp"
+
+    @staticmethod
+    def volume_path(car_dir: Path) -> Path:
+        """Get path to the volume data file."""
+        return car_dir / "merged_volumes.vtu"
+
+class LuminaryWingPaths:
+    """Path getter for your dataset with fixed filenames."""
+
+    @staticmethod
+    def geometry_path(car_dir: Path) -> Path:
+        """Get path to the STL geometry file."""
+        # Use the filled version (typically more complete)
+        return car_dir / "merged_surfaces.stl"
+
+    @staticmethod
+    def surface_path(car_dir: Path) -> Path:
+        """Get path to the surface data file."""
+        return car_dir / "merged_surfaces.vtp"
+
+    @staticmethod
+    def volume_path(car_dir: Path) -> Path:
+        """Get path to the volume data file."""
+        return car_dir / "merged_volumes.vtu"
+
+
 def get_path_getter(kind: DatasetKind):
     """Returns path getter for a given dataset type."""
 
@@ -150,3 +189,7 @@ def get_path_getter(kind: DatasetKind):
             return DrivAerMLPaths
         case DatasetKind.DRIVESIM:
             return DriveSimPaths
+        case DatasetKind.LUMINARY_WING:
+            return LuminaryWingPaths
+        case DatasetKind.LUMINARY_SUV:
+            return LuminarySUVPaths
