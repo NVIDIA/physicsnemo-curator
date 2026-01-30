@@ -72,6 +72,26 @@ def load_d3plot_data(data_path: str):
     return coords, pos_raw, mesh_connectivity, part_ids, actual_part_ids
 
 
+def load_d3plot_element_fields(data_path: str):
+    """
+    Load optional element-level fields from a d3plot file.
+    Returns (element_shell_stress, element_shell_effective_plastic_strain),
+    each possibly None if absent in the dataset.
+    """
+    dp = D3plot(data_path)
+    element_shell_stress = (
+        dp.arrays[ArrayType.element_shell_stress]
+        if ArrayType.element_shell_stress in dp.arrays
+        else None
+    )  # expected shape: (T, E, 2, 6)
+    element_shell_effective_plastic_strain = (
+        dp.arrays[ArrayType.element_shell_effective_plastic_strain]
+        if ArrayType.element_shell_effective_plastic_strain in dp.arrays
+        else None
+    )  # expected shape: (T, E, 2)
+    return element_shell_stress, element_shell_effective_plastic_strain
+
+
 def find_k_file(run_dir: Path) -> Optional[Path]:
     """Find .k file in run directory.
 
@@ -228,3 +248,73 @@ def compute_node_thickness(
             node_thickness[i] /= node_thickness_count[i]
 
     return node_thickness
+
+
+def reduce_shell_layers_scalar(x: np.ndarray) -> np.ndarray:
+    """
+    Average over through-thickness layers (axis=2) for scalar shell fields.
+    Input shape: (T, E, 2) -> Output shape: (T, E)
+    """
+    return np.nanmean(x, axis=2)
+
+
+def reduce_shell_layers_stress_voigt(sig: np.ndarray) -> np.ndarray:
+    """
+    Average over through-thickness layers (axis=2) for stress in Voigt form.
+    Input shape: (T, E, 2, 6) -> Output shape: (T, E, 6)
+    """
+    return np.nanmean(sig, axis=2)
+
+
+def von_mises_from_voigt(sig: np.ndarray) -> np.ndarray:
+    """
+    Compute von Mises stress from Voigt components [sx, sy, sz, txy, tyz, tzx].
+    Input shape: (T, E, 6) -> Output shape: (T, E)
+    """
+    sx = sig[..., 0]
+    sy = sig[..., 1]
+    sz = sig[..., 2]
+    txy = sig[..., 3]
+    tyz = sig[..., 4]
+    tzx = sig[..., 5]
+    j2 = 0.5 * ((sx - sy) ** 2 + (sy - sz) ** 2 + (sz - sx) ** 2) + 3.0 * (
+        txy**2 + tyz**2 + tzx**2
+    )
+    # Numerically safe clamp
+    return np.sqrt(np.maximum(j2 * 2.0 / 3.0, 0.0))
+
+
+def compute_element_and_node_fields(
+    mesh_connectivity: np.ndarray,
+    element_shell_stress: Optional[np.ndarray] = None,
+    element_shell_effective_plastic_strain: Optional[np.ndarray] = None,
+    compute_von_mises: bool = True,
+) -> dict:
+    """
+    Convenience function to compute reduced element fields.
+    Inputs can be None; outputs will carry None accordingly.
+    Returns a dict with key 'element' containing arrays or None.
+    """
+    out = {"element": {}}
+
+    # Effective plastic strain (scalar)
+    if element_shell_effective_plastic_strain is not None:
+        eps_elem = reduce_shell_layers_scalar(element_shell_effective_plastic_strain)  # (T, E)
+        out["element"]["effective_plastic_strain"] = eps_elem
+    else:
+        out["element"]["effective_plastic_strain"] = None
+
+    # Stress
+    if element_shell_stress is not None:
+        stress_elem_voigt = reduce_shell_layers_stress_voigt(element_shell_stress)  # (T, E, 6)
+        out["element"]["stress_voigt"] = stress_elem_voigt
+        if compute_von_mises:
+            vm_elem = von_mises_from_voigt(stress_elem_voigt)  # (T, E)
+            out["element"]["stress_vm"] = vm_elem
+        else:
+            out["element"]["stress_vm"] = None
+    else:
+        out["element"]["stress_voigt"] = None
+        out["element"]["stress_vm"] = None
+
+    return out

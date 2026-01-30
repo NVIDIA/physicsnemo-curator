@@ -37,6 +37,7 @@ class CrashExtractedDataInMemory:
 
     Version history:
     - 1.0: Initial version with expected data fields.
+    - 1.1: Added optional element stress/strain raw fields and processed element fields.
     """
 
     # Metadata
@@ -46,9 +47,16 @@ class CrashExtractedDataInMemory:
     pos_raw: np.ndarray = None
     mesh_connectivity: np.ndarray = None
     node_thickness: np.ndarray = None
+    element_shell_stress: np.ndarray = None  # (T, E, 2, 6) or None
+    element_shell_effective_plastic_strain: np.ndarray = None  # (T, E, 2) or None
 
     # Processed data
     filtered_pos_raw: np.ndarray = None
     filtered_mesh_connectivity: np.ndarray = None
     filtered_node_thickness: np.ndarray = None
     edges: np.ndarray = None
+
+    # Processed optional fields
+    filtered_element_stress_voigt: np.ndarray = None  # (T, E, 6)
+    filtered_element_stress_vm: np.ndarray = None  # (T, E)
+    filtered_element_effective_plastic_strain: np.ndarray = None  # (T, E)
