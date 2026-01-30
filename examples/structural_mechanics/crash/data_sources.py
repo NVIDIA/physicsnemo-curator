@@ -26,6 +26,7 @@ from crash_data_processors import (
     compute_node_thickness,
     find_k_file,
     load_d3plot_data,
+    load_d3plot_element_fields,
     parse_k_file,
 )
 from schemas import CrashExtractedDataInMemory, CrashMetadata
@@ -77,6 +78,11 @@ class CrashD3PlotDataSource(DataSource):
             load_d3plot_data(str(d3plot_path))
         )
 
+        # Optional element-level fields (stress, effective plastic strain)
+        element_shell_stress, element_shell_effective_plastic_strain = (
+            load_d3plot_element_fields(str(d3plot_path))
+        )
+
         # Parse .k file for thickness
         k_file_path = find_k_file(run_dir=run_dir)
         node_thickness = np.zeros(len(coords))
@@ -101,6 +107,8 @@ class CrashD3PlotDataSource(DataSource):
             pos_raw=pos_raw,
             mesh_connectivity=mesh_connectivity,
             node_thickness=node_thickness,
+            element_shell_stress=element_shell_stress,
+            element_shell_effective_plastic_strain=element_shell_effective_plastic_strain,
         )
 
     def _get_output_path(self, filename: str) -> Path:
@@ -240,6 +248,17 @@ class CrashVTPDataSource(DataSource):
             field_name = f"displacement_{time_str}"
 
             mesh.point_data[field_name] = displacement
+
+            # Optional: add per-timestep cell scalar fields
+            n_cells = int(mesh.n_cells)
+            if getattr(data, "filtered_element_effective_plastic_strain", None) is not None:
+                eps_elem_t = data.filtered_element_effective_plastic_strain[t, :]
+                if eps_elem_t.shape[0] == n_cells:
+                    mesh.cell_data[f"cell_effective_plastic_strain_{time_str}"] = eps_elem_t
+            if getattr(data, "filtered_element_stress_vm", None) is not None:
+                vm_elem_t = data.filtered_element_stress_vm[t, :]
+                if vm_elem_t.shape[0] == n_cells:
+                    mesh.cell_data[f"cell_stress_vm_{time_str}"] = vm_elem_t
 
         # Save the single VTP file
         mesh.save(output_path)
@@ -471,6 +490,27 @@ class CrashZarrDataSource(DataSource):
             chunks=edges_chunks,
             compressors=(self.compressor,),
         )
+
+        # Optionally write processed element/node fields if available
+        def _maybe_write(name: str, arr: np.ndarray) -> None:
+            if arr is None:
+                return
+            arr32 = arr.astype(np.float32)
+            chunks = self._calculate_chunks(arr32)
+            root.create_array(
+                name=name,
+                data=arr32,
+                chunks=chunks,
+                compressors=(self.compressor,),
+            )
+
+        _maybe_write("element_stress_voigt", data.filtered_element_stress_voigt)
+        _maybe_write("element_stress_vm", data.filtered_element_stress_vm)
+        _maybe_write(
+            "element_effective_plastic_strain",
+            data.filtered_element_effective_plastic_strain,
+        )
+        # Node-level stress/strain intentionally not written (cell-only per request)
 
         # Add some statistics as metadata
         root.attrs["thickness_min"] = float(np.min(data.filtered_node_thickness))

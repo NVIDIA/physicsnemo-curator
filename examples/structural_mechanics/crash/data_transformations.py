@@ -19,7 +19,11 @@ import logging
 from typing import Callable, Optional
 
 import numpy as np
-from crash_data_processors import build_edges_from_mesh_connectivity, compute_node_type
+from crash_data_processors import (
+    build_edges_from_mesh_connectivity,
+    compute_element_and_node_fields,
+    compute_node_type,
+)
 from schemas import CrashExtractedDataInMemory
 
 from physicsnemo_curator.etl.data_transformations import DataTransformation
@@ -79,10 +83,12 @@ class CrashDataTransformation(DataTransformation):
 
         # Step 3: Remap mesh connectivity
         filtered_mesh_connectivity = []
-        for cell in data.mesh_connectivity:
+        kept_element_indices = []
+        for e_idx, cell in enumerate(data.mesh_connectivity):
             filtered_cell = [node_map[n] for n in cell if n in node_map]
             if len(filtered_cell) >= 3:
                 filtered_mesh_connectivity.append(filtered_cell)
+                kept_element_indices.append(e_idx)
 
         # Step 4: Compact to contiguous indices (reuse your logic)
         used = np.unique(
@@ -103,6 +109,38 @@ class CrashDataTransformation(DataTransformation):
             ]
             num_kept = filtered_pos_raw.shape[1]
 
+        # Optional: filter element fields to kept elements
+        filtered_element_stress_voigt = None
+        filtered_element_stress_vm = None
+        filtered_element_effective_plastic_strain = None
+
+        has_epsp = data.element_shell_effective_plastic_strain is not None
+        has_stress = data.element_shell_stress is not None
+        if has_epsp or has_stress:
+            epsp_kept = (
+                data.element_shell_effective_plastic_strain[:, kept_element_indices, :]
+                if has_epsp
+                else None
+            )
+            stress_kept = (
+                data.element_shell_stress[:, kept_element_indices, :, :]
+                if has_stress
+                else None
+            )
+            # Compute reduced element/node fields on filtered mesh
+            fields = compute_element_and_node_fields(
+                filtered_mesh_connectivity,
+                element_shell_stress=stress_kept,
+                element_shell_effective_plastic_strain=epsp_kept,
+                compute_von_mises=True,
+            )
+            # Unpack
+            filtered_element_effective_plastic_strain = fields["element"][
+                "effective_plastic_strain"
+            ]
+            filtered_element_stress_voigt = fields["element"]["stress_voigt"]
+            filtered_element_stress_vm = fields["element"]["stress_vm"]
+
         # Step 6: Build edges
         edges = build_edges_from_mesh_connectivity(filtered_mesh_connectivity)
 
@@ -115,6 +153,8 @@ class CrashDataTransformation(DataTransformation):
         data.pos_raw = None
         data.mesh_connectivity = None
         data.node_thickness = None
+        data.element_shell_stress = None
+        data.element_shell_effective_plastic_strain = None
 
         return CrashExtractedDataInMemory(
             metadata=data.metadata,
@@ -122,4 +162,7 @@ class CrashDataTransformation(DataTransformation):
             filtered_mesh_connectivity=filtered_mesh_connectivity,
             filtered_node_thickness=filtered_node_thickness,
             edges=edges,
+            filtered_element_stress_voigt=filtered_element_stress_voigt,
+            filtered_element_stress_vm=filtered_element_stress_vm,
+            filtered_element_effective_plastic_strain=filtered_element_effective_plastic_strain,
         )
