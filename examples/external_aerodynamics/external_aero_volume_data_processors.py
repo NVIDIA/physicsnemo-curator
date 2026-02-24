@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -122,8 +122,8 @@ def filter_volume_invalid_cells(
 
 def non_dimensionalize_volume_fields(
     data: ExternalAerodynamicsExtractedDataInMemory,
-    air_density: PhysicsConstantsCarAerodynamics.AIR_DENSITY,
-    stream_velocity: PhysicsConstantsCarAerodynamics.STREAM_VELOCITY,
+    air_density: float = PhysicsConstantsCarAerodynamics.AIR_DENSITY,
+    stream_velocity: float = PhysicsConstantsCarAerodynamics.STREAM_VELOCITY,
 ) -> ExternalAerodynamicsExtractedDataInMemory:
     """Non-dimensionalize volume fields."""
 
