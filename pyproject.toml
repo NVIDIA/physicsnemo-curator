@@ -1,0 +1,150 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "physicsnemo-curator"
+version = "0.1.0"
+description = "Rust-based ETL toolkit for deep learning data curation with Python APIs"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15",
+    "ty>=0.0.26",
+    "pytest>=8.0",
+    "pytest-cov>=7.0",
+    "pytest-benchmark>=5.0",
+    "pre-commit>=4.0",
+    "interrogate>=1.7",
+    "maturin>=1.0,<2.0",
+]
+docs = [
+    "sphinx>=9.0,<10",
+    "nvidia-sphinx-theme>=0.0.9",
+    "myst-parser>=5.0,<6",
+    "sphinx-autodoc-typehints>=3.9,<4",
+    "sphinx-autoapi>=3.8,<4",
+    "sphinx-copybutton>=0.5",
+    "sphinx-design>=0.6",
+    "numpydoc>=1.10",
+]
+
+# ---------------------------------------------------------------------------
+# Maturin (Rust/PyO3 build)
+# ---------------------------------------------------------------------------
+[tool.maturin]
+python-source = "src"
+manifest-path = "src/rust/Cargo.toml"
+module-name = "curator._lib"
+
+# ---------------------------------------------------------------------------
+# Ruff (linting + formatting)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "D",    # pydocstyle
+    "UP",   # pyupgrade
+    "N",    # pep8-naming
+    "B",    # flake8-bugbear
+    "A",    # flake8-builtins
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "PTH",  # flake8-use-pathlib
+    "ERA",  # eradicate (commented-out code)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test/**" = ["S101", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["test"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "benchmark: marks benchmark tests",
+]
+
+# ---------------------------------------------------------------------------
+# Coverage (pytest-cov)
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["curator"]
+omit = [
+    "test/*",
+    "docs/*",
+    "*/benchmarks/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
+
+# ---------------------------------------------------------------------------
+# Interrogate (docstring coverage)
+# ---------------------------------------------------------------------------
+[tool.interrogate]
+fail-under = 99
+ignore-init-method = true
+ignore-init-module = true
+ignore-module = true
+ignore-private = true
+ignore-semiprivate = true
+ignore-magic = true
+exclude = ["setup.py", "test", "build", "docs"]
+ignore-regex = [
+    "forward",
+    "backward",
+    "reset_parameters",
+    "extra_repr",
+    "MetaData",
+    "apply_activation",
+    "exec_activation",
+]
+color = true
+verbose = 2

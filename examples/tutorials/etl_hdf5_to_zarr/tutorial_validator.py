@@ -19,12 +19,12 @@ from typing import List
 
 import h5py
 
-from physicsnemo_curator.etl.dataset_validators import (
+from curator.etl.dataset_validators import (
     DatasetValidator,
     ValidationError,
     ValidationLevel,
 )
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from curator.etl.processing_config import ProcessingConfig
 
 
 class TutorialValidator(DatasetValidator):

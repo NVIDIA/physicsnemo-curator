@@ -10,11 +10,12 @@ lint:
   stage: build
 
   before_script:
-    - pip install -e .[dev] --no-build-isolation
-    - pip install pre-commit --no-build-isolation
+    - pip install uv --no-build-isolation
+    - uv sync --group dev
+    - uv run pre-commit install
 
   script:
-    - pre-commit run --all-files
+    - uv run pre-commit run --all-files
 
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -24,10 +25,12 @@ unit_tests:
   stage: test
 
   before_script:
-    - pip install -e .[dev] --no-build-isolation
+    - pip install uv --no-build-isolation
+    - uv sync --group dev
+    - uv run maturin develop
 
   script:
-    - pytest ./tests
+    - uv run pytest test/ --cov --cov-report=term-missing
 
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"

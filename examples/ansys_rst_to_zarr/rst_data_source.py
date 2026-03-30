@@ -19,8 +19,8 @@ import pickle
 from pathlib import Path
 from typing import Any, Dict, List
 
-from physicsnemo_curator.etl.data_sources import DataSource
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from curator.etl.data_sources import DataSource
+from curator.etl.processing_config import ProcessingConfig
 
 
 class RstDataSource(DataSource):

@@ -26,8 +26,8 @@ from crash_data_processors import (
 )
 from schemas import CrashExtractedDataInMemory
 
-from physicsnemo_curator.etl.data_transformations import DataTransformation
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from curator.etl.data_transformations import DataTransformation
+from curator.etl.processing_config import ProcessingConfig
 
 
 class CrashDataTransformation(DataTransformation):

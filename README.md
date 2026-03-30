@@ -101,7 +101,7 @@ demonstrates creating a complete pipeline that reads in HDF5 data and converts i
 - **Domain-Specific Examples**:
   - [External aerodynamics pipeline](./examples/external_aerodynamics/README.md)
   provides an example ETL pipeline for training DoMINO/Transolver models for automotive aerodynamics applications.
-  For more questions about the formats, please refer to [Data Processing Reference](./physicsnemo_curator/examples/external_aerodynamics/External_Aero_Data_Processing_Reference.md)
+  For more questions about the formats, please refer to [Data Processing Reference](./examples/external_aerodynamics/External_Aero_Data_Processing_Reference.md)
   - [Structural Mechanics / Crash pipeline](./examples/structural_mechanics/crash/README.md)
   provides an example ETL pipeline for training models for structural mechanics/crash applications.
 - **Architecture Questions**: See the [Tutorial](./examples/tutorials/etl_hdf5_to_zarr/hdf5_to_zarr.ipynb)

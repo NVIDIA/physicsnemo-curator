@@ -5,4 +5,17 @@
 .coverage*
 .pytest_cache*
 .ruff_cache*
+.ty_cache*
 .vscode/
+
+# Rust build artifacts
+target/
+
+# Coverage reports
+htmlcov/
+
+# Benchmarks
+.benchmarks/
+
+# Sphinx docs build
+docs/_build/

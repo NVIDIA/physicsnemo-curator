@@ -15,6 +15,7 @@
 # limitations under the License.
 
 repos:
+# ── General file checks ──────────────────────────────────────────────────
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -23,18 +24,17 @@ repos:
     - id: trailing-whitespace
     - id: end-of-file-fixer
     - id: check-yaml
+    - id: check-toml
 
--   repo: https://github.com/psf/black
-    rev: 25.1.0
-    hooks:
-    - id: black
-
+# ── Python: Ruff (linting + formatting) ──────────────────────────────────
 -   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.6
+    rev: v0.15.8
     hooks:
+    - id: ruff-format
     - id: ruff
-      args: [--fix, "--per-file-ignores=tests/*:S101"]
+      args: [--fix, "--per-file-ignores=test/*:S101,D"]
 
+# ── Python: Docstring coverage ───────────────────────────────────────────
 -   repo: https://github.com/econchick/interrogate
     rev: 1.7.0
     hooks:
@@ -46,9 +46,40 @@ repos:
           "--ignore-regex=['forward', 'backward', 'reset_parameters', 'extra_repr', 'MetaData', 'apply_activation','exec_activation']",
           "--color", "--"]
 
+# ── Markdown ─────────────────────────────────────────────────────────────
 -   repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.44.0
     hooks:
     - id: markdownlint
       args: [--config, .markdownlint.json]
-      exclude: ^(e2cc/.*)
+
+# ── Local hooks (Rust tooling + ty) ──────────────────────────────────────
+-   repo: local
+    hooks:
+    - id: ty
+      name: ty (type checking)
+      language: system
+      entry: uv run ty check
+      types: [python]
+      pass_filenames: false
+
+    - id: cargo-fmt
+      name: cargo fmt
+      language: system
+      entry: cargo fmt --manifest-path src/rust/Cargo.toml -- --check
+      types: [rust]
+      pass_filenames: false
+
+    - id: cargo-clippy
+      name: cargo clippy
+      language: system
+      entry: cargo clippy --manifest-path src/rust/Cargo.toml -- -D warnings
+      types: [rust]
+      pass_filenames: false
+
+    - id: cargo-deny
+      name: cargo deny
+      language: system
+      entry: cargo deny --manifest-path src/rust/Cargo.toml check
+      types: [toml]
+      pass_filenames: false

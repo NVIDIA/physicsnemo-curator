@@ -20,8 +20,8 @@ from typing import Any, Dict, List
 import h5py
 import numpy as np
 
-from physicsnemo_curator.etl.data_sources import DataSource
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from curator.etl.data_sources import DataSource
+from curator.etl.processing_config import ProcessingConfig
 
 
 class H5DataSource(DataSource):

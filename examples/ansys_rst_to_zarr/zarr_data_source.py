@@ -20,8 +20,8 @@ from typing import Any, Dict, List
 import zarr
 from zarr.storage import LocalStore
 
-from physicsnemo_curator.etl.data_sources import DataSource
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from curator.etl.data_sources import DataSource
+from curator.etl.processing_config import ProcessingConfig
 
 
 class ZarrDataSource(DataSource):

@@ -206,7 +206,7 @@ The ETL pipeline is designed to be customizable:
 Modify `CrashDataTransformation` to add new filtering or feature extraction logic:
 
 ```python
-from physicsnemo_curator.etl.base import BaseDataTransformation
+from curator.etl.base import BaseDataTransformation
 from schemas import CrashExtractedDataInMemory
 
 class CustomTransformation(BaseDataTransformation):

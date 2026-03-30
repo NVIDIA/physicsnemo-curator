@@ -20,8 +20,8 @@ from typing import Any, Dict
 import numpy as np
 import zarr
 
-from physicsnemo_curator.etl.data_transformations import DataTransformation
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from curator.etl.data_transformations import DataTransformation
+from curator.etl.processing_config import ProcessingConfig
 
 
 class RstToZarrTransformation(DataTransformation):

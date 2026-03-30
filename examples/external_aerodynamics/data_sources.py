@@ -33,8 +33,8 @@ from schemas import (
 )
 from zarr.storage import LocalStore
 
-from physicsnemo_curator.etl.data_sources import DataSource
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from curator.etl.data_sources import DataSource
+from curator.etl.processing_config import ProcessingConfig
 
 
 class ExternalAerodynamicsDataSource(DataSource):

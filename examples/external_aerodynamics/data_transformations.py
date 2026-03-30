@@ -43,8 +43,8 @@ from schemas import (
     PreparedZarrArrayInfo,
 )
 
-from physicsnemo_curator.etl.data_transformations import DataTransformation
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from curator.etl.data_transformations import DataTransformation
+from curator.etl.processing_config import ProcessingConfig
 
 
 class ExternalAerodynamicsNumpyTransformation(DataTransformation):

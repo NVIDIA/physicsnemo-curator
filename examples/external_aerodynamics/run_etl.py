@@ -35,9 +35,9 @@ import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
-from physicsnemo_curator.etl.etl_orchestrator import ETLOrchestrator
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
-from physicsnemo_curator.utils import utils as curator_utils
+from curator.etl.etl_orchestrator import ETLOrchestrator
+from curator.etl.processing_config import ProcessingConfig
+from curator.utils import utils as curator_utils
 
 
 @hydra.main(version_base="1.3", config_path="config")

@@ -1,0 +1,20 @@
+[package]
+name = "physicsnemo-curator"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Rust core for physicsnemo-curator ETL toolkit"
+
+[lib]
+name = "curator"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.28", features = ["abi3-py312"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "benchmarks"
+harness = false

@@ -32,8 +32,8 @@ from crash_data_processors import (
 from schemas import CrashExtractedDataInMemory, CrashMetadata
 from zarr.storage import LocalStore
 
-from physicsnemo_curator.etl.data_sources import DataSource
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from curator.etl.data_sources import DataSource
+from curator.etl.processing_config import ProcessingConfig
 
 
 class CrashD3PlotDataSource(DataSource):
