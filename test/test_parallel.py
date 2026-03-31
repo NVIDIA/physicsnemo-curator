@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, ClassVar
 from unittest.mock import patch
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterator
 
 import pytest
 
@@ -86,7 +86,7 @@ class ListSink(Sink[int]):
     def params(cls) -> list[Param]:
         return []
 
-    def __call__(self, items: Generator[int], index: int) -> list[str]:
+    def __call__(self, items: Iterator[int], index: int) -> list[str]:
         return [f"item_{index}_{v}" for v in items]
 
 
@@ -103,7 +103,7 @@ class StatefulSink(Sink[int]):
     def __init__(self) -> None:
         self.call_count = 0
 
-    def __call__(self, items: Generator[int], index: int) -> list[str]:
+    def __call__(self, items: Iterator[int], index: int) -> list[str]:
         self.call_count += 1
         return [str(v) for v in items]
 

@@ -118,40 +118,40 @@ class Registry:
         self._ensure_submodule(submodule)
         self._submodules[submodule].stores[name] = cls
 
-    def register_source(self, submodule: str, cls: type) -> None:
+    def register_source(self, submodule: str, cls: Any) -> None:
         """Register a source class under *submodule*.
 
         Parameters
         ----------
         submodule : str
             Target submodule name (must already be registered).
-        cls : type
+        cls : Any
             Source class with a ``name`` class attribute.
         """
         self._ensure_submodule(submodule)
         self._submodules[submodule].sources[cls.name] = cls
 
-    def register_filter(self, submodule: str, cls: type) -> None:
+    def register_filter(self, submodule: str, cls: Any) -> None:
         """Register a filter class under *submodule*.
 
         Parameters
         ----------
         submodule : str
             Target submodule name (must already be registered).
-        cls : type
+        cls : Any
             Filter class with a ``name`` class attribute.
         """
         self._ensure_submodule(submodule)
         self._submodules[submodule].filters[cls.name] = cls
 
-    def register_sink(self, submodule: str, cls: type) -> None:
+    def register_sink(self, submodule: str, cls: Any) -> None:
         """Register a sink class under *submodule*.
 
         Parameters
         ----------
         submodule : str
             Target submodule name (must already be registered).
-        cls : type
+        cls : Any
             Sink class with a ``name`` class attribute.
         """
         self._ensure_submodule(submodule)

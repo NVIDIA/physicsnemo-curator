@@ -32,7 +32,7 @@ import zarr
 from curator.core.base import Param, Sink
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Iterator
 
     import xarray as xr
 
@@ -40,14 +40,17 @@ if TYPE_CHECKING:
 class ZarrSink(Sink["xr.DataArray"]):
     """Write :class:`xarray.DataArray` fields to a Zarr store.
 
-    Each incoming DataArray is expected to have dimensions
-    ``(time, variable, lat, lon)``.  The sink splits along the
-    ``variable`` dimension and writes each variable to its own Zarr
-    group: ``<output_path>/<variable_name>/``, with dimensions
-    ``(time, lat, lon)``.
+    Each incoming DataArray is expected to carry coordinate metadata
+    (e.g. ``time``, ``variable``, ``lat``, ``lon``).  The sink uses
+    these coordinates — not the pipeline index — to organise the
+    output.
 
-    Subsequent calls **append** along the ``time`` dimension, so the
-    sink accumulates data across multiple pipeline indices.
+    DataArrays with a ``variable`` dimension are split along it so
+    that each variable gets its own Zarr group:
+    ``<output_path>/<variable_name>/``, with dimensions
+    ``(time, lat, lon)``.  Subsequent calls **append** along the
+    ``time`` dimension, so the sink accumulates data across pipeline
+    indices based on the time coordinate in the incoming data.
 
     Parameters
     ----------
@@ -104,15 +107,19 @@ class ZarrSink(Sink["xr.DataArray"]):
         self._chunks = chunks if chunks is not None else dict(self._DEFAULT_CHUNKS)
         self._shards = shards
 
-    def __call__(self, items: Generator[xr.DataArray], index: int) -> list[str]:
+    def __call__(self, items: Iterator[xr.DataArray], index: int) -> list[str]:
         """Consume DataArrays and write each variable to the Zarr store.
+
+        Output paths are derived from the coordinates of the incoming
+        data (one Zarr group per variable), not from *index*.
 
         Parameters
         ----------
-        items : Generator[xr.DataArray]
+        items : Iterator[xr.DataArray]
             Stream of DataArrays with dims ``(time, variable, lat, lon)``.
         index : int
-            Source index (used for logging; data is appended by time).
+            Pipeline source index (not used for path naming — the data's
+            own coordinates determine the output layout).
 
         Returns
         -------
@@ -162,6 +169,9 @@ class ZarrSink(Sink["xr.DataArray"]):
 
     def _append_to_zarr(self, da: xr.DataArray, group_path: pathlib.Path) -> None:
         """Append a DataArray to a Zarr group, creating it if needed.
+
+        The time coordinate from the DataArray determines where in the
+        output store the data lands.
 
         Parameters
         ----------

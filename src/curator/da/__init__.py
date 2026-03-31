@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from curator.core.registry import registry
 from curator.da.filters.moments import MomentsFilter
+from curator.da.sinks.netcdf_writer import NetCDF4Sink
 from curator.da.sinks.zarr_writer import ZarrSink
 from curator.da.sources.era5 import ERA5Source
 
@@ -36,9 +37,11 @@ registry.register_submodule("da", "DataArray processing (xarray.DataArray)", "xa
 registry.register_source("da", ERA5Source)
 registry.register_filter("da", MomentsFilter)
 registry.register_sink("da", ZarrSink)
+registry.register_sink("da", NetCDF4Sink)
 
 __all__ = [
     "ERA5Source",
     "MomentsFilter",
+    "NetCDF4Sink",
     "ZarrSink",
 ]

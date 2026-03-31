@@ -66,12 +66,12 @@ def _ensure_submodules_registered() -> None:
             )
 
 
-def _prompt_params(component_cls: type) -> dict[str, Any]:
+def _prompt_params(component_cls: Any) -> dict[str, Any]:
     """Prompt the user for each parameter declared by *component_cls*.
 
     Parameters
     ----------
-    component_cls : type
+    component_cls : Any
         A Source, Filter, or Sink subclass with a ``params()`` classmethod.
 
     Returns
@@ -360,7 +360,8 @@ def run_interactive() -> None:
     # ------------------------------------------------------------------
     for f in filter_instances:
         if hasattr(f, "flush"):
-            result = f.flush()
+            flush = getattr(f, "flush")  # noqa: B009
+            result = flush()
             if result:
                 click.echo(f"Statistics saved to {result}")
 

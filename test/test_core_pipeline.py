@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterator
 
 import pytest
 
@@ -117,7 +117,7 @@ class CollectSink(Sink[int]):
     def __init__(self) -> None:
         self.collected: list[list[int]] = []
 
-    def __call__(self, items: Generator[int], index: int) -> list[str]:
+    def __call__(self, items: Iterator[int], index: int) -> list[str]:
         values = list(items)
         self.collected.append(values)
         return [str(v) for v in values]

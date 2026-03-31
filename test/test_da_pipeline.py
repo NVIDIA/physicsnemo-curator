@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the ``da`` submodule — ERA5Source, ZarrSink, MomentsFilter.
+"""Tests for the ``da`` submodule — ERA5Source, ZarrSink, NetCDF4Sink, MomentsFilter.
 
 Unit tests use synthetic xarray DataArrays and mock the earth2studio
 ARCO backend.  End-to-end tests hit the real ARCO endpoint and are
@@ -23,6 +23,7 @@ marked ``@pytest.mark.slow`` + ``@pytest.mark.e2e``.
 
 from __future__ import annotations
 
+import pathlib
 from datetime import datetime
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
@@ -319,6 +320,287 @@ class TestZarrSink:
 
 
 # ===================================================================
+# NetCDF4Sink tests
+# ===================================================================
+
+
+class TestNetCDF4Sink:
+    """Unit tests for NetCDF4Sink."""
+
+    def test_params(self) -> None:
+        """NetCDF4Sink.params() returns descriptors for output_dir, chunks, compression_level, split_dim."""
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        params = NetCDF4Sink.params()
+        names = {p.name for p in params}
+        assert {"output_dir", "chunks", "compression_level", "split_dim"} == names
+
+    def test_name_and_description(self) -> None:
+        """NetCDF4Sink has correct name and description."""
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        assert NetCDF4Sink.name == "NetCDF4 Writer"
+        assert "NetCDF4" in NetCDF4Sink.description
+
+    def test_write_single_variable(self, tmp_path: Path) -> None:
+        """Writing a single-variable DataArray creates the expected .nc file."""
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
+        da = _make_dataarray(variables=["t2m"])
+
+        def gen():  # type: ignore[override]
+            yield da
+
+        paths = sink(gen(), index=0)
+        assert len(paths) == 1
+        assert paths[0].endswith("2020.nc")
+        assert "t2m" in paths[0]
+
+        # Read back and verify
+        ds = xr.open_dataset(paths[0])
+        assert "data" in ds
+        assert ds["data"].shape == (1, _LATS_N, _LONS_N)
+
+    def test_write_multiple_variables(self, tmp_path: Path) -> None:
+        """Writing a multi-variable DataArray creates one subdirectory per variable."""
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
+        da = _make_dataarray()
+
+        def gen():  # type: ignore[override]
+            yield da
+
+        paths = sink(gen(), index=0)
+        assert len(paths) == 2
+
+        for path in paths:
+            ds = xr.open_dataset(path)
+            assert "data" in ds
+
+    def test_append_along_time(self, tmp_path: Path) -> None:
+        """Subsequent writes with the same year append along the time dimension."""
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
+
+        da1 = _make_dataarray(times=[_TIMES[0]], variables=["t2m"])
+        da2 = _make_dataarray(times=[_TIMES[1]], variables=["t2m"], seed=99)
+
+        def gen1():  # type: ignore[override]
+            yield da1
+
+        def gen2():  # type: ignore[override]
+            yield da2
+
+        sink(gen1(), index=0)
+        sink(gen2(), index=1)
+
+        ds = xr.open_dataset(str(tmp_path / "output_nc" / "t2m" / "2020.nc"))
+        assert ds["data"].sizes["time"] == 2
+
+    def test_custom_chunks(self, tmp_path: Path) -> None:
+        """Custom chunk sizes are passed through to the NetCDF4 file."""
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(
+            output_dir=str(tmp_path / "output_nc"),
+            chunks={"time": 1, "lat": 3, "lon": 4},
+        )
+        da = _make_dataarray(variables=["t2m"])
+
+        def gen():  # type: ignore[override]
+            yield da
+
+        sink(gen(), index=0)
+
+        ds = xr.open_dataset(str(tmp_path / "output_nc" / "t2m" / "2020.nc"))
+        assert "data" in ds
+
+    def test_no_compression(self, tmp_path: Path) -> None:
+        """compression_level=0 disables zlib compression."""
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(
+            output_dir=str(tmp_path / "output_nc"),
+            compression_level=0,
+        )
+        da = _make_dataarray(variables=["t2m"])
+
+        def gen():  # type: ignore[override]
+            yield da
+
+        sink(gen(), index=0)
+
+        ds = xr.open_dataset(str(tmp_path / "output_nc" / "t2m" / "2020.nc"))
+        assert "data" in ds
+
+    def test_no_variable_dim(self, tmp_path: Path) -> None:
+        """DataArrays without a variable dim write to data/<year>.nc."""
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
+        da = _make_simple_dataarray(n_samples=1, fill_value=42.0)
+
+        def gen():  # type: ignore[override]
+            yield da
+
+        paths = sink(gen(), index=0)
+        assert len(paths) == 1
+        assert "data" in paths[0]
+        assert paths[0].endswith("2020.nc")
+
+        ds = xr.open_dataset(paths[0])
+        assert "data" in ds
+
+    def test_no_split(self, tmp_path: Path) -> None:
+        """split_dim=None writes a single file per variable."""
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"), split_dim=None)
+        da = _make_dataarray(variables=["t2m"])
+
+        def gen():  # type: ignore[override]
+            yield da
+
+        paths = sink(gen(), index=0)
+        assert len(paths) == 1
+        assert paths[0].endswith("data.nc")
+        assert "t2m" in paths[0]
+
+        ds = xr.open_dataset(paths[0])
+        assert "data" in ds
+
+    def test_split_across_years(self, tmp_path: Path) -> None:
+        """Data spanning multiple years is split into separate files."""
+        import numpy as np
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
+
+        # Create data with timestamps in 2020 and 2021
+        times_cross_year = [datetime(2020, 12, 31, 12), datetime(2021, 1, 1, 0)]
+        lats = np.linspace(90, -90, _LATS_N)
+        lons = np.linspace(0, 350, _LONS_N)
+        rng = np.random.default_rng(42)
+
+        da_with_var = xr.DataArray(
+            data=rng.standard_normal((2, 1, _LATS_N, _LONS_N)),
+            dims=["time", "variable", "lat", "lon"],
+            coords={
+                "time": [np.datetime64(t) for t in times_cross_year],
+                "variable": ["t2m"],
+                "lat": lats,
+                "lon": lons,
+            },
+        )
+
+        def gen():  # type: ignore[override]
+            yield da_with_var
+
+        paths = sink(gen(), index=0)
+        # Should produce two files: 2020.nc and 2021.nc
+        assert len(paths) == 2
+        basenames = sorted(pathlib.Path(p).name for p in paths)
+        assert basenames == ["2020.nc", "2021.nc"]
+
+        for path in paths:
+            ds = xr.open_dataset(path)
+            assert ds["data"].sizes["time"] == 1
+
+    def test_custom_split_func(self, tmp_path: Path) -> None:
+        """Custom split_func is used for grouping."""
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        # Split by month: YYYY-MM
+        def month_key(t):  # type: ignore[override]
+            import numpy as np
+
+            dt = np.datetime64(t, "M")
+            return str(dt)
+
+        sink = NetCDF4Sink(
+            output_dir=str(tmp_path / "output_nc"),
+            split_func=month_key,
+        )
+        da = _make_dataarray(
+            times=[datetime(2020, 6, 1, 0)],
+            variables=["t2m"],
+        )
+
+        def gen():  # type: ignore[override]
+            yield da
+
+        paths = sink(gen(), index=0)
+        assert len(paths) == 1
+        assert "2020-06" in paths[0]
+
+        ds = xr.open_dataset(paths[0])
+        assert "data" in ds
+
+    def test_output_dir_property(self, tmp_path: Path) -> None:
+        """output_dir property returns the configured path."""
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
+        assert sink.output_dir == tmp_path / "output_nc"
+
+    def test_compression_level_property(self) -> None:
+        """compression_level property returns the configured value."""
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir="/tmp/output_nc", compression_level=7)
+        assert sink.compression_level == 7
+
+    def test_unlimited_dims_property(self) -> None:
+        """unlimited_dims property returns the configured list."""
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir="/tmp/output_nc", unlimited_dims=["time", "lat"])
+        assert sink.unlimited_dims == ["time", "lat"]
+
+    def test_default_unlimited_dims(self) -> None:
+        """Default unlimited_dims is ['time']."""
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir="/tmp/output_nc")
+        assert sink.unlimited_dims == ["time"]
+
+    def test_split_dim_property(self) -> None:
+        """split_dim property returns the configured value."""
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir="/tmp/output_nc", split_dim="time")
+        assert sink.split_dim == "time"
+
+    def test_split_dim_none_property(self) -> None:
+        """split_dim=None disables splitting."""
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+        sink = NetCDF4Sink(output_dir="/tmp/output_nc", split_dim=None)
+        assert sink.split_dim is None
+
+
+# ===================================================================
 # MomentsFilter tests
 # ===================================================================
 
@@ -461,6 +743,14 @@ class TestRegistration:
         sinks = registry.sinks("da")
         assert "Zarr Writer" in sinks
 
+    def test_netcdf4sink_registered(self) -> None:
+        """NetCDF4Sink is discoverable via the registry."""
+        import curator.da  # noqa: F401
+        from curator.core.registry import registry
+
+        sinks = registry.sinks("da")
+        assert "NetCDF4 Writer" in sinks
+
     def test_moments_registered(self) -> None:
         """MomentsFilter is discoverable via the registry."""
         import curator.da  # noqa: F401
@@ -522,6 +812,66 @@ class TestDAPipeline:
 
         source = ERA5Source(times=_TIMES[:1], variables=_VARS)
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
+
+        pipeline = source.write(sink)
+        paths = pipeline[0]
+        assert len(paths) == 2  # one per variable
+
+    @patch("curator.da.sources.era5.ARCO")
+    def test_full_pipeline_netcdf4(self, mock_arco_cls: MagicMock, tmp_path: Path) -> None:
+        """Full pipeline: ERA5Source -> MomentsFilter -> NetCDF4Sink."""
+        from curator.da.filters.moments import MomentsFilter
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from curator.da.sources.era5 import ERA5Source
+
+        mock_instance = mock_arco_cls.return_value
+
+        def side_effect(time, variable):  # type: ignore[override]
+            return _make_dataarray(times=time, variables=variable)
+
+        mock_instance.side_effect = side_effect
+
+        source = ERA5Source(times=_TIMES, variables=_VARS)
+        filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
+        sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
+
+        pipeline = source.filter(filt).write(sink)
+
+        assert len(pipeline) == 2
+
+        all_paths: list[list[str]] = []
+        for i in range(len(pipeline)):
+            paths = pipeline[i]
+            all_paths.append(paths)
+            assert len(paths) > 0
+
+            # Verify .nc files were created
+            import xarray as xr
+
+            for var in _VARS:
+                nc_dir = tmp_path / "output_nc" / var
+                assert nc_dir.exists()
+                nc_files = list(nc_dir.glob("*.nc"))
+                assert len(nc_files) >= 1
+                for nc_file in nc_files:
+                    ds = xr.open_dataset(str(nc_file))
+                    assert "data" in ds
+
+        # Flush moments
+        stats_path = filt.flush()
+        assert stats_path is not None
+
+    @patch("curator.da.sources.era5.ARCO")
+    def test_pipeline_netcdf4_no_filter(self, mock_arco_cls: MagicMock, tmp_path: Path) -> None:
+        """Pipeline with just source and NetCDF4Sink (no filter)."""
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from curator.da.sources.era5 import ERA5Source
+
+        mock_instance = mock_arco_cls.return_value
+        mock_instance.return_value = _make_dataarray(times=[_TIMES[0]])
+
+        source = ERA5Source(times=_TIMES[:1], variables=_VARS)
+        sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
 
         pipeline = source.write(sink)
         paths = pipeline[0]
@@ -655,3 +1005,33 @@ class TestERA5EndToEnd:
 
         ds = xr.open_zarr(paths[0])
         assert ds["data"].sizes["lat"] == 721
+
+    def test_era5_netcdf4_pipeline(self, tmp_path: Path) -> None:
+        """Full pipeline: ERA5 -> NetCDF4Sink with compression."""
+        import xarray as xr
+
+        from curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from curator.da.sources.era5 import ERA5Source
+
+        source = ERA5Source(
+            times=[datetime(2020, 1, 1, 0), datetime(2020, 1, 1, 6)],
+            variables=["t2m"],
+            cache=True,
+        )
+        sink = NetCDF4Sink(
+            output_dir=str(tmp_path / "output_nc"),
+            chunks={"time": 1, "lat": 721, "lon": 1440},
+            compression_level=4,
+        )
+
+        pipeline = source.write(sink)
+
+        for i in range(len(pipeline)):
+            paths = pipeline[i]
+            assert len(paths) > 0
+
+        # Verify the output NetCDF4 file
+        ds = xr.open_dataset(str(tmp_path / "output_nc" / "t2m" / "2020.nc"))
+        assert ds["data"].sizes["time"] == 2
+        assert ds["data"].sizes["lat"] == 721
+        assert ds["data"].sizes["lon"] == 1440

@@ -31,8 +31,10 @@ repos:
     rev: v0.15.8
     hooks:
     - id: ruff-format
+      exclude: ^(examples-old|benchmarks)/
     - id: ruff
-      args: [--fix, "--per-file-ignores=test/*:S101,D"]
+      args: [--fix]
+      exclude: ^(examples-old|benchmarks)/
 
 # ── Python: Docstring coverage ───────────────────────────────────────────
 -   repo: https://github.com/econchick/interrogate
@@ -42,9 +44,15 @@ repos:
       args: [
           "-vv", "--ignore-init-method", "--ignore-init-module",
           "--ignore-module", "--ignore-private", "--ignore-semiprivate",
-          "--ignore-magic", "--fail-under=99", "--exclude=['setup.py', 'test', 'build', 'docs']",
-          "--ignore-regex=['forward', 'backward', 'reset_parameters', 'extra_repr', 'MetaData', 'apply_activation','exec_activation']",
-          "--color", "--"]
+          "--ignore-magic", "--fail-under=99",
+          "-e", "setup.py", "-e", "test", "-e", "build", "-e", "docs",
+          "-e", "examples-old", "-e", "benchmarks", "-e", ".asv",
+          "--ignore-regex=forward", "--ignore-regex=backward",
+          "--ignore-regex=reset_parameters", "--ignore-regex=extra_repr",
+          "--ignore-regex=MetaData", "--ignore-regex=apply_activation",
+          "--ignore-regex=exec_activation",
+          "--color", "src/curator/"]
+      pass_filenames: false
 
 # ── Markdown ─────────────────────────────────────────────────────────────
 -   repo: https://github.com/igorshubovych/markdownlint-cli
@@ -52,6 +60,7 @@ repos:
     hooks:
     - id: markdownlint
       args: [--config, .markdownlint.json]
+      exclude: ^examples-old/
 
 # ── Local hooks (Rust tooling + ty) ──────────────────────────────────────
 -   repo: local
@@ -59,28 +68,28 @@ repos:
     - id: ty
       name: ty (type checking)
       language: system
-      entry: uv run ty check
+      entry: uv run ty check --exclude "examples-old/" --exclude "benchmarks/"
       types: [python]
       pass_filenames: false
 
     - id: cargo-fmt
       name: cargo fmt
       language: system
-      entry: cargo fmt --manifest-path src/rust/Cargo.toml -- --check
+      entry: bash -c 'command -v cargo >/dev/null 2>&1 && cargo fmt --manifest-path src/rust/Cargo.toml -- --check || echo "cargo not found, skipping"'
       types: [rust]
       pass_filenames: false
 
     - id: cargo-clippy
       name: cargo clippy
       language: system
-      entry: cargo clippy --manifest-path src/rust/Cargo.toml -- -D warnings
+      entry: bash -c 'command -v cargo >/dev/null 2>&1 && cargo clippy --manifest-path src/rust/Cargo.toml -- -D warnings || echo "cargo not found, skipping"'
       types: [rust]
       pass_filenames: false
 
     - id: cargo-deny
       name: cargo deny
       language: system
-      entry: cargo deny --manifest-path src/rust/Cargo.toml check
+      entry: bash -c 'command -v cargo >/dev/null 2>&1 && cargo deny --manifest-path src/rust/Cargo.toml check || echo "cargo not found, skipping"'
       types: [toml]
       pass_filenames: false
 

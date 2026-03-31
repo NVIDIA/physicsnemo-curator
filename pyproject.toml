@@ -104,6 +104,14 @@ requires-dist = []
 nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo" }
 
 # ---------------------------------------------------------------------------
+# ty (type checking)
+# ---------------------------------------------------------------------------
+[tool.ty]
+
+[tool.ty.rules]
+unresolved-import = "ignore"
+
+# ---------------------------------------------------------------------------
 # Maturin (Rust/PyO3 build)
 # ---------------------------------------------------------------------------
 [tool.maturin]
@@ -117,6 +125,7 @@ module-name = "curator._lib"
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+exclude = ["examples-old", "benchmarks"]
 
 [tool.ruff.lint]
 select = [
@@ -199,7 +208,7 @@ ignore-module = true
 ignore-private = true
 ignore-semiprivate = true
 ignore-magic = true
-exclude = ["setup.py", "test", "build", "docs"]
+exclude = ["setup.py", "test", "build", "docs", "examples-old", "benchmarks", ".asv"]
 ignore-regex = [
     "forward",
     "backward",

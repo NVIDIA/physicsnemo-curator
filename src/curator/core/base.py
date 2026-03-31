@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterator
 
 # Sentinel for required parameters (no default).
 _REQUIRED = object()
@@ -53,7 +53,7 @@ class Param:
 
     name: str
     description: str
-    type: type = str
+    type: type = str  # ty: ignore[invalid-type-form]
     default: Any = REQUIRED
     choices: list[str] | None = None
 
@@ -239,12 +239,12 @@ class Sink[T](ABC):
         ...
 
     @abstractmethod
-    def __call__(self, items: Generator[T], index: int) -> list[str]:
+    def __call__(self, items: Iterator[T], index: int) -> list[str]:
         """Consume items and persist them to storage.
 
         Parameters
         ----------
-        items : Generator[T]
+        items : Iterator[T]
             Stream of data items to write.
         index : int
             Source index being processed (useful for naming output files).

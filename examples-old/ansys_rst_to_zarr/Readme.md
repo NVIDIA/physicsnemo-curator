@@ -68,17 +68,17 @@ Create a configuration file (e.g., `rst_to_zarr.yaml`) to define the pipeline pa
 etl:
   processing:
     num_processes: 4  # Adjust based on CPU cores
-  
+
   source:
     _target_: rst_data_source.RstDataSource
     input_dir: ???
-  
+
   transformations:
     rst_to_zarr:
       _target_: rst_to_zarr_transformation.RstToZarrTransformation
       chunk_size: 1000
       compression_level: 5
-  
+
   sink:
     _target_: zarr_data_source.ZarrDataSource
     output_dir: ???
@@ -122,15 +122,15 @@ from ansys.dpf import core as dpf
 def read_file(self, filename: str) -> Dict[str, Any]:
     filepath = self.input_dir / f"{filename}.rst"
     model = dpf.Model(str(filepath))
-    
+
     # Extract data using DPF operators
     mesh = model.metadata.meshed_region
     coords = np.array(mesh.nodes.coordinates_field.data)
-    
+
     # Extract results (Temperature, etc.)
     temp_op = model.results.temperature()
     temperature = np.array(temp_op.outputs.fields_container()[0].data)
-    
+
     return {
         "coordinates": coords,
         "temperature": temperature,

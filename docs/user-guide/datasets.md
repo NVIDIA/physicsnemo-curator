@@ -176,7 +176,7 @@ print(f"Run indices: {store.run_indices[:5]}...")
 - **Files per run**: `boundary_{i}.vtp`, `volume_{i}.vtu`,
   `slices/*.vtp`, `ahmed_{i}.stl`, metadata CSVs
 
-### WindsorML
+### WindsorML Details
 
 - **Paper**: [arXiv:2407.19320](https://arxiv.org/abs/2407.19320)
 - **License**: CC-BY-SA 4.0
@@ -186,7 +186,7 @@ print(f"Run indices: {store.run_indices[:5]}...")
   `windsor_{i}.stl`, `windsor_{i}.stp`, metadata CSVs
 - **Note**: No slice plane meshes (images only)
 
-### WindTunnel-20k
+### WindTunnel-20k Details
 
 - **Source**: [inductiva/windtunnel-20k](https://huggingface.co/datasets/inductiva/windtunnel-20k)
 - **Solver**: OpenFOAM

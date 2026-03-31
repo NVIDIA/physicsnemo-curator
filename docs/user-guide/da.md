@@ -87,6 +87,50 @@ sink = ZarrSink(
 **Sharding** (Zarr v3) groups multiple chunks into larger shard files,
 reducing the number of objects in cloud storage.
 
+### NetCDF4Sink
+
+Writes incoming DataArrays to NetCDF4 files.  Each variable gets its own
+subdirectory, and files are **split** along a configurable coordinate
+dimension (default: ``time``, grouped by year).  The output layout is:
+
+``<output_dir>/<variable>/<split_key>.nc``
+
+For example, with the default settings, data spanning 2020–2021 produces:
+
+```text
+output_nc/
+    t2m/
+        2020.nc       # all 2020 timestamps
+        2021.nc       # all 2021 timestamps
+```
+
+Subsequent calls with the same split key **append** along the time
+dimension using the unlimited dimension.
+
+```python
+from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+# Default: split by year
+sink = NetCDF4Sink(
+    output_dir="output_nc",
+    chunks={"time": 1, "lat": 721, "lon": 1440},
+    compression_level=4,       # zlib 0-9, default 4
+)
+
+# Split by month instead
+sink = NetCDF4Sink(
+    output_dir="output_nc",
+    split_func=lambda t: str(np.datetime64(t, "M")),
+)
+
+# No splitting — one file per variable
+sink = NetCDF4Sink(output_dir="output_nc", split_dim=None)
+```
+
+**Chunking** controls the HDF5 chunk layout inside the NetCDF4 file.
+**Compression** uses zlib (level 0 disables it, 9 is maximum compression).
+The ``time`` dimension is unlimited by default, allowing efficient appends.
+
 ## Full Pipeline Example
 
 ```python
@@ -133,6 +177,38 @@ era5_stats.zarr/
     u10m/         # with shape (lat=721, lon=1440)
     v10m/
     sp/
+```
+
+### Using NetCDF4 output
+
+Replace the sink to write NetCDF4 files instead of Zarr:
+
+```python
+from curator.da.sinks.netcdf_writer import NetCDF4Sink
+
+sink = NetCDF4Sink(
+    output_dir="era5_output_nc",
+    chunks={"time": 1, "lat": 721, "lon": 1440},
+    compression_level=4,
+)
+
+pipeline = source.filter(filt).write(sink)
+results = run_pipeline(pipeline)
+filt.flush()
+```
+
+This produces one subdirectory per variable, with files split by year:
+
+```text
+era5_output_nc/
+    t2m/
+        2020.nc       # NetCDF4: (time=24, lat=721, lon=1440)
+    u10m/
+        2020.nc
+    v10m/
+        2020.nc
+    sp/
+        2020.nc
 ```
 
 ## Caching

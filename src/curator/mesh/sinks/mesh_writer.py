@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, ClassVar
 from curator.core.base import Param, Sink
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Iterator
 
     from physicsnemo.mesh import Mesh
 
@@ -72,12 +72,12 @@ class MeshSink(Sink["Mesh"]):
     def __init__(self, output_dir: str) -> None:
         self._output_dir = pathlib.Path(output_dir)
 
-    def __call__(self, items: Generator[Mesh], index: int) -> list[str]:
+    def __call__(self, items: Iterator[Mesh], index: int) -> list[str]:
         """Consume meshes from the stream and save each to disk.
 
         Parameters
         ----------
-        items : Generator[Mesh]
+        items : Iterator[Mesh]
             Stream of meshes to persist.
         index : int
             Source index (used for naming output subdirectories).
