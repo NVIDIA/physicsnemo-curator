@@ -17,8 +17,13 @@
 """VTK file source for mesh pipelines.
 
 Reads VTK-format files (``.vtk``, ``.vtp``, ``.vtu``, ``.vts``, ``.vtm``)
-from a directory and converts each to a :class:`physicsnemo.mesh.Mesh`
-using :func:`physicsnemo.mesh.io.from_pyvista`.
+via a :class:`~curator.core.store.FileStore` and converts each to a
+:class:`physicsnemo.mesh.Mesh` using :func:`physicsnemo.mesh.io.from_pyvista`.
+
+File discovery and access is delegated to the injected
+:class:`~curator.core.store.FileStore`, allowing transparent support for
+local directories, S3, HuggingFace Hub, HTTPS, and any other
+``fsspec``-compatible backend.
 
 The conversion supports multiple manifold dimensions (point clouds, lines,
 surfaces, volumes) and two point-source modes (vertices or cell centroids).
@@ -27,7 +32,6 @@ See :func:`physicsnemo.mesh.io.from_pyvista` for full details.
 
 from __future__ import annotations
 
-import pathlib
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 import pyvista as pv
@@ -35,6 +39,7 @@ from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.io import from_pyvista
 
 from curator.core.base import Param, Source
+from curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -44,21 +49,18 @@ _VTK_EXTENSIONS: frozenset[str] = frozenset({".vtk", ".vtp", ".vtu", ".vts", ".v
 
 
 class VTKSource(Source[Mesh]):
-    """Read VTK files from a directory and yield :class:`~physicsnemo.mesh.Mesh` objects.
+    """Read VTK files and yield :class:`~physicsnemo.mesh.Mesh` objects.
 
-    Each VTK file is loaded via :func:`pyvista.read` and converted to a
-    :class:`~physicsnemo.mesh.Mesh` using :func:`physicsnemo.mesh.io.from_pyvista`.
-    The conversion parameters (``manifold_dim``, ``point_source``, etc.) are
-    forwarded directly to ``from_pyvista``.
+    File discovery and caching are handled by the injected
+    :class:`~curator.core.store.FileStore`.  Use the convenience
+    constructors :meth:`from_path` and :meth:`from_url` for the common
+    cases of local directories and remote ``fsspec`` URLs.
 
     Parameters
     ----------
-    input_path : str
-        Path to a directory containing VTK files, or a single VTK file path.
-    file_pattern : str
-        Glob pattern used to filter files when *input_path* is a directory.
-        Defaults to ``"*"`` which matches all files; only files whose
-        extension is a recognised VTK format are kept regardless.
+    store : FileStore
+        A :class:`~curator.core.store.FileStore` that maps integer
+        indices to local file paths.
     manifold_dim : int or {"auto"}
         Target manifold dimension passed to ``from_pyvista``:
 
@@ -82,21 +84,23 @@ class VTKSource(Source[Mesh]):
 
     Examples
     --------
-    >>> source = VTKSource(input_path="./cfd_results/")
+    Local directory:
+
+    >>> source = VTKSource.from_path("./cfd_results/")
     >>> len(source)
     42
-    >>> mesh_gen = source[0]
-    >>> mesh = next(mesh_gen)
+    >>> mesh = next(source[0])
 
-    Read volume meshes and tetrahedralize:
+    Remote HuggingFace dataset:
 
-    >>> source = VTKSource(input_path="./volumes/", manifold_dim=3)
-
-    Use cell centroids as points (avoids tetrahedralization for CFD):
-
-    >>> source = VTKSource(
-    ...     input_path="./cfd/", point_source="cell_centroids"
+    >>> source = VTKSource.from_url(
+    ...     "hf://datasets/neashton/drivaerml/run_1/slices"
     ... )
+
+    Custom store (dependency injection):
+
+    >>> store = MyCustomFileStore(...)
+    >>> source = VTKSource(store=store, manifold_dim=2)
     """
 
     name: ClassVar[str] = "VTK Reader"
@@ -113,7 +117,8 @@ class VTKSource(Source[Mesh]):
             ``from_pyvista`` conversion options.
         """
         return [
-            Param(name="input_path", description="Path to VTK file or directory", type=str),
+            Param(name="input_path", description="Path to VTK file or directory (local)", type=str),
+            Param(name="url", description="fsspec URL (s3://, hf://, https://)", type=str, default=""),
             Param(name="file_pattern", description="Glob pattern for filtering files", type=str, default="*"),
             Param(
                 name="manifold_dim",
@@ -137,26 +142,133 @@ class VTKSource(Source[Mesh]):
             ),
         ]
 
+    # -- Constructors --------------------------------------------------------
+
     def __init__(
         self,
-        input_path: str,
-        file_pattern: str = "*",
+        store: FileStore,
         manifold_dim: int | Literal["auto"] = "auto",
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
     ) -> None:
-        self._root = pathlib.Path(input_path)
-        self._pattern = file_pattern
+        self._store = store
         self._manifold_dim = manifold_dim
         self._point_source = point_source
         self._warn_on_lost_data = warn_on_lost_data
-        self._files = self._discover_files()
+
+    @classmethod
+    def from_path(
+        cls,
+        input_path: str,
+        file_pattern: str = "*",
+        *,
+        manifold_dim: int | Literal["auto"] = "auto",
+        point_source: Literal["vertices", "cell_centroids"] = "vertices",
+        warn_on_lost_data: bool = True,
+    ) -> VTKSource:
+        """Create a :class:`VTKSource` from a local directory or file.
+
+        Parameters
+        ----------
+        input_path : str
+            Path to a directory containing VTK files, or a single file.
+        file_pattern : str
+            Glob pattern for filtering files in a directory.
+        manifold_dim : int or {"auto"}
+            Target manifold dimension.
+        point_source : {"vertices", "cell_centroids"}
+            Point source mode.
+        warn_on_lost_data : bool
+            Warn when data arrays are discarded.
+
+        Returns
+        -------
+        VTKSource
+            Configured source backed by a :class:`LocalFileStore`.
+
+        Examples
+        --------
+        >>> source = VTKSource.from_path("./cfd_results/")
+        >>> source = VTKSource.from_path("./data/", file_pattern="timestep_*")
+        """
+        store = LocalFileStore(input_path, pattern=file_pattern, extensions=_VTK_EXTENSIONS)
+        return cls(
+            store=store,
+            manifold_dim=manifold_dim,
+            point_source=point_source,
+            warn_on_lost_data=warn_on_lost_data,
+        )
+
+    @classmethod
+    def from_url(
+        cls,
+        url: str,
+        file_pattern: str = "**",
+        *,
+        storage_options: dict[str, object] | None = None,
+        cache_storage: str | None = None,
+        manifold_dim: int | Literal["auto"] = "auto",
+        point_source: Literal["vertices", "cell_centroids"] = "vertices",
+        warn_on_lost_data: bool = True,
+    ) -> VTKSource:
+        """Create a :class:`VTKSource` from an ``fsspec``-compatible URL.
+
+        Remote files are transparently cached to a local directory.
+
+        Parameters
+        ----------
+        url : str
+            An ``fsspec`` URL such as ``"hf://datasets/org/repo/path"``,
+            ``"s3://bucket/prefix/"``, or ``"https://example.com/data/"``.
+        file_pattern : str
+            Glob pattern for file discovery.  Defaults to ``"**"``
+            (recursive).
+        storage_options : dict[str, object] | None
+            Extra keyword arguments for the ``fsspec`` filesystem
+            (e.g. ``{"anon": True}``).
+        cache_storage : str | None
+            Local directory for cached downloads.  If ``None``, a
+            temporary directory is used.
+        manifold_dim : int or {"auto"}
+            Target manifold dimension.
+        point_source : {"vertices", "cell_centroids"}
+            Point source mode.
+        warn_on_lost_data : bool
+            Warn when data arrays are discarded.
+
+        Returns
+        -------
+        VTKSource
+            Configured source backed by a :class:`FsspecFileStore`.
+
+        Examples
+        --------
+        >>> source = VTKSource.from_url(
+        ...     "hf://datasets/neashton/drivaerml/run_1/slices"
+        ... )
+        >>> source = VTKSource.from_url(
+        ...     "s3://my-bucket/data/", storage_options={"anon": True}
+        ... )
+        """
+        store = FsspecFileStore(
+            url=url,
+            pattern=file_pattern,
+            extensions=_VTK_EXTENSIONS,
+            storage_options=storage_options,
+            cache_storage=cache_storage,
+        )
+        return cls(
+            store=store,
+            manifold_dim=manifold_dim,
+            point_source=point_source,
+            warn_on_lost_data=warn_on_lost_data,
+        )
 
     # -- Source interface -----------------------------------------------------
 
     def __len__(self) -> int:
         """Return the number of discovered VTK files."""
-        return len(self._files)
+        return len(self._store)
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
         """Read the *index*-th VTK file and yield a Mesh.
@@ -175,8 +287,8 @@ class VTKSource(Source[Mesh]):
         Mesh
             The converted physicsnemo Mesh.
         """
-        path = self._files[index]
-        pv_mesh = pv.read(str(path))
+        path = self._store[index]
+        pv_mesh = pv.read(path)
         mesh = from_pyvista(
             pv_mesh,
             manifold_dim=self._manifold_dim,
@@ -184,38 +296,3 @@ class VTKSource(Source[Mesh]):
             warn_on_lost_data=self._warn_on_lost_data,
         )
         yield mesh
-
-    # -- Internal helpers ----------------------------------------------------
-
-    def _discover_files(self) -> list[pathlib.Path]:
-        """Scan the input path and return sorted VTK file paths.
-
-        Returns
-        -------
-        list[pathlib.Path]
-            Sorted list of VTK file paths discovered.
-
-        Raises
-        ------
-        FileNotFoundError
-            If *input_path* does not exist.
-        ValueError
-            If no VTK files are found.
-        """
-        if self._root.is_file():
-            if self._root.suffix.lower() in _VTK_EXTENSIONS:
-                return [self._root]
-            msg = f"File {self._root} is not a recognised VTK format."
-            raise ValueError(msg)
-
-        if not self._root.is_dir():
-            msg = f"Input path {self._root} does not exist."
-            raise FileNotFoundError(msg)
-
-        files = sorted(p for p in self._root.glob(self._pattern) if p.is_file() and p.suffix.lower() in _VTK_EXTENSIONS)
-
-        if not files:
-            msg = f"No VTK files found in {self._root} with pattern {self._pattern!r}."
-            raise ValueError(msg)
-
-        return files

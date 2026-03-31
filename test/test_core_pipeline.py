@@ -27,6 +27,8 @@ import pytest
 
 from curator.core.base import REQUIRED, Filter, Param, Pipeline, Sink, Source
 
+pytestmark = pytest.mark.unit
+
 # ---------------------------------------------------------------------------
 # Concrete test implementations
 # ---------------------------------------------------------------------------
@@ -308,3 +310,70 @@ class TestRegistry:
         text = repr(reg)
         assert "test" in text
         assert "1 sources" in text
+        assert "0 stores" in text
+
+    def test_register_store(self):
+        from curator.core.registry import Registry
+
+        reg = Registry()
+        reg.register_submodule("test", "Test", "builtins")
+
+        class DummyStore:
+            def __len__(self):
+                return 0
+
+            def __getitem__(self, index):
+                raise IndexError
+
+        reg.register_store("test", "Dummy store", DummyStore)
+        stores = reg.stores("test")
+        assert "Dummy store" in stores
+        assert stores["Dummy store"] is DummyStore
+
+    def test_register_multiple_stores(self):
+        from curator.core.registry import Registry
+
+        reg = Registry()
+        reg.register_submodule("test", "Test", "builtins")
+
+        class StoreA:
+            def __len__(self):
+                return 0
+
+            def __getitem__(self, index):
+                raise IndexError
+
+        class StoreB:
+            def __len__(self):
+                return 0
+
+            def __getitem__(self, index):
+                raise IndexError
+
+        reg.register_store("test", "Store A", StoreA)
+        reg.register_store("test", "Store B", StoreB)
+        stores = reg.stores("test")
+        assert len(stores) == 2
+        assert "Store A" in stores
+        assert "Store B" in stores
+
+    def test_stores_empty_by_default(self):
+        from curator.core.registry import Registry
+
+        reg = Registry()
+        reg.register_submodule("test", "Test", "builtins")
+        assert reg.stores("test") == {}
+
+    def test_register_store_unregistered_submodule_raises(self):
+        from curator.core.registry import Registry
+
+        class DummyStore:
+            def __len__(self):
+                return 0
+
+            def __getitem__(self, index):
+                raise IndexError
+
+        reg = Registry()
+        with pytest.raises(KeyError, match="not registered"):
+            reg.register_store("nope", "Dummy", DummyStore)

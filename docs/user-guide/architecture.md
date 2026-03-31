@@ -143,6 +143,75 @@ Submodules register their components with the global
 {class}`~curator.core.registry.Registry` at import time, enabling the
 CLI to discover them dynamically.
 
+## FileStore
+
+{class}`~curator.core.store.FileStore` is a protocol that decouples
+**file discovery and access** from **file reading**.  Sources accept a
+`FileStore` via dependency injection, so the same reader works with local
+directories, S3 buckets, HuggingFace Hub datasets, or any custom backend.
+
+```python
+@runtime_checkable
+class FileStore(Protocol):
+    def __len__(self) -> int: ...
+    def __getitem__(self, index: int) -> str: ...
+    # returns a local filesystem path
+```
+
+Two built-in implementations:
+
+### LocalFileStore
+
+{class}`~curator.core.store.LocalFileStore` discovers and serves files
+from a local directory using `pathlib.Path.glob`:
+
+```python
+from curator.core.store import LocalFileStore
+
+store = LocalFileStore("./data/", extensions=frozenset({".vtk", ".vtu"}))
+path = store[0]  # "/absolute/path/to/data/mesh_0000.vtu"
+```
+
+### FsspecFileStore
+
+{class}`~curator.core.store.FsspecFileStore` discovers and serves files
+from any `fsspec`-compatible URL, transparently caching downloads:
+
+```python
+from curator.core.store import FsspecFileStore
+
+# HuggingFace Hub
+store = FsspecFileStore(
+    "hf://datasets/neashton/drivaerml/run_1/slices",
+    extensions=frozenset({".vtk", ".vtp"}),
+)
+
+# S3 (public bucket)
+store = FsspecFileStore(
+    "s3://my-bucket/cfd-data/",
+    storage_options={"anon": True},
+)
+
+path = store[0]  # local cached path, ready for pyvista.read()
+```
+
+Remote files are downloaded once and cached locally.  The cache location
+can be controlled via the `cache_storage` parameter.
+
+### Custom stores
+
+Any object implementing `__len__` and `__getitem__` (returning a local
+path string) satisfies the `FileStore` protocol:
+
+```python
+class DatabaseFileStore:
+    """Fetch VTK files from a database by row id."""
+    def __len__(self) -> int:
+        return self._db.count()
+    def __getitem__(self, index: int) -> str:
+        return self._db.download_to_cache(index)
+```
+
 ## Registry
 
 The {class}`~curator.core.registry.Registry` is a global singleton that

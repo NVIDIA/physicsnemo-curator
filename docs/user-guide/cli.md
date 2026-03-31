@@ -94,7 +94,7 @@ from curator.mesh.filters.mean import MeanFilter
 from curator.mesh.sinks.mesh_writer import MeshSink
 
 pipeline = (
-    VTKSource(input_path="./cfd_results/")
+    VTKSource.from_path("./cfd_results/")
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )

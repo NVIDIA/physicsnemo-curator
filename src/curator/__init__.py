@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from curator.core.base import Filter, Param, Pipeline, Sink, Source
 from curator.core.registry import registry
+from curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 
 __version__ = "0.1.0"
 
@@ -33,7 +34,10 @@ except ImportError:
 
 
 __all__ = [
+    "FileStore",
     "Filter",
+    "FsspecFileStore",
+    "LocalFileStore",
     "Param",
     "Pipeline",
     "Sink",

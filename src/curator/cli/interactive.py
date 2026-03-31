@@ -16,8 +16,8 @@
 
 """Interactive pipeline builder using questionary prompts.
 
-Walks the user through selecting a submodule, source, filters, and sink,
-then constructs and executes a :class:`~curator.core.base.Pipeline`.
+Walks the user through selecting a submodule, store, source, filters, and
+sink, then constructs and executes a :class:`~curator.core.base.Pipeline`.
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ import questionary
 
 from curator.core.base import Filter, Param, Pipeline, Sink, Source
 from curator.core.registry import registry
+from curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 
 # Map submodule names to their Python module paths so we can import them
 # on demand (triggering component registration).
@@ -107,6 +108,80 @@ def _prompt_params(component_cls: type) -> dict[str, Any]:
     return values
 
 
+def _build_source(source_cls: type, store: FileStore, kwargs: dict[str, Any]) -> Source[Any]:
+    """Construct a source with an already-built :class:`FileStore`.
+
+    If *source_cls* accepts a ``store`` init parameter (the recommended
+    pattern), the store is injected directly.  Otherwise the kwargs are
+    passed through to ``__init__``.
+
+    Parameters
+    ----------
+    source_cls : type
+        The Source subclass.
+    store : FileStore
+        Pre-built file store to inject.
+    kwargs : dict[str, Any]
+        Additional parameter values collected from the user (e.g.
+        conversion options such as ``manifold_dim``).
+
+    Returns
+    -------
+    Source[Any]
+        Constructed source instance.
+    """
+    return source_cls(store=store, **kwargs)
+
+
+def _build_store(store_cls: type) -> FileStore:
+    """Prompt for store-specific inputs and construct the store.
+
+    For :class:`LocalFileStore` the user provides a local path and optional
+    glob pattern.  For :class:`FsspecFileStore` the user provides a URL and
+    optional pattern / cache directory.
+
+    Parameters
+    ----------
+    store_cls : type
+        The FileStore class to build.
+
+    Returns
+    -------
+    FileStore
+        Constructed file store instance.
+    """
+    if store_cls is LocalFileStore:
+        path = questionary.text("  Path to file or directory:").ask()
+        if path is None:
+            click.echo("Aborted.")
+            sys.exit(1)
+        pattern = questionary.text("  Glob pattern [*]:", default="*").ask()
+        if pattern is None:
+            click.echo("Aborted.")
+            sys.exit(1)
+        return LocalFileStore(path=path, pattern=pattern or "*")
+
+    if store_cls is FsspecFileStore:
+        url = questionary.text("  Remote URL (s3://, hf://, https://):").ask()
+        if url is None:
+            click.echo("Aborted.")
+            sys.exit(1)
+        pattern = questionary.text("  Glob pattern [**]:", default="**").ask()
+        if pattern is None:
+            click.echo("Aborted.")
+            sys.exit(1)
+        cache = questionary.text("  Local cache directory (leave empty for temp):", default="").ask()
+        return FsspecFileStore(
+            url=url,
+            pattern=pattern or "**",
+            cache_storage=cache or None,
+        )
+
+    # Generic fallback for user-registered stores.
+    click.echo("  (custom store — no interactive prompts, constructing with defaults)")
+    return store_cls()
+
+
 def run_interactive() -> None:
     """Run the full interactive pipeline builder flow."""
     click.echo()
@@ -152,7 +227,26 @@ def run_interactive() -> None:
         sys.exit(1)
 
     # ------------------------------------------------------------------
-    # 3. Select source
+    # 3. Select and build store (data location)
+    # ------------------------------------------------------------------
+    stores = registry.stores(submodule_name)
+    store_instance: FileStore | None = None
+
+    if stores:
+        store_choices = [questionary.Choice(title=name, value=name) for name in stores]
+        store_name: str | None = questionary.select("Select a data store:", choices=store_choices).ask()
+        if store_name is None:
+            click.echo("Aborted.")
+            sys.exit(1)
+
+        store_cls = stores[store_name]
+        click.echo(f"\nConfigure {store_name}:")
+        store_instance = _build_store(store_cls)
+        click.echo(f"  Found {len(store_instance)} file(s) in store.")
+        click.echo()
+
+    # ------------------------------------------------------------------
+    # 4. Select source
     # ------------------------------------------------------------------
     sources = registry.sources(submodule_name)
     if not sources:
@@ -170,13 +264,23 @@ def run_interactive() -> None:
     source_cls = sources[source_name]
     click.echo(f"\nConfigure {source_cls.name}:")
     source_kwargs = _prompt_params(source_cls)
-    source_instance: Source[Any] = source_cls(**source_kwargs)
+
+    # Remove store-related params that are now handled by the store step.
+    source_kwargs.pop("input_path", None)
+    source_kwargs.pop("url", None)
+    source_kwargs.pop("file_pattern", None)
+
+    if store_instance is not None:
+        source_instance: Source[Any] = _build_source(source_cls, store_instance, source_kwargs)
+    else:
+        # No stores registered — fall back to passing kwargs directly.
+        source_instance = source_cls(**source_kwargs)
 
     click.echo(f"  Found {len(source_instance)} item(s) in source.")
     click.echo()
 
     # ------------------------------------------------------------------
-    # 4. Select filters (multi-select)
+    # 5. Select filters (multi-select)
     # ------------------------------------------------------------------
     filters = registry.filters(submodule_name)
     filter_instances: list[Filter[Any]] = []
@@ -205,7 +309,7 @@ def run_interactive() -> None:
     click.echo()
 
     # ------------------------------------------------------------------
-    # 5. Select sink
+    # 6. Select sink
     # ------------------------------------------------------------------
     sinks = registry.sinks(submodule_name)
     if not sinks:
@@ -226,7 +330,7 @@ def run_interactive() -> None:
     sink_instance: Sink[Any] = sink_cls(**sink_kwargs)
 
     # ------------------------------------------------------------------
-    # 6. Build pipeline
+    # 7. Build pipeline
     # ------------------------------------------------------------------
     click.echo()
     chain_parts = [source_cls.name]
@@ -238,7 +342,7 @@ def run_interactive() -> None:
     pipeline: Pipeline[Any] = Pipeline(source=source_instance, filters=filter_instances, sink=sink_instance)
 
     # ------------------------------------------------------------------
-    # 7. Execute pipeline
+    # 8. Execute pipeline
     # ------------------------------------------------------------------
     n = len(pipeline)
     click.echo(f"Processing {n} item(s)...")
@@ -252,7 +356,7 @@ def run_interactive() -> None:
     click.echo()
 
     # ------------------------------------------------------------------
-    # 8. Flush any stateful filters (e.g. MeanFilter)
+    # 9. Flush any stateful filters (e.g. MeanFilter)
     # ------------------------------------------------------------------
     for f in filter_instances:
         if hasattr(f, "flush"):

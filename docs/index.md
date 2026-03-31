@@ -38,7 +38,7 @@ from curator.mesh.sinks.mesh_writer import MeshSink
 
 # Build the pipeline
 pipeline = (
-    VTKSource(input_path="./cfd_results/")
+    VTKSource.from_path("./cfd_results/")
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )

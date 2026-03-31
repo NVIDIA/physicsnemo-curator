@@ -4,7 +4,8 @@
 
 .PHONY: install install-docs setup-ci develop develop-release build \
         format format-check lint lint-check typecheck interrogate \
-        test test-rust bench deny docs docs-rust license check clean
+        test test-core test-mesh test-unit test-integration test-e2e test-device test-rust bench \
+        deny docs docs-rust license check clean
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -90,6 +91,30 @@ interrogate:
 ## Run Python tests with coverage
 test:
 	uv run pytest test/ --cov --cov-report=term-missing
+
+## Run only core tests (no optional dependency groups)
+test-core:
+	uv run pytest test/ -m 'not requires' --cov --cov-report=term-missing
+
+## Run only mesh tests (requires mesh dependency group)
+test-mesh:
+	uv run pytest test/ -m mesh --cov --cov-report=term-missing
+
+## Run only unit tests (fast, no I/O, no GPU)
+test-unit:
+	uv run pytest test/ -m unit --cov --cov-report=term-missing
+
+## Run only integration tests (filesystem, network, multi-component)
+test-integration:
+	uv run pytest test/ -m integration --cov --cov-report=term-missing
+
+## Run only end-to-end pipeline tests
+test-e2e:
+	uv run pytest test/ -m e2e --cov --cov-report=term-missing
+
+## Run device-parametrised tests (CPU + CUDA when available)
+test-device:
+	uv run pytest test/ -m device --cov --cov-report=term-missing
 
 ## Run Rust tests with nextest
 test-rust:

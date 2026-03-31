@@ -25,7 +25,9 @@ description = "Rust-based ETL toolkit for deep learning data curation with Pytho
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
-dependencies = []
+dependencies = [
+    "fsspec>=2023.1.0",
+]
 
 [project.optional-dependencies]
 cli = [
@@ -47,6 +49,7 @@ mesh = [
     "tqdm",
     "tensordict",
     "jaxtyping",
+    "huggingface_hub",
 ]
 xr = []
 mdt = []
@@ -140,6 +143,15 @@ indent-style = "space"
 testpaths = ["test"]
 addopts = "-v --tb=short"
 markers = [
+    "unit: fast isolated unit tests — no I/O, no GPU, no network",
+    "integration: tests that touch the filesystem, network, or multiple components",
+    "e2e: end-to-end pipeline tests (source → filters → sink)",
+    "device: parametrised across compute devices (cpu, cuda)",
+    "requires(group): declares the dependency group needed (mesh, xr, mdt, cli)",
+    "mesh: tests requiring the mesh dependency group (auto-added by requires)",
+    "xr: tests requiring the xr dependency group (auto-added by requires)",
+    "mdt: tests requiring the mdt dependency group (auto-added by requires)",
+    "cli: tests requiring the cli dependency group (auto-added by requires)",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "benchmark: marks benchmark tests",
 ]

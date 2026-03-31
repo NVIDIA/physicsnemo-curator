@@ -27,12 +27,15 @@ This module registers its components with the global
 from __future__ import annotations
 
 from curator.core.registry import registry
+from curator.core.store import FsspecFileStore, LocalFileStore
 from curator.mesh.filters.mean import MeanFilter
 from curator.mesh.sinks.mesh_writer import MeshSink
 from curator.mesh.sources.vtk import VTKSource
 
 # Register submodule and components with the global registry.
 registry.register_submodule("mesh", "Mesh processing (physicsnemo.mesh.Mesh)", "physicsnemo.mesh")
+registry.register_store("mesh", "Local directory", LocalFileStore)
+registry.register_store("mesh", "Remote (fsspec)", FsspecFileStore)
 registry.register_source("mesh", VTKSource)
 registry.register_filter("mesh", MeanFilter)
 registry.register_sink("mesh", MeshSink)

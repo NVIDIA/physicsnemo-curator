@@ -23,7 +23,7 @@ The {class}`~curator.mesh.sources.vtk.VTKSource` reads VTK files (`.vtk`,
 ```python
 from curator.mesh.sources.vtk import VTKSource
 
-source = VTKSource(input_path="./cfd_results/")
+source = VTKSource.from_path("./cfd_results/")
 print(f"Found {len(source)} VTK files")
 
 # Access a single mesh (lazy — returns a generator)
@@ -37,14 +37,14 @@ print(f"Points: {mesh.n_points}, Cells: {mesh.n_cells}")
 
 ```python
 # Read as point cloud (no cell topology)
-source = VTKSource(input_path="./data/", manifold_dim=0)
+source = VTKSource.from_path("./data/", manifold_dim=0)
 
 # Read volume meshes (tetrahedralize)
-source = VTKSource(input_path="./volumes/", manifold_dim=3)
+source = VTKSource.from_path("./volumes/", manifold_dim=3)
 
 # Use cell centroids as points (avoids tetrahedralization for CFD)
-source = VTKSource(
-    input_path="./cfd/",
+source = VTKSource.from_path(
+    "./cfd/",
     point_source="cell_centroids",
     warn_on_lost_data=False,
 )
@@ -89,7 +89,7 @@ Chain the components together using the fluent API:
 
 ```python
 pipeline = (
-    VTKSource(input_path="./cfd_results/")
+    VTKSource.from_path("./cfd_results/")
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )
@@ -130,7 +130,7 @@ Filters compose naturally:
 
 ```python
 pipeline = (
-    VTKSource(input_path="./data/")
+    VTKSource.from_path("./data/")
     .filter(FilterA())
     .filter(FilterB())
     .filter(FilterC())

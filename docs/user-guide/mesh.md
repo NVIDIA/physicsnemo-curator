@@ -18,18 +18,29 @@ dependencies.
 
 ### VTKSource
 
-{class}`~curator.mesh.sources.vtk.VTKSource` reads VTK files from a
-directory (or a single file) and converts each to a
+{class}`~curator.mesh.sources.vtk.VTKSource` reads VTK files via a
+{class}`~curator.core.store.FileStore` and converts each to a
 {class}`physicsnemo.mesh.Mesh` using {func}`physicsnemo.mesh.io.from_pyvista`.
+
+Use the convenience constructors for common cases:
+
+- {meth}`~curator.mesh.sources.vtk.VTKSource.from_path` — local directory
+  or file
+- {meth}`~curator.mesh.sources.vtk.VTKSource.from_url` — any
+  ``fsspec``-compatible URL (S3, HuggingFace Hub, HTTPS, …)
+
+Or inject a custom {class}`~curator.core.store.FileStore` directly.
 
 **Supported formats:** `.vtk`, `.vtp`, `.vtu`, `.vts`, `.vtm`
 
-**Parameters:**
+**Parameters (constructors):**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `input_path` | `str` | *required* | Path to VTK file or directory |
-| `file_pattern` | `str` | `"*"` | Glob pattern for filtering files in a directory |
+| `input_path` / `url` | `str` | *required* | Local path or fsspec URL |
+| `file_pattern` | `str` | `"*"` / `"**"` | Glob pattern for filtering files |
+| `storage_options` | `dict` | `None` | fsspec auth/config (``from_url`` only) |
+| `cache_storage` | `str` | `None` | Local cache dir (``from_url`` only) |
 | `manifold_dim` | `int \| "auto"` | `"auto"` | Target manifold dimension (0–3) |
 | `point_source` | `str` | `"vertices"` | `"vertices"` or `"cell_centroids"` |
 | `warn_on_lost_data` | `bool` | `True` | Warn when data arrays are discarded |
@@ -56,21 +67,38 @@ directory (or a single file) and converts each to a
 ```python
 from curator.mesh.sources.vtk import VTKSource
 
-# Read all VTK files from a directory
-source = VTKSource(input_path="./data/")
+# Read all VTK files from a local directory
+source = VTKSource.from_path("./data/")
 
 # Read only files matching a pattern
-source = VTKSource(input_path="./data/", file_pattern="timestep_*")
+source = VTKSource.from_path("./data/", file_pattern="timestep_*")
 
 # Read as volume mesh
-source = VTKSource(input_path="./volumes/", manifold_dim=3)
+source = VTKSource.from_path("./volumes/", manifold_dim=3)
 
 # Use cell centroids for CFD polyhedral meshes
-source = VTKSource(
-    input_path="./cfd/",
+source = VTKSource.from_path(
+    "./cfd/",
     point_source="cell_centroids",
     warn_on_lost_data=False,
 )
+
+# Read from HuggingFace Hub
+source = VTKSource.from_url(
+    "hf://datasets/neashton/drivaerml/run_1/slices"
+)
+
+# Read from S3 (public bucket)
+source = VTKSource.from_url(
+    "s3://my-bucket/cfd-data/",
+    storage_options={"anon": True},
+)
+
+# Custom FileStore (dependency injection)
+from curator.core.store import LocalFileStore
+
+store = LocalFileStore("./data/", extensions=frozenset({".vtk"}))
+source = VTKSource(store=store, manifold_dim=2)
 ```
 
 ### MeanFilter
@@ -163,9 +191,16 @@ from curator.mesh.sources.vtk import VTKSource
 from curator.mesh.filters.mean import MeanFilter
 from curator.mesh.sinks.mesh_writer import MeshSink
 
-# Build
+# Local data
 pipeline = (
-    VTKSource(input_path="./cfd_results/", manifold_dim=2)
+    VTKSource.from_path("./cfd_results/", manifold_dim=2)
+    .filter(MeanFilter(output="stats.parquet"))
+    .write(MeshSink(output_dir="./output/"))
+)
+
+# Or remote data from HuggingFace
+pipeline = (
+    VTKSource.from_url("hf://datasets/neashton/drivaerml/run_1/slices")
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )
