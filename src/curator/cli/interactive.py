@@ -37,7 +37,7 @@ from curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 # on demand (triggering component registration).
 _SUBMODULE_IMPORTS: dict[str, str] = {
     "mesh": "curator.mesh",
-    "xr": "curator.xr",
+    "da": "curator.da",
     "mdt": "curator.mdt",
 }
 
@@ -53,10 +53,10 @@ def _ensure_submodules_registered() -> None:
             importlib.import_module(module_path)
         except ImportError:
             # Register a placeholder so the CLI can show it as unavailable.
-            dep_map = {"mesh": "physicsnemo.mesh", "xr": "xarray", "mdt": "torch"}
+            dep_map = {"mesh": "physicsnemo.mesh", "da": "xarray", "mdt": "torch"}
             desc_map = {
                 "mesh": "Mesh processing (physicsnemo.mesh.Mesh)",
-                "xr": "xarray dataset processing",
+                "da": "DataArray processing (xarray.DataArray)",
                 "mdt": "Molecular dynamics tensor tuples",
             }
             registry.register_submodule(

@@ -62,7 +62,7 @@ import pytest
 # whole file is skipped with a clear message.
 _GROUP_SENTINELS: dict[str, list[str]] = {
     "mesh": ["pyvista", "torch", "pyarrow", "physicsnemo.mesh"],
-    "xr": ["xarray"],
+    "da": ["xarray", "earth2studio"],
     "mdt": ["torch"],
     "cli": ["click", "questionary"],
 }

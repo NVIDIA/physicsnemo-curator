@@ -69,6 +69,8 @@ make clean              # Remove build artifacts
 Defined in `pyproject.toml` under `[dependency-groups]`:
 
 - **dev**: ruff, ty, pytest, pytest-cov, pytest-benchmark, asv, pre-commit, interrogate, maturin
+- **mesh**: nvidia-physicsnemo, pyvista, pyarrow, torch, warp-lang, s3fs, tqdm, tensordict, jaxtyping, huggingface_hub
+- **da**: xarray, earth2studio, zarr, gcsfs
 - **docs**: sphinx, nvidia-sphinx-theme, myst-parser, sphinx-autoapi, sphinx-autodoc-typehints, etc.
 
 Optional extras in `[project.optional-dependencies]`:
