@@ -27,7 +27,29 @@ requires-python = ">=3.12"
 license = "Apache-2.0"
 dependencies = []
 
+[project.optional-dependencies]
+cli = [
+    "click>=8.0",
+    "questionary>=2.0",
+]
+
+[project.scripts]
+curator = "curator.cli:main"
+
 [dependency-groups]
+mesh = [
+    "nvidia-physicsnemo",
+    "pyvista",
+    "pyarrow",
+    "torch",
+    "warp-lang",
+    "s3fs",
+    "tqdm",
+    "tensordict",
+    "jaxtyping",
+]
+xr = []
+mdt = []
 dev = [
     "ruff>=0.15",
     "ty>=0.0.26",
@@ -48,6 +70,25 @@ docs = [
     "sphinx-design>=0.6",
     "numpydoc>=1.10",
 ]
+
+# ---------------------------------------------------------------------------
+# uv
+# ---------------------------------------------------------------------------
+[tool.uv]
+# The mesh/xr/mdt dependency groups have heavy or private dependencies
+# (physicsnemo, torch, etc.) not on PyPI. Install them explicitly:
+#   uv sync --group mesh
+default-groups = ["dev"]
+
+# physicsnemo is a private NVIDIA package not on PyPI. Provide metadata
+# so uv can resolve the dependency graph without a registry lookup.
+[[tool.uv.dependency-metadata]]
+name = "nvidia-physicsnemo"
+version = "0.1.0"
+requires-dist = []
+
+[tool.uv.sources]
+nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo" }
 
 # ---------------------------------------------------------------------------
 # Maturin (Rust/PyO3 build)

@@ -14,31 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""PhysicsNeMo Curator: ETL toolkit for deep learning data curation."""
+"""CLI entry point for PhysicsNeMo Curator.
+
+Run ``curator`` to launch the interactive pipeline builder.  Requires the
+``curator[cli]`` extra (click, questionary).
+"""
 
 from __future__ import annotations
 
-from curator.core.base import Filter, Param, Pipeline, Sink, Source
-from curator.core.registry import registry
+import click
 
-__version__ = "0.1.0"
-
-try:
-    from curator._lib import rust_version
-except ImportError:
-    # Native extension not built yet (e.g. during docs build or initial setup).
-    def rust_version() -> str:  # type: ignore[misc]
-        """Return a placeholder when the native library is unavailable."""
-        return "not built"
+from curator.cli.interactive import run_interactive
 
 
-__all__ = [
-    "Filter",
-    "Param",
-    "Pipeline",
-    "Sink",
-    "Source",
-    "__version__",
-    "registry",
-    "rust_version",
-]
+@click.command()
+@click.version_option(package_name="physicsnemo-curator")
+def main() -> None:
+    """PhysicsNeMo Curator — interactive ETL pipeline builder."""
+    run_interactive()

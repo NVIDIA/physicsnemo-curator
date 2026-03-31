@@ -46,7 +46,6 @@ autoapi_options = [
     "undoc-members",
     "show-inheritance",
     "show-module-summary",
-    "imported-members",
 ]
 
 # ---------------------------------------------------------------------------
@@ -70,6 +69,8 @@ myst_enable_extensions = [
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
+    "torch": ("https://pytorch.org/docs/stable/", None),
+    "pyvista": ("https://docs.pyvista.org/version/stable/", None),
 }
 
 # ---------------------------------------------------------------------------
