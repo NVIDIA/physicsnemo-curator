@@ -83,3 +83,10 @@ repos:
       entry: cargo deny --manifest-path src/rust/Cargo.toml check
       types: [toml]
       pass_filenames: false
+
+    - id: uv-lock
+      name: uv lock --check
+      language: system
+      entry: uv lock --check
+      files: pyproject\.toml$
+      pass_filenames: false
