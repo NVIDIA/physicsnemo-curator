@@ -1,0 +1,186 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES.
+SPDX-FileCopyrightText: All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# Benchmarking
+
+PhysicsNeMo Curator uses a three-tier benchmarking strategy:
+
+| Tool | Purpose | Scope |
+|---|---|---|
+| **pytest-benchmark** | Fast per-PR regression checks in CI | Current commit only |
+| **ASV (airspeed velocity)** | Long-term historical performance tracking | Across git history |
+| **Criterion** | Rust micro-benchmarks | Rust core library |
+
+## Quick Start
+
+```bash
+# Install dev dependencies (includes asv + pytest-benchmark)
+make install
+
+# Build the native extension
+make develop
+
+# Run pytest-benchmark (fast, current code)
+make bench
+
+# Run ASV on the current commit
+make asv-run
+
+# Preview the ASV dashboard
+make asv-preview
+```
+
+## pytest-benchmark (CI Benchmarks)
+
+pytest-benchmark runs inside the normal test suite and is designed for fast
+per-PR checks. Benchmark tests live in `test/` and use the `@pytest.mark.benchmark`
+marker.
+
+```python
+import pytest
+
+@pytest.mark.benchmark
+def test_pipeline_throughput(benchmark):
+    """Benchmark pipeline item processing."""
+    from curator.core.base import Pipeline
+    # ... setup ...
+    benchmark(pipeline.__getitem__, 0)
+```
+
+Run benchmarks:
+
+```bash
+# Run only benchmarks
+uv run pytest test/ --benchmark-only
+
+# Skip benchmarks during normal test runs
+uv run pytest test/ --benchmark-skip
+
+# Compare against saved baseline
+uv run pytest test/ --benchmark-only --benchmark-compare
+```
+
+Results are stored as JSON in `.benchmarks/`.
+
+## ASV (Historical Benchmarks)
+
+[Airspeed Velocity](https://asv.readthedocs.io/) tracks performance across the
+project's git history. It checks out each commit, builds the package in an
+isolated environment, runs benchmarks, and produces an interactive web dashboard.
+
+### Benchmark Files
+
+ASV benchmarks live in the `benchmarks/` directory at the project root:
+
+```text
+benchmarks/
+├── __init__.py
+├── bench_pipeline.py    # Pipeline construction & iteration
+├── bench_store.py       # FileStore creation & indexing
+└── bench_import.py      # Package import time
+```
+
+### Writing ASV Benchmarks
+
+Benchmarks are plain Python classes/functions with magic name prefixes:
+
+| Prefix | Measures |
+|---|---|
+| `time_` | Wall-clock execution time |
+| `mem_` | Memory footprint of returned object |
+| `peakmem_` | Peak resident memory |
+| `track_` | Arbitrary numeric value |
+| `timeraw_` | Execution time in a fresh subprocess |
+
+```python
+class TimePipelineIteration:
+    """Benchmark per-item pipeline throughput."""
+
+    params = [10, 100, 1000]
+    param_names = ["num_items"]
+
+    def setup(self, num_items):
+        """Called before each benchmark (excluded from timing)."""
+        self.pipeline = build_pipeline(num_items)
+
+    def time_iterate_all(self, num_items):
+        """Time iterating through every item."""
+        for i in range(len(self.pipeline)):
+            self.pipeline[i]
+```
+
+### Running ASV
+
+```bash
+# Benchmark the current commit
+make asv-run
+
+# Dry-run (quick smoke test, no results saved)
+make asv-quick
+
+# Benchmark a range of commits
+uv run asv run v0.1.0..HEAD
+
+# Compare two revisions
+make asv-compare REF1=main REF2=HEAD
+
+# Find the commit that introduced a regression
+uv run asv find v0.1.0..HEAD TimePipelineIteration.time_iterate_all
+
+# Show results for a commit
+uv run asv show HEAD
+```
+
+### Publishing Results
+
+```bash
+# Build the static HTML dashboard
+make asv-publish
+
+# Preview locally
+make asv-preview
+```
+
+The dashboard is a standalone HTML/JS application. For public hosting, push to
+GitHub Pages:
+
+```bash
+uv run asv gh-pages
+```
+
+### Configuration
+
+ASV is configured in `asv.conf.json` at the project root. Key settings:
+
+- **`build_command`**: Uses `maturin develop --release` to build the Rust
+  extension in each isolated benchmark environment
+- **`benchmark_dir`**: Points to `benchmarks/`
+- **`environment_type`**: `virtualenv` (ASV manages its own venvs)
+- **All ASV artifacts** (envs, results, HTML) are stored under `.asv/` and
+  gitignored
+
+## Criterion (Rust Benchmarks)
+
+Rust micro-benchmarks use [Criterion.rs](https://bheisler.github.io/criterion.rs/book/)
+and live in `src/rust/benches/`:
+
+```bash
+# Run Rust benchmarks
+cargo bench --manifest-path src/rust/Cargo.toml
+```
+
+Criterion produces HTML reports in `src/rust/target/criterion/`.
+
+## Make Targets Reference
+
+| Target | Description |
+|---|---|
+| `make bench` | pytest-benchmark + Criterion (fast, current code) |
+| `make asv-run` | ASV benchmark on HEAD (saves results) |
+| `make asv-quick` | ASV dry-run (no results saved) |
+| `make asv-publish` | Build ASV HTML dashboard |
+| `make asv-preview` | Serve ASV dashboard locally |
+| `make asv-compare REF1=... REF2=...` | Compare two git revisions |

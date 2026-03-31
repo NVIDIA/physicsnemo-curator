@@ -127,3 +127,69 @@ generated when the `html_reports` feature is enabled.
 make bench    # Python benchmarks + Rust benchmarks
 make check    # format-check + lint-check + typecheck + interrogate + deny
 ```
+
+## ASV Historical Benchmarks
+
+ASV (airspeed velocity) tracks performance across the project's git history,
+producing an interactive web dashboard.
+
+### Configuration
+
+ASV is configured in `asv.conf.json` at the project root. Benchmarks live in
+`benchmarks/` (separate from the pytest test suite in `test/`). All ASV
+artifacts (environments, results, HTML) are stored under `.asv/` and gitignored.
+
+### Running ASV benchmarks
+
+```bash
+# Benchmark the current commit
+make asv-run
+# Equivalent to: uv run asv run --quick HEAD^!
+
+# Dry-run (smoke test, no results saved)
+make asv-quick
+
+# Benchmark a range of commits
+uv run asv run v0.1.0..HEAD
+
+# Compare two revisions
+make asv-compare REF1=main REF2=HEAD
+# Equivalent to: uv run asv compare main HEAD
+
+# Find the commit that introduced a regression
+uv run asv find v0.1.0..HEAD TimePipelineIteration.time_iterate_all
+
+# Show results for a specific commit
+uv run asv show HEAD
+```
+
+### Publishing the dashboard
+
+```bash
+# Build static HTML dashboard
+make asv-publish
+# Output: .asv/html/
+
+# Preview locally
+make asv-preview
+
+# Push to GitHub Pages
+uv run asv gh-pages
+```
+
+### Writing ASV benchmarks
+
+ASV benchmarks use magic name prefixes:
+
+| Prefix | Measures |
+|---|---|
+| `time_` | Wall-clock execution time |
+| `mem_` | Memory footprint of returned object |
+| `peakmem_` | Peak resident memory |
+| `track_` | Arbitrary numeric value |
+| `timeraw_` | Execution time in a fresh subprocess |
+
+Benchmarks support `setup()`, `teardown()`, `setup_cache()` lifecycle methods
+and parameterization via `params` / `param_names` class attributes.
+
+See `benchmarks/bench_pipeline.py` for working examples.

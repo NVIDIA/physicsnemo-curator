@@ -5,6 +5,7 @@
 .PHONY: install install-docs setup-ci develop develop-release build \
         format format-check lint lint-check typecheck interrogate \
         test test-core test-mesh test-unit test-integration test-e2e test-device test-rust bench \
+        asv-run asv-quick asv-publish asv-preview asv-compare \
         deny docs docs-rust license check clean
 
 # ---------------------------------------------------------------------------
@@ -124,6 +125,26 @@ test-rust:
 bench:
 	uv run pytest test/ --benchmark-only && \
 	cargo bench --manifest-path src/rust/Cargo.toml
+
+## Run ASV benchmarks on the current HEAD commit
+asv-run:
+	uv run asv run --quick HEAD^!
+
+## Quick ASV benchmark (single pass, useful for smoke tests)
+asv-quick:
+	uv run asv run --quick --dry-run HEAD^!
+
+## Build the ASV HTML dashboard from collected results
+asv-publish:
+	uv run asv publish
+
+## Preview the ASV dashboard locally in a browser
+asv-preview:
+	uv run asv preview
+
+## Compare ASV results between two revisions (usage: make asv-compare REF1=main REF2=HEAD)
+asv-compare:
+	uv run asv compare $(REF1) $(REF2)
 
 # ---------------------------------------------------------------------------
 # Dependency auditing

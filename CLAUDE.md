@@ -22,6 +22,7 @@ The Rust extension is exposed as `curator._lib` and imported in
 | **ty** | Python type checking (Astral) | `uv run ty check` |
 | **pytest** | Python testing + coverage | `uv run pytest test/ --cov` |
 | **pytest-benchmark** | Python benchmarks | `uv run pytest --benchmark-only` |
+| **ASV** | Historical Python benchmarks | `uv run asv run`, `uv run asv publish` |
 | **interrogate** | Docstring coverage (99% threshold) | `uv run interrogate` |
 | **cargo fmt** | Rust formatting | `cargo fmt --manifest-path src/rust/Cargo.toml` |
 | **clippy** | Rust linting | `cargo clippy --manifest-path src/rust/Cargo.toml` |
@@ -45,6 +46,9 @@ make deny               # Audit Rust dependencies
 make test               # Python tests with coverage
 make test-rust          # Rust tests with nextest
 make bench              # Python + Rust benchmarks
+make asv-run            # ASV benchmarks on current commit
+make asv-publish        # Build ASV HTML dashboard
+make asv-preview        # Preview ASV dashboard locally
 
 make check              # All checks (format + lint + typecheck + interrogate + deny)
 make docs               # Build Sphinx documentation
@@ -64,7 +68,7 @@ make clean              # Remove build artifacts
 
 Defined in `pyproject.toml` under `[dependency-groups]`:
 
-- **dev**: ruff, ty, pytest, pytest-cov, pytest-benchmark, pre-commit, interrogate, maturin
+- **dev**: ruff, ty, pytest, pytest-cov, pytest-benchmark, asv, pre-commit, interrogate, maturin
 - **docs**: sphinx, nvidia-sphinx-theme, myst-parser, sphinx-autoapi, sphinx-autodoc-typehints, etc.
 
 Install with: `uv sync --group dev` or `uv sync --group docs`
@@ -83,6 +87,7 @@ Claude tools in `.claude/tools/`:
 | `cargo-clippy` | Run clippy on Rust code |
 | `cargo-nextest` | Run Rust tests with nextest |
 | `cargo-deny` | Audit Rust dependencies |
+| `asv` | Run ASV historical benchmarks |
 
 ## Skills Available
 

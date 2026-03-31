@@ -59,6 +59,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=7.0",
     "pytest-benchmark>=5.0",
+    "asv>=0.6",
     "pre-commit>=4.0",
     "interrogate>=1.7",
     "maturin>=1.0,<2.0",

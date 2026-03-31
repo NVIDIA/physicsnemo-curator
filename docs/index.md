@@ -68,5 +68,6 @@ user-guide/architecture
 user-guide/mesh
 user-guide/cli
 developer-guide/extending
+developer-guide/benchmarking
 autoapi/index
 ```

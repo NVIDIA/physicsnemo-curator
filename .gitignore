@@ -16,6 +16,7 @@ htmlcov/
 
 # Benchmarks
 .benchmarks/
+.asv/
 
 # Sphinx docs build
 docs/_build/
