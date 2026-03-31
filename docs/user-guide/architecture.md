@@ -5,7 +5,7 @@ PhysicsNeMo Curator is built around three core abstractions — **Source**,
 
 ## Overview
 
-```
+```text
 ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
 │  Source   │────▶│ Filter A │────▶│ Filter B │────▶│   Sink   │
 │ (reader)  │     │(transform)│    │(transform)│    │ (writer) │
@@ -158,7 +158,12 @@ class FileStore(Protocol):
     # returns a local filesystem path
 ```
 
-Two built-in implementations:
+Built-in implementations are registered with each submodule's
+{class}`~curator.core.registry.Registry` and are selectable in the CLI.
+Users can also register custom stores at runtime (see {ref}`store-registration`
+above).
+
+Two built-in implementations are provided:
 
 ### LocalFileStore
 
@@ -215,21 +220,44 @@ class DatabaseFileStore:
 ## Registry
 
 The {class}`~curator.core.registry.Registry` is a global singleton that
-tracks all submodules and their components:
+tracks all submodules, their pipeline components, and their file stores:
 
 ```python
 from curator.core.registry import registry
 
 # Registration happens at import time in each submodule's __init__.py
 registry.register_submodule("mesh", "Mesh processing", "physicsnemo.mesh")
+registry.register_store("mesh", "Local directory", LocalFileStore)
+registry.register_store("mesh", "Remote (fsspec)", FsspecFileStore)
 registry.register_source("mesh", VTKSource)
 registry.register_filter("mesh", MeanFilter)
 registry.register_sink("mesh", MeshSink)
 
 # Query
 registry.submodules()         # {"mesh": SubmoduleEntry(...)}
+registry.stores("mesh")       # {"Local directory": <class LocalFileStore>, ...}
 registry.sources("mesh")      # {"VTK Reader": <class VTKSource>}
+registry.filters("mesh")      # {"Mean Statistics": <class MeanFilter>}
+registry.sinks("mesh")        # {"PhysicsNeMo Mesh Writer": <class MeshSink>}
 ```
 
 Each {class}`~curator.core.registry.SubmoduleEntry` can check whether its
 dependencies are available via the `.available` property.
+
+(store-registration)=
+
+### Store Registration
+
+File stores are registered per-submodule with a human-readable display
+name.  The built-in stores (`LocalFileStore` and `FsspecFileStore`) are
+registered automatically when a submodule is imported.  Users can register
+custom stores at runtime:
+
+```python
+from curator.core.registry import registry
+
+registry.register_store("mesh", "My Database Store", DatabaseFileStore)
+```
+
+The interactive CLI uses the store registry to present data-source options
+before prompting for a reader.

@@ -22,18 +22,53 @@ dependencies.
 {class}`~curator.core.store.FileStore` and converts each to a
 {class}`physicsnemo.mesh.Mesh` using {func}`physicsnemo.mesh.io.from_pyvista`.
 
-Use the convenience constructors for common cases:
+The primary constructor accepts a `FileStore` directly — this is the
+recommended pattern for programmatic use:
 
-- {meth}`~curator.mesh.sources.vtk.VTKSource.from_path` — local directory
-  or file
-- {meth}`~curator.mesh.sources.vtk.VTKSource.from_url` — any
-  ``fsspec``-compatible URL (S3, HuggingFace Hub, HTTPS, …)
+```python
+from curator.core.store import LocalFileStore, FsspecFileStore
+from curator.mesh.sources.vtk import VTKSource
 
-Or inject a custom {class}`~curator.core.store.FileStore` directly.
+# Local directory
+store = LocalFileStore("./data/", extensions=frozenset({".vtk", ".vtu"}))
+source = VTKSource(store=store, manifold_dim=2)
+
+# Remote (HuggingFace Hub, S3, HTTPS, ...)
+store = FsspecFileStore(
+    "hf://datasets/neashton/drivaerml/run_1/slices",
+    extensions=frozenset({".vtp"}),
+)
+source = VTKSource(store=store)
+
+# Custom store
+source = VTKSource(store=my_database_store, point_source="cell_centroids")
+```
+
+Convenience classmethods are also available for quick one-liners:
+
+- {meth}`~curator.mesh.sources.vtk.VTKSource.from_path` — wraps a
+  {class}`~curator.core.store.LocalFileStore`
+- {meth}`~curator.mesh.sources.vtk.VTKSource.from_url` — wraps a
+  {class}`~curator.core.store.FsspecFileStore`
+
+```python
+# One-liner shortcuts
+source = VTKSource.from_path("./data/")
+source = VTKSource.from_url("hf://datasets/neashton/drivaerml/run_1/slices")
+```
 
 **Supported formats:** `.vtk`, `.vtp`, `.vtu`, `.vts`, `.vtm`
 
-**Parameters (constructors):**
+**Constructor parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `store` | `FileStore` | *required* | File store providing indexed access to VTK files |
+| `manifold_dim` | `int \| "auto"` | `"auto"` | Target manifold dimension (0–3) |
+| `point_source` | `str` | `"vertices"` | `"vertices"` or `"cell_centroids"` |
+| `warn_on_lost_data` | `bool` | `True` | Warn when data arrays are discarded |
+
+**Convenience classmethod parameters (``from_path`` / ``from_url``):**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -41,9 +76,9 @@ Or inject a custom {class}`~curator.core.store.FileStore` directly.
 | `file_pattern` | `str` | `"*"` / `"**"` | Glob pattern for filtering files |
 | `storage_options` | `dict` | `None` | fsspec auth/config (``from_url`` only) |
 | `cache_storage` | `str` | `None` | Local cache dir (``from_url`` only) |
-| `manifold_dim` | `int \| "auto"` | `"auto"` | Target manifold dimension (0–3) |
-| `point_source` | `str` | `"vertices"` | `"vertices"` or `"cell_centroids"` |
-| `warn_on_lost_data` | `bool` | `True` | Warn when data arrays are discarded |
+
+All conversion parameters from the constructor table above (``manifold_dim``,
+``point_source``, ``warn_on_lost_data``) are also accepted.
 
 **Manifold dimensions:**
 
@@ -65,40 +100,47 @@ Or inject a custom {class}`~curator.core.store.FileStore` directly.
 **Examples:**
 
 ```python
+from curator.core.store import LocalFileStore, FsspecFileStore
 from curator.mesh.sources.vtk import VTKSource
 
-# Read all VTK files from a local directory
-source = VTKSource.from_path("./data/")
+# --- Primary pattern: construct store + inject ---
 
-# Read only files matching a pattern
-source = VTKSource.from_path("./data/", file_pattern="timestep_*")
+# Local directory with extension filter
+store = LocalFileStore("./data/", extensions=frozenset({".vtk", ".vtu"}))
+source = VTKSource(store=store)
 
 # Read as volume mesh
-source = VTKSource.from_path("./volumes/", manifold_dim=3)
+store = LocalFileStore("./volumes/")
+source = VTKSource(store=store, manifold_dim=3)
 
 # Use cell centroids for CFD polyhedral meshes
-source = VTKSource.from_path(
-    "./cfd/",
+store = LocalFileStore("./cfd/")
+source = VTKSource(
+    store=store,
     point_source="cell_centroids",
     warn_on_lost_data=False,
 )
 
-# Read from HuggingFace Hub
-source = VTKSource.from_url(
-    "hf://datasets/neashton/drivaerml/run_1/slices"
+# HuggingFace Hub dataset
+store = FsspecFileStore(
+    "hf://datasets/neashton/drivaerml/run_1/slices",
+    extensions=frozenset({".vtp"}),
 )
+source = VTKSource(store=store)
 
-# Read from S3 (public bucket)
-source = VTKSource.from_url(
+# S3 (public bucket)
+store = FsspecFileStore(
     "s3://my-bucket/cfd-data/",
     storage_options={"anon": True},
 )
-
-# Custom FileStore (dependency injection)
-from curator.core.store import LocalFileStore
-
-store = LocalFileStore("./data/", extensions=frozenset({".vtk"}))
 source = VTKSource(store=store, manifold_dim=2)
+
+# --- Convenience classmethods (one-liners) ---
+
+source = VTKSource.from_path("./data/")
+source = VTKSource.from_path("./data/", file_pattern="timestep_*")
+source = VTKSource.from_url("hf://datasets/neashton/drivaerml/run_1/slices")
+source = VTKSource.from_url("s3://my-bucket/cfd-data/", storage_options={"anon": True})
 ```
 
 ### MeanFilter
@@ -187,20 +229,30 @@ paths = pipeline[0]  # ['./output/mesh_0000_0']
 ## Full Pipeline Example
 
 ```python
+from curator.core.store import LocalFileStore, FsspecFileStore
 from curator.mesh.sources.vtk import VTKSource
 from curator.mesh.filters.mean import MeanFilter
 from curator.mesh.sinks.mesh_writer import MeshSink
 
-# Local data
+# Local data with explicit store
+store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
 pipeline = (
-    VTKSource.from_path("./cfd_results/", manifold_dim=2)
+    VTKSource(store=store, manifold_dim=2)
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )
 
-# Or remote data from HuggingFace
+# Or remote data from HuggingFace with explicit store
+store = FsspecFileStore("hf://datasets/neashton/drivaerml/run_1/slices")
 pipeline = (
-    VTKSource.from_url("hf://datasets/neashton/drivaerml/run_1/slices")
+    VTKSource(store=store)
+    .filter(MeanFilter(output="stats.parquet"))
+    .write(MeshSink(output_dir="./output/"))
+)
+
+# Or use convenience classmethods for quick pipelines
+pipeline = (
+    VTKSource.from_path("./cfd_results/", manifold_dim=2)
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )

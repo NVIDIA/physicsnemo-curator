@@ -12,16 +12,51 @@ Every component has:
 3. An **`__init__`** accepting those parameters as keyword arguments
 4. A core method (`__getitem__`, `__call__`, or `__call__`) implementing the logic
 
+## Custom FileStore
+
+A {class}`~curator.core.store.FileStore` maps integer indices to local
+file paths.  Any object with `__len__` and `__getitem__` (returning a
+`str` path) satisfies the protocol:
+
+```python
+class DatabaseFileStore:
+    """Fetch files from a database by row id."""
+
+    def __init__(self, connection_string: str, table: str) -> None:
+        self._db = connect(connection_string)
+        self._rows = self._db.query(f"SELECT id FROM {table}")
+
+    def __len__(self) -> int:
+        return len(self._rows)
+
+    def __getitem__(self, index: int) -> str:
+        row_id = self._rows[index]
+        return self._db.download_to_cache(row_id)
+```
+
+Register custom stores with the global registry so the interactive CLI
+can offer them as a data-source option:
+
+```python
+from curator.core.registry import registry
+
+registry.register_store("mesh", "My Database", DatabaseFileStore)
+```
+
+The CLI will then show "My Database" alongside "Local directory" and
+"Remote (fsspec)" in the store selection prompt.
+
 ## Custom Source
 
-A source reads data and yields items.  Subclass
-{class}`~curator.core.base.Source` and implement `__len__`, `__getitem__`,
-and `params`:
+A source reads data from a {class}`~curator.core.store.FileStore` and
+yields items.  Subclass {class}`~curator.core.base.Source` and implement
+`__len__`, `__getitem__`, and `params`:
 
 ```python
 from __future__ import annotations
 from typing import ClassVar, TYPE_CHECKING
 from curator.core.base import Source, Param
+from curator.core.store import FileStore
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -34,35 +69,35 @@ class MySource(Source["Mesh"]):
     @classmethod
     def params(cls) -> list[Param]:
         return [
-            Param(name="input_path", description="Path to data", type=str),
+            Param(name="option", description="Processing option", type=str, default="default"),
         ]
 
-    def __init__(self, input_path: str) -> None:
-        self._path = input_path
-        self._items = self._discover()
+    def __init__(self, store: FileStore, option: str = "default") -> None:
+        self._store = store
+        self._option = option
 
     def __len__(self) -> int:
-        return len(self._items)
+        return len(self._store)
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
-        item = self._items[index]
-        mesh = self._load(item)
+        path = self._store[index]
+        mesh = self._load(path)
         yield mesh
 
-    def _discover(self) -> list[str]:
-        """Find items to process."""
-        ...
-
-    def _load(self, item: str) -> Mesh:
-        """Load a single item."""
+    def _load(self, path: str) -> Mesh:
+        """Load a single item from a local file path."""
         ...
 ```
 
 Key points:
 
+- The source receives a `FileStore` — it never handles file discovery or
+  downloads directly.
 - `__getitem__` is a **generator** (uses `yield`).  It can yield multiple
   items per index if needed.
 - `params()` drives the CLI prompts and documents the constructor interface.
+  Do **not** include a `store` parameter — the CLI constructs the store
+  separately.
 
 ## Custom Filter
 
@@ -195,6 +230,7 @@ submodule's `__init__.py`:
 ```python
 # src/curator/mymodule/__init__.py
 from curator.core.registry import registry
+from curator.core.store import LocalFileStore, FsspecFileStore
 
 from .sources.my_source import MySource
 from .filters.my_filter import MyFilter
@@ -205,6 +241,8 @@ registry.register_submodule(
     "My custom data processing",
     "some_dependency",  # import check for availability
 )
+registry.register_store("mymodule", "Local directory", LocalFileStore)
+registry.register_store("mymodule", "Remote (fsspec)", FsspecFileStore)
 registry.register_source("mymodule", MySource)
 registry.register_filter("mymodule", MyFilter)
 registry.register_sink("mymodule", MySink)
@@ -214,24 +252,27 @@ The CLI will discover the submodule when `curator.mymodule` is imported.
 
 ## Testing
 
-Use pytest with `pytest.importorskip` for optional dependencies:
+Use the `requires` marker to skip tests when optional dependencies are
+missing:
 
 ```python
 import pytest
 
-pv = pytest.importorskip("pyvista")
-torch = pytest.importorskip("torch")
+pytestmark = pytest.mark.requires("mesh")
 
+from curator.core.store import LocalFileStore
 from curator.mesh.sources.vtk import VTKSource
 
 class TestMySource:
     def test_len(self, tmp_path):
         # Create test fixtures...
-        source = MySource(input_path=str(tmp_path))
+        store = LocalFileStore(str(tmp_path))
+        source = MySource(store=store)
         assert len(source) > 0
 
     def test_yields_correct_type(self, tmp_path):
-        source = MySource(input_path=str(tmp_path))
+        store = LocalFileStore(str(tmp_path))
+        source = MySource(store=store)
         item = next(source[0])
         assert isinstance(item, Mesh)
 ```
@@ -239,7 +280,10 @@ class TestMySource:
 Run tests with:
 
 ```bash
-make test
-# or
-uv run pytest test/ -v
+make test           # All tests
+make test-core      # Core tests only (no optional deps)
+make test-mesh      # Mesh tests only
+make test-unit      # Unit tests
+make test-integration  # Integration tests
+make test-e2e       # End-to-end tests
 ```

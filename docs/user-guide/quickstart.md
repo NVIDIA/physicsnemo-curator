@@ -13,38 +13,67 @@ pip install physicsnemo-curator[mesh]
 uv sync --group mesh
 ```
 
-## Step 1: Read VTK Files
+## Step 1: Create a FileStore
 
-The {class}`~curator.mesh.sources.vtk.VTKSource` reads VTK files (`.vtk`,
-`.vtp`, `.vtu`, `.vts`, `.vtm`) from a directory and converts each to a
+A {class}`~curator.core.store.FileStore` maps integer indices to local file
+paths.  It decouples *where* data lives from *how* it's read.
+
+```python
+from curator.core.store import LocalFileStore, FsspecFileStore
+
+# Local directory
+store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
+print(f"Found {len(store)} files")
+
+# Or a remote dataset (HuggingFace Hub, S3, HTTPS, ...)
+store = FsspecFileStore(
+    "hf://datasets/neashton/drivaerml/run_1/slices",
+    extensions=frozenset({".vtp"}),
+)
+print(f"Found {len(store)} remote files")
+```
+
+## Step 2: Read VTK Files
+
+The {class}`~curator.mesh.sources.vtk.VTKSource` accepts a
+{class}`~curator.core.store.FileStore` and converts each VTK file to a
 {class}`physicsnemo.mesh.Mesh` using
 {func}`physicsnemo.mesh.io.from_pyvista`.
 
 ```python
 from curator.mesh.sources.vtk import VTKSource
 
-source = VTKSource.from_path("./cfd_results/")
-print(f"Found {len(source)} VTK files")
+source = VTKSource(store=store)
+print(f"Source has {len(source)} items")
 
 # Access a single mesh (lazy — returns a generator)
 mesh = next(source[0])
 print(f"Points: {mesh.n_points}, Cells: {mesh.n_cells}")
 ```
 
+You can also use convenience classmethods that create the store internally:
+
+```python
+# Quick one-liners
+source = VTKSource.from_path("./cfd_results/")
+source = VTKSource.from_url("hf://datasets/neashton/drivaerml/run_1/slices")
+```
+
 ### Conversion Options
 
-`VTKSource` exposes the full `from_pyvista` conversion interface:
+`VTKSource` exposes the full `from_pyvista` conversion interface.  These
+options apply regardless of which store is used:
 
 ```python
 # Read as point cloud (no cell topology)
-source = VTKSource.from_path("./data/", manifold_dim=0)
+source = VTKSource(store=store, manifold_dim=0)
 
 # Read volume meshes (tetrahedralize)
-source = VTKSource.from_path("./volumes/", manifold_dim=3)
+source = VTKSource(store=store, manifold_dim=3)
 
 # Use cell centroids as points (avoids tetrahedralization for CFD)
-source = VTKSource.from_path(
-    "./cfd/",
+source = VTKSource(
+    store=store,
     point_source="cell_centroids",
     warn_on_lost_data=False,
 )
@@ -56,7 +85,7 @@ source = VTKSource.from_path(
 | `point_source` | `"vertices"`, `"cell_centroids"` | What becomes mesh points |
 | `warn_on_lost_data` | `True` / `False` | Warn on discarded data arrays |
 
-## Step 2: Add Filters
+## Step 3: Add Filters
 
 Filters transform the data stream.  The
 {class}`~curator.mesh.filters.mean.MeanFilter` computes per-field spatial
@@ -72,7 +101,7 @@ Filters are generators — they can yield zero, one, or many items per input.
 `MeanFilter` is a pass-through: it computes statistics and yields the mesh
 unchanged.
 
-## Step 3: Write Output
+## Step 4: Write Output
 
 The {class}`~curator.mesh.sinks.mesh_writer.MeshSink` saves meshes in the
 physicsnemo native tensordict format:
@@ -83,13 +112,19 @@ from curator.mesh.sinks.mesh_writer import MeshSink
 sink = MeshSink(output_dir="./output/")
 ```
 
-## Step 4: Build and Run the Pipeline
+## Step 5: Build and Run the Pipeline
 
 Chain the components together using the fluent API:
 
 ```python
+from curator.core.store import LocalFileStore
+from curator.mesh.sources.vtk import VTKSource
+from curator.mesh.filters.mean import MeanFilter
+from curator.mesh.sinks.mesh_writer import MeshSink
+
+store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
 pipeline = (
-    VTKSource.from_path("./cfd_results/")
+    VTKSource(store=store)
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )
@@ -109,7 +144,7 @@ mean_filter.flush()
 Each call to `pipeline[i]` processes only that item through the full
 Source → Filter → Sink chain and returns the output file path(s).
 
-## Step 5: Inspect Results
+## Step 6: Inspect Results
 
 ```python
 import pyarrow.parquet as pq
@@ -129,8 +164,9 @@ print(f"Loaded mesh: {mesh.n_points} points, {mesh.n_cells} cells")
 Filters compose naturally:
 
 ```python
+store = LocalFileStore("./data/")
 pipeline = (
-    VTKSource.from_path("./data/")
+    VTKSource(store=store)
     .filter(FilterA())
     .filter(FilterB())
     .filter(FilterC())
