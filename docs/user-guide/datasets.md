@@ -52,6 +52,7 @@ for mesh in source[0]:
 from curator.mesh.sources.ahmedml import AhmedMLSource
 from curator.mesh.filters.mean import MeanFilter
 from curator.mesh.sinks.mesh_writer import MeshSink
+from curator import run_pipeline
 
 pipeline = (
     AhmedMLSource(mesh_type="boundary")
@@ -59,10 +60,9 @@ pipeline = (
     .write(MeshSink(output_dir="./output/"))
 )
 
-# Process first 10 runs
-for i in range(10):
-    paths = pipeline[i]
-    print(f"Run {i}: {paths}")
+# Process first 10 runs in parallel
+results = run_pipeline(pipeline, n_jobs=4, indices=list(range(10)))
+print(f"Wrote {sum(len(r) for r in results)} files")
 ```
 
 ### WindsorML

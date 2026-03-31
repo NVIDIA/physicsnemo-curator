@@ -29,6 +29,7 @@ you need.  Each submodule has its own group:
 | **xr** | *(planned)* xarray, zarr | — |
 | **mdt** | *(planned)* torch | — |
 | **cli** | click, questionary | `pip install .[cli]` |
+| **parallel** | joblib, dask | `pip install .[parallel]` |
 | **dev** | ruff, ty, pytest, maturin, interrogate, pre-commit | `uv sync --group dev` |
 | **docs** | sphinx, nvidia-sphinx-theme, myst-parser, etc. | `uv sync --group docs` |
 

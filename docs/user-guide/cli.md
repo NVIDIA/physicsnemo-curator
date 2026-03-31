@@ -118,6 +118,7 @@ Flushed Mean Statistics → stats.parquet
 Everything the CLI does can be done in Python:
 
 ```python
+from curator import run_pipeline
 from curator.core.store import LocalFileStore
 from curator.mesh.sources.vtk import VTKSource
 from curator.mesh.filters.mean import MeanFilter
@@ -130,8 +131,14 @@ pipeline = (
     .write(MeshSink(output_dir="./output/"))
 )
 
-for i in range(len(pipeline)):
-    pipeline[i]
+# Sequential with progress bar (equivalent to CLI behaviour)
+results = run_pipeline(pipeline)
 
+# Or parallel across multiple cores
+results = run_pipeline(pipeline, n_jobs=-1, backend="processes")
+
+# Flush stateful filters (sequential only)
 pipeline.filters[0].flush()
 ```
+
+See {doc}`parallel` for details on `run_pipeline` and available backends.

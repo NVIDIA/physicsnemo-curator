@@ -287,3 +287,27 @@ make test-unit      # Unit tests
 make test-integration  # Integration tests
 make test-e2e       # End-to-end tests
 ```
+
+## Executing Components
+
+Once components are registered, use {func}`~curator.core.parallel.run_pipeline`
+to execute a pipeline efficiently:
+
+```python
+from curator import run_pipeline
+
+pipeline = (
+    MySource(store=store)
+    .filter(MyFilter())
+    .write(MySink(output_dir="./out/"))
+)
+
+# Sequential
+results = run_pipeline(pipeline)
+
+# Parallel — uses all CPUs with the best available backend
+results = run_pipeline(pipeline, n_jobs=-1)
+```
+
+See {doc}`/user-guide/parallel` for backend options and process-isolation
+considerations.

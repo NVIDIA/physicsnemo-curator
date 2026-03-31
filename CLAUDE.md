@@ -71,6 +71,11 @@ Defined in `pyproject.toml` under `[dependency-groups]`:
 - **dev**: ruff, ty, pytest, pytest-cov, pytest-benchmark, asv, pre-commit, interrogate, maturin
 - **docs**: sphinx, nvidia-sphinx-theme, myst-parser, sphinx-autoapi, sphinx-autodoc-typehints, etc.
 
+Optional extras in `[project.optional-dependencies]`:
+
+- **parallel**: joblib, dask (for `run_pipeline` multiprocess backends)
+- **cli**: click, questionary (for interactive CLI)
+
 Install with: `uv sync --group dev` or `uv sync --group docs`
 
 ## Custom Tools Available

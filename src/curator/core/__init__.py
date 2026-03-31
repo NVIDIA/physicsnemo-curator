@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 from curator.core.base import Filter, Param, Pipeline, Sink, Source
+from curator.core.parallel import run_pipeline
 from curator.core.registry import registry
 from curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 
@@ -32,4 +33,5 @@ __all__ = [
     "Sink",
     "Source",
     "registry",
+    "run_pipeline",
 ]

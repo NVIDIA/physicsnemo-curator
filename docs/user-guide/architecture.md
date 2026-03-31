@@ -113,6 +113,33 @@ Execution flow for `pipeline[i]`:
 3. Feed into the sink: `sink(stream, index=i)`
 4. Return the list of output file paths
 
+### Batch & Parallel Execution
+
+For processing all indices, use {func}`~curator.core.parallel.run_pipeline`
+instead of a manual loop:
+
+```python
+from curator import run_pipeline
+
+# Sequential with progress bar
+results = run_pipeline(pipeline)
+
+# Parallel across all CPUs
+results = run_pipeline(pipeline, n_jobs=-1, backend="processes")
+```
+
+`run_pipeline` supports multiple backends — `"sequential"`, `"processes"`,
+`"loky"` (joblib), and `"dask"` — with automatic detection of the best
+available option.  See {doc}`/user-guide/parallel` for details.
+
+```{important}
+Multiprocess backends execute each index in a **separate process** with
+an independent copy of the pipeline.  Stateful filters (e.g.
+``MeanFilter._rows``) accumulate per-process state that is not merged
+back.  Use sequential execution when filter side-effects must be
+aggregated.
+```
+
 ### Param
 
 {class}`~curator.core.base.Param` describes a configurable parameter on

@@ -144,6 +144,36 @@ mean_filter.flush()
 Each call to `pipeline[i]` processes only that item through the full
 Source → Filter → Sink chain and returns the output file path(s).
 
+### Using `run_pipeline` (recommended)
+
+For batch execution, use {func}`~curator.core.parallel.run_pipeline`
+instead of a manual loop.  It handles progress bars, index management,
+and supports parallel backends:
+
+```python
+from curator import run_pipeline
+
+# Sequential with progress bar
+results = run_pipeline(pipeline)
+print(f"Wrote {sum(len(r) for r in results)} files")
+
+# Parallel across 4 worker processes
+results = run_pipeline(pipeline, n_jobs=4, backend="processes")
+
+# Use all CPUs with automatic backend selection
+results = run_pipeline(pipeline, n_jobs=-1)
+
+# Process a subset
+results = run_pipeline(pipeline, indices=[0, 1, 2])
+```
+
+```{note}
+Stateful filter side-effects (like `MeanFilter.flush()`) are **not** merged
+across processes when running in parallel.  Use sequential execution
+(`n_jobs=1`) when you need to collect filter state, or see
+{doc}`parallel` for details.
+```
+
 ## Step 6: Inspect Results
 
 ```python
