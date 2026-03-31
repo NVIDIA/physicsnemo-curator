@@ -27,21 +27,34 @@ This module registers its components with the global
 from __future__ import annotations
 
 from curator.core.registry import registry
-from curator.core.store import FsspecFileStore, LocalFileStore
+from curator.core.store import FsspecFileStore, LocalFileStore, RunIndexedFileStore
 from curator.mesh.filters.mean import MeanFilter
 from curator.mesh.sinks.mesh_writer import MeshSink
+from curator.mesh.sources.ahmedml import AhmedMLSource
+from curator.mesh.sources.drivaerml import DrivAerMLSource
 from curator.mesh.sources.vtk import VTKSource
+from curator.mesh.sources.windsorml import WindsorMLSource
+from curator.mesh.sources.windtunnel import WindTunnelSource
 
 # Register submodule and components with the global registry.
 registry.register_submodule("mesh", "Mesh processing (physicsnemo.mesh.Mesh)", "physicsnemo.mesh")
 registry.register_store("mesh", "Local directory", LocalFileStore)
 registry.register_store("mesh", "Remote (fsspec)", FsspecFileStore)
+registry.register_store("mesh", "Run-indexed (remote)", RunIndexedFileStore)
 registry.register_source("mesh", VTKSource)
+registry.register_source("mesh", DrivAerMLSource)
+registry.register_source("mesh", AhmedMLSource)
+registry.register_source("mesh", WindsorMLSource)
+registry.register_source("mesh", WindTunnelSource)
 registry.register_filter("mesh", MeanFilter)
 registry.register_sink("mesh", MeshSink)
 
 __all__ = [
+    "AhmedMLSource",
+    "DrivAerMLSource",
     "MeanFilter",
     "MeshSink",
     "VTKSource",
+    "WindsorMLSource",
+    "WindTunnelSource",
 ]

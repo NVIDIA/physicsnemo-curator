@@ -14,4 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Mesh data sources."""
+"""Mesh data sources.
+
+Provides pipeline sources for reading mesh data from local files,
+remote URLs, and curated HuggingFace Hub datasets.
+"""

@@ -16,7 +16,7 @@
 
 """File-discovery and access abstractions for pipeline sources.
 
-This module provides the :class:`FileStore` protocol and two concrete
+This module provides the :class:`FileStore` protocol and three concrete
 implementations:
 
 * :class:`LocalFileStore` — discovers and serves files from a local
@@ -24,6 +24,9 @@ implementations:
 * :class:`FsspecFileStore` — discovers and serves files from any
   ``fsspec``-compatible URL (S3, HuggingFace Hub, HTTPS, …),
   transparently caching them to a local directory.
+* :class:`RunIndexedFileStore` — discovers run-indexed directories
+  (``run_0/``, ``run_1/``, …) from a remote ``fsspec`` URL and
+  resolves per-run file templates on demand.
 
 Sources (e.g. :class:`~curator.mesh.sources.vtk.VTKSource`) accept a
 :class:`FileStore` via dependency injection so that file-access logic is
@@ -342,6 +345,163 @@ class FsspecFileStore:
             return remote_path
 
         # Build a deterministic local cache path.
+        local_path = pathlib.Path(self._cache_storage) / remote_path.lstrip("/")
+        if not local_path.exists():
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            self._fs.get(remote_path, str(local_path))
+
+        return str(local_path)
+
+
+# ---------------------------------------------------------------------------
+# RunIndexedFileStore
+# ---------------------------------------------------------------------------
+
+
+class RunIndexedFileStore:
+    """Discover ``run_<i>/`` directories and resolve per-run file templates.
+
+    Many CFD benchmark datasets on HuggingFace Hub organise results as
+    numbered run directories (``run_0/``, ``run_1/``, …), each containing
+    identically-named files with a run index substituted into the filename.
+
+    This store discovers all ``run_<i>/`` directories under a base URL,
+    extracts the integer indices, sorts them, and resolves a file
+    *template* on demand.  File templates use Python ``str.format``
+    syntax with a single ``{i}`` placeholder that is replaced by the
+    run index.
+
+    Parameters
+    ----------
+    url : str
+        Base ``fsspec``-compatible URL containing ``run_<i>/`` dirs.
+        E.g. ``"hf://datasets/neashton/drivaerml"``.
+    file_template : str
+        Per-run filename template with ``{i}`` placeholder.
+        E.g. ``"boundary_{i}.vtp"`` resolves to ``"run_5/boundary_5.vtp"``
+        for the run at index 5.
+    storage_options : dict[str, object] | None
+        Extra keyword arguments forwarded to the ``fsspec`` filesystem.
+    cache_storage : str | None
+        Local directory for cached downloads.  ``None`` → temp dir.
+    run_prefix : str
+        Directory prefix before the integer index.  Defaults to
+        ``"run_"``.
+
+    Raises
+    ------
+    ValueError
+        If no ``run_<i>/`` directories are found at *url*.
+
+    Examples
+    --------
+    >>> store = RunIndexedFileStore(
+    ...     "hf://datasets/neashton/drivaerml",
+    ...     file_template="boundary_{i}.vtp",
+    ... )
+    >>> len(store)       # number of discovered runs
+    484
+    >>> store[0]         # local cached path
+    '/tmp/.../run_1/boundary_1.vtp'
+    """
+
+    def __init__(
+        self,
+        url: str,
+        file_template: str,
+        storage_options: dict[str, object] | None = None,
+        cache_storage: str | None = None,
+        run_prefix: str = "run_",
+    ) -> None:
+        import re
+
+        import fsspec
+
+        self._url = url.rstrip("/")
+        self._file_template = file_template
+        self._storage_options = storage_options or {}
+        self._cache_storage = cache_storage or tempfile.mkdtemp(prefix="curator_cache_")
+        self._run_prefix = run_prefix
+
+        self._fs, self._root_path = fsspec.core.url_to_fs(self._url, **self._storage_options)
+        self._protocol = self._fs.protocol if isinstance(self._fs.protocol, str) else self._fs.protocol[0]
+
+        # Discover run directories.
+        run_pattern = re.compile(rf"^{re.escape(self._run_prefix)}(\d+)$")
+        entries = self._fs.ls(self._root_path, detail=False)
+
+        run_indices: list[int] = []
+        for entry in entries:
+            basename = pathlib.PurePosixPath(entry).name
+            m = run_pattern.match(basename)
+            if m:
+                run_indices.append(int(m.group(1)))
+
+        if not run_indices:
+            msg = f"No {self._run_prefix}<i>/ directories found at {self._url}."
+            raise ValueError(msg)
+
+        self._run_indices = sorted(run_indices)
+
+    def __len__(self) -> int:
+        """Return the number of discovered run directories."""
+        return len(self._run_indices)
+
+    def __getitem__(self, index: int) -> str:
+        """Return a local cached path for the resolved template at *index*.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Returns
+        -------
+        str
+            Local filesystem path to the (cached) file.
+
+        Raises
+        ------
+        IndexError
+            If *index* is out of range.
+        """
+        if index < -len(self._run_indices) or index >= len(self._run_indices):
+            msg = f"Index {index} out of range for store with {len(self._run_indices)} runs."
+            raise IndexError(msg)
+
+        run_id = self._run_indices[index]
+        filename = self._file_template.format(i=run_id)
+        remote_path = f"{self._root_path}/{self._run_prefix}{run_id}/{filename}"
+        return self._ensure_local(remote_path)
+
+    @property
+    def run_indices(self) -> list[int]:
+        """Return the sorted list of discovered run indices."""
+        return list(self._run_indices)
+
+    def __repr__(self) -> str:
+        """Return a string representation of the store."""
+        return (
+            f"RunIndexedFileStore(url={self._url!r}, template={self._file_template!r}, runs={len(self._run_indices)})"
+        )
+
+    def _ensure_local(self, remote_path: str) -> str:
+        """Download *remote_path* to the cache (if not already present).
+
+        Parameters
+        ----------
+        remote_path : str
+            Path as returned by the fsspec filesystem (no protocol
+            prefix).
+
+        Returns
+        -------
+        str
+            Local filesystem path.
+        """
+        if self._protocol in ("file", ""):
+            return remote_path
+
         local_path = pathlib.Path(self._cache_storage) / remote_path.lstrip("/")
         if not local_path.exists():
             local_path.parent.mkdir(parents=True, exist_ok=True)

@@ -66,6 +66,7 @@ user-guide/installation
 user-guide/quickstart
 user-guide/architecture
 user-guide/mesh
+user-guide/datasets
 user-guide/cli
 developer-guide/extending
 developer-guide/benchmarking
