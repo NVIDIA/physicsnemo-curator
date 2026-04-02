@@ -302,7 +302,6 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh
             One mesh per slice plane file.
         """
-        assert isinstance(self._store, FsspecFileStore)  # noqa: S101
         # The FsspecFileStore for slices discovers all slice files across
         # all runs.  We partition them by run directory.
         #

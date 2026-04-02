@@ -229,6 +229,36 @@ class Registry:
         """
         return dict(self._submodules[submodule].sinks)
 
+    def list_sources(self, submodule: str) -> list[type]:
+        """Return a list of registered source classes for *submodule*.
+
+        Parameters
+        ----------
+        submodule : str
+            Submodule name.
+
+        Returns
+        -------
+        list[type]
+            List of source classes (each has a ``name`` attribute).
+        """
+        return list(self._submodules[submodule].sources.values())
+
+    def list_stores(self, submodule: str) -> list[tuple[str, type]]:
+        """Return a list of registered stores for *submodule*.
+
+        Parameters
+        ----------
+        submodule : str
+            Submodule name.
+
+        Returns
+        -------
+        list[tuple[str, type]]
+            List of (display_name, class) tuples.
+        """
+        return list(self._submodules[submodule].stores.items())
+
     # -- Internal ------------------------------------------------------------
 
     def _ensure_submodule(self, name: str) -> None:
