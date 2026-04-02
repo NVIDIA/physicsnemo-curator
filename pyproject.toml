@@ -23,7 +23,7 @@ name = "physicsnemo-curator"
 version = "0.1.0"
 description = "Rust-based ETL toolkit for deep learning data curation with Python APIs"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 dependencies = [
     "fsspec>=2023.1.0",
@@ -77,7 +77,7 @@ docs = [
     "sphinx>=9.0,<10",
     "nvidia-sphinx-theme>=0.0.9",
     "myst-parser>=5.0,<6",
-    "sphinx-autodoc-typehints>=3.9,<4",
+    "sphinx-autodoc-typehints>=3.1,<3.7",
     "sphinx-autoapi>=3.8,<4",
     "sphinx-copybutton>=0.5",
     "sphinx-design>=0.6",
@@ -124,7 +124,7 @@ module-name = "curator._lib"
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py311"
 exclude = ["examples-old", "benchmarks"]
 
 [tool.ruff.lint]
