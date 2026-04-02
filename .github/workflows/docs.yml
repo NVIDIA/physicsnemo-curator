@@ -6,7 +6,7 @@ name: Deploy Documentation
 
 on:
   push:
-    branches: [main]
+    branches: [main,refactor]
 
 # Allow only one concurrent deployment
 concurrency:
