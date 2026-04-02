@@ -65,6 +65,9 @@ _GROUP_SENTINELS: dict[str, list[str]] = {
     "da": ["xarray", "earth2studio"],
     "mdt": ["torch"],
     "cli": ["click", "questionary"],
+    "loky": ["joblib"],
+    "dask": ["dask"],
+    "prefect": ["prefect"],
 }
 
 

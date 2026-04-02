@@ -14,7 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for :mod:`physicsnemo_curator.run` — ``run_pipeline()``."""
+"""Integration tests for :mod:`physicsnemo_curator.run` backends.
+
+These tests execute actual pipelines using each backend to verify
+correct behavior in realistic scenarios.
+"""
 
 from __future__ import annotations
 
@@ -27,18 +31,13 @@ if TYPE_CHECKING:
 import pytest
 
 from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
-from physicsnemo_curator.run import (
-    RunConfig,
-    list_backends,
-    run_pipeline,
-)
-from physicsnemo_curator.run import _pick_auto_backend
+from physicsnemo_curator.run import _pick_auto_backend, run_pipeline
 
-pytestmark = pytest.mark.unit
+pytestmark = pytest.mark.integration
 
 
 # ---------------------------------------------------------------------------
-# Concrete test components (picklable at module level)
+# Concrete test components (picklable at module level for multiprocessing)
 # ---------------------------------------------------------------------------
 
 
@@ -50,15 +49,19 @@ class NumberSource(Source[int]):
 
     @classmethod
     def params(cls) -> list[Param]:
+        """Return parameter definitions."""
         return [Param(name="count", description="How many items", type=int)]
 
     def __init__(self, count: int) -> None:
+        """Initialize with count."""
         self._count = count
 
     def __len__(self) -> int:
+        """Return number of items."""
         return self._count
 
     def __getitem__(self, index: int) -> Generator[int]:
+        """Yield the index value."""
         yield index
 
 
@@ -70,9 +73,11 @@ class TripleFilter(Filter[int]):
 
     @classmethod
     def params(cls) -> list[Param]:
+        """Return empty params list."""
         return []
 
     def __call__(self, items: Generator[int]) -> Generator[int]:
+        """Triple each item."""
         for item in items:
             yield item * 3
 
@@ -85,9 +90,11 @@ class ListSink(Sink[int]):
 
     @classmethod
     def params(cls) -> list[Param]:
+        """Return empty params list."""
         return []
 
     def __call__(self, items: Iterator[int], index: int) -> list[str]:
+        """Return items as formatted strings."""
         return [f"item_{index}_{v}" for v in items]
 
 
@@ -99,18 +106,21 @@ class StatefulSink(Sink[int]):
 
     @classmethod
     def params(cls) -> list[Param]:
+        """Return empty params list."""
         return []
 
     def __init__(self) -> None:
+        """Initialize call counter."""
         self.call_count = 0
 
     def __call__(self, items: Iterator[int], index: int) -> list[str]:
+        """Increment counter and return items as strings."""
         self.call_count += 1
         return [str(v) for v in items]
 
 
 # ---------------------------------------------------------------------------
-# Helper fixtures
+# Fixtures
 # ---------------------------------------------------------------------------
 
 
@@ -127,45 +137,15 @@ def no_filter_pipeline() -> Pipeline[int]:
 
 
 # ---------------------------------------------------------------------------
-# RunConfig tests (replaces _resolve_n_jobs)
-# ---------------------------------------------------------------------------
-
-
-class TestRunConfig:
-    def test_positive_passthrough(self):
-        config = RunConfig(n_jobs=4)
-        assert config.resolved_n_jobs == 4
-
-    def test_one_is_one(self):
-        config = RunConfig(n_jobs=1)
-        assert config.resolved_n_jobs == 1
-
-    def test_negative_one_uses_all_cpus(self):
-        import os
-
-        expected = os.cpu_count() or 1
-        config = RunConfig(n_jobs=-1)
-        assert config.resolved_n_jobs == expected
-
-    def test_negative_two_is_cpus_minus_one(self):
-        import os
-
-        cpu = os.cpu_count() or 1
-        config = RunConfig(n_jobs=-2)
-        assert config.resolved_n_jobs == max(1, cpu - 1)
-
-    def test_very_negative_floors_at_one(self):
-        config = RunConfig(n_jobs=-999)
-        assert config.resolved_n_jobs >= 1
-
-
-# ---------------------------------------------------------------------------
-# run_pipeline — sequential backend
+# Sequential backend tests
 # ---------------------------------------------------------------------------
 
 
 class TestSequentialBackend:
+    """Integration tests for the sequential backend."""
+
     def test_processes_all_indices(self, simple_pipeline):
+        """Should process all indices in order."""
         results = run_pipeline(simple_pipeline, n_jobs=1, progress=False)
         assert len(results) == 5
         # Index 0 → 0*3=0, Index 4 → 4*3=12
@@ -173,26 +153,31 @@ class TestSequentialBackend:
         assert results[4] == ["item_4_12"]
 
     def test_explicit_sequential_backend(self, simple_pipeline):
+        """Explicit backend="sequential" should work."""
         results = run_pipeline(simple_pipeline, backend="sequential", progress=False)
         assert len(results) == 5
 
     def test_subset_indices(self, simple_pipeline):
+        """Should process only specified indices."""
         results = run_pipeline(simple_pipeline, indices=[1, 3], progress=False)
         assert len(results) == 2
         assert results[0] == ["item_1_3"]  # index 1 → 1*3=3
         assert results[1] == ["item_3_9"]  # index 3 → 3*3=9
 
     def test_empty_indices(self, simple_pipeline):
+        """Empty indices should return empty results."""
         results = run_pipeline(simple_pipeline, indices=[], progress=False)
         assert results == []
 
     def test_no_filter_pipeline(self, no_filter_pipeline):
+        """Pipeline without filters should work."""
         results = run_pipeline(no_filter_pipeline, progress=False)
         assert len(results) == 3
         assert results[0] == ["item_0_0"]
         assert results[2] == ["item_2_2"]
 
     def test_stateful_sink_sequential(self):
+        """Sequential execution should preserve state in sink."""
         sink = StatefulSink()
         pipeline = NumberSource(3).write(sink)
         run_pipeline(pipeline, n_jobs=1, progress=False)
@@ -200,18 +185,52 @@ class TestSequentialBackend:
         assert sink.call_count == 3
 
     def test_with_progress(self, simple_pipeline):
-        # Should not raise even if tqdm is not available
+        """Should not raise even if tqdm is not available."""
         results = run_pipeline(simple_pipeline, n_jobs=1, progress=True)
         assert len(results) == 5
 
 
 # ---------------------------------------------------------------------------
-# run_pipeline — processes backend
+# Thread pool backend tests
 # ---------------------------------------------------------------------------
 
 
-class TestProcessesBackend:
+class TestThreadPoolBackend:
+    """Integration tests for the thread_pool backend."""
+
+    def test_basic_execution(self, simple_pipeline):
+        """Basic execution with thread pool."""
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="thread_pool", progress=False)
+        assert len(results) == 5
+        assert results[0] == ["item_0_0"]
+        assert results[4] == ["item_4_12"]
+
+    def test_subset_indices(self, simple_pipeline):
+        """Thread pool with subset of indices."""
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="thread_pool", indices=[1, 3], progress=False)
+        assert len(results) == 2
+        assert results[0] == ["item_1_3"]
+        assert results[1] == ["item_3_9"]
+
+    def test_stateful_sink_shared(self):
+        """Thread pool shares state (same process)."""
+        sink = StatefulSink()
+        pipeline = NumberSource(4).write(sink)
+        run_pipeline(pipeline, n_jobs=2, backend="thread_pool", progress=False)
+        # Thread pool: sink is shared within process
+        assert sink.call_count == 4
+
+
+# ---------------------------------------------------------------------------
+# Process pool backend tests
+# ---------------------------------------------------------------------------
+
+
+class TestProcessPoolBackend:
+    """Integration tests for the process_pool backend."""
+
     def test_basic_parallel(self, simple_pipeline):
+        """Basic parallel execution with process pool."""
         results = run_pipeline(simple_pipeline, n_jobs=2, backend="process_pool", progress=False)
         assert len(results) == 5
         # Order should be preserved
@@ -219,6 +238,7 @@ class TestProcessesBackend:
         assert results[4] == ["item_4_12"]
 
     def test_subset_parallel(self, simple_pipeline):
+        """Process pool with subset of indices."""
         results = run_pipeline(simple_pipeline, n_jobs=2, backend="process_pool", indices=[0, 2, 4], progress=False)
         assert len(results) == 3
         assert results[0] == ["item_0_0"]
@@ -237,12 +257,15 @@ class TestProcessesBackend:
 
 
 # ---------------------------------------------------------------------------
-# run_pipeline — loky backend (optional)
+# Loky backend tests (optional dependency)
 # ---------------------------------------------------------------------------
 
 
 class TestLokyBackend:
+    """Integration tests for the loky backend (requires joblib)."""
+
     def test_loky_runs(self, simple_pipeline):
+        """Loky backend should produce correct results."""
         pytest.importorskip("joblib")
         results = run_pipeline(simple_pipeline, n_jobs=2, backend="loky", progress=False)
         assert len(results) == 5
@@ -250,17 +273,21 @@ class TestLokyBackend:
         assert results[4] == ["item_4_12"]
 
     def test_loky_missing_raises(self, simple_pipeline):
+        """Missing joblib should raise ImportError with helpful message."""
         with patch.dict("sys.modules", {"joblib": None}), pytest.raises(ImportError, match="joblib"):
             run_pipeline(simple_pipeline, n_jobs=2, backend="loky", progress=False)
 
 
 # ---------------------------------------------------------------------------
-# run_pipeline — dask backend (optional)
+# Dask backend tests (optional dependency)
 # ---------------------------------------------------------------------------
 
 
 class TestDaskBackend:
+    """Integration tests for the dask backend (requires dask)."""
+
     def test_dask_runs(self, simple_pipeline):
+        """Dask backend should produce correct results."""
         pytest.importorskip("dask")
         results = run_pipeline(simple_pipeline, n_jobs=2, backend="dask", progress=False)
         assert len(results) == 5
@@ -268,36 +295,21 @@ class TestDaskBackend:
         assert results[4] == ["item_4_12"]
 
     def test_dask_missing_raises(self, simple_pipeline):
+        """Missing dask should raise ImportError with helpful message."""
         with patch.dict("sys.modules", {"dask": None, "dask.bag": None}), pytest.raises(ImportError, match="dask"):
             run_pipeline(simple_pipeline, n_jobs=2, backend="dask", progress=False)
 
 
 # ---------------------------------------------------------------------------
-# run_pipeline — thread_pool backend
-# ---------------------------------------------------------------------------
-
-
-class TestThreadPoolBackend:
-    def test_thread_pool_runs(self, simple_pipeline):
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="thread_pool", progress=False)
-        assert len(results) == 5
-        assert results[0] == ["item_0_0"]
-        assert results[4] == ["item_4_12"]
-
-    def test_thread_pool_subset(self, simple_pipeline):
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="thread_pool", indices=[1, 3], progress=False)
-        assert len(results) == 2
-        assert results[0] == ["item_1_3"]
-        assert results[1] == ["item_3_9"]
-
-
-# ---------------------------------------------------------------------------
-# run_pipeline — prefect backend (optional)
+# Prefect backend tests (optional dependency)
 # ---------------------------------------------------------------------------
 
 
 class TestPrefectBackend:
+    """Integration tests for the prefect backend (requires prefect)."""
+
     def test_prefect_runs(self, simple_pipeline):
+        """Prefect backend should produce correct results."""
         pytest.importorskip("prefect")
         results = run_pipeline(simple_pipeline, n_jobs=2, backend="prefect", progress=False)
         assert len(results) == 5
@@ -305,66 +317,54 @@ class TestPrefectBackend:
         assert results[4] == ["item_4_12"]
 
     def test_prefect_missing_raises(self, simple_pipeline):
+        """Missing prefect should raise ImportError with helpful message."""
         with patch.dict("sys.modules", {"prefect": None}), pytest.raises(ImportError, match="prefect"):
             run_pipeline(simple_pipeline, n_jobs=2, backend="prefect", progress=False)
 
 
 # ---------------------------------------------------------------------------
-# run_pipeline — auto backend
+# Auto backend tests
 # ---------------------------------------------------------------------------
 
 
 class TestAutoBackend:
+    """Integration tests for auto backend selection."""
+
     def test_auto_selects_something(self, simple_pipeline):
+        """Auto backend should select a working backend."""
         results = run_pipeline(simple_pipeline, n_jobs=2, backend="auto", progress=False)
         assert len(results) == 5
 
     def test_pick_auto_backend_returns_valid(self):
+        """_pick_auto_backend should return a valid backend name."""
         result = _pick_auto_backend()
         assert result in ("dask", "loky", "process_pool")
 
 
 # ---------------------------------------------------------------------------
-# Error handling
+# Error handling tests
 # ---------------------------------------------------------------------------
 
 
-class TestErrors:
+class TestErrorHandling:
+    """Tests for error conditions."""
+
     def test_unknown_backend_raises(self, simple_pipeline):
+        """Unknown backend should raise ValueError."""
         with pytest.raises(ValueError, match="Unknown backend"):
             run_pipeline(simple_pipeline, backend="magic")
 
     def test_no_sink_raises(self):
+        """Pipeline without sink should raise RuntimeError."""
         pipeline = NumberSource(3).filter(TripleFilter())
         with pytest.raises(RuntimeError, match="no sink"):
             run_pipeline(pipeline)
 
-
-# ---------------------------------------------------------------------------
-# Import tests
-# ---------------------------------------------------------------------------
-
-
-class TestImports:
-    def test_import_from_core(self):
-        from physicsnemo_curator.core import run_pipeline as rp
-
-        assert callable(rp)
-
-    def test_import_from_top_level(self):
-        from physicsnemo_curator import run_pipeline as rp
-
-        assert callable(rp)
-
-    def test_import_from_run_module(self):
-        from physicsnemo_curator.run import run_pipeline as rp
-
-        assert callable(rp)
-
-    def test_list_backends(self):
-        backends = list_backends()
-        assert "sequential" in backends
-        assert "process_pool" in backends
-        assert "thread_pool" in backends
-        assert all("description" in info for info in backends.values())
-        assert all("available" in info for info in backends.values())
+    def test_n_jobs_one_forces_sequential(self, simple_pipeline):
+        """n_jobs=1 should force sequential even with different backend."""
+        sink = StatefulSink()
+        pipeline = NumberSource(3).write(sink)
+        # Even with backend="process_pool", n_jobs=1 should use sequential
+        run_pipeline(pipeline, n_jobs=1, backend="process_pool", progress=False)
+        # Sequential preserves state
+        assert sink.call_count == 3
