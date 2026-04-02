@@ -22,7 +22,7 @@ import pathlib
 
 import pytest
 
-from curator.core.store import FileStore, FsspecFileStore, LocalFileStore
+from physicsnemo_curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 
 # ---------------------------------------------------------------------------
 # Helpers

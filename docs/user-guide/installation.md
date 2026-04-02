@@ -46,11 +46,11 @@ uv sync --group dev --group mesh --group docs
 ## Verifying the Installation
 
 ```python
-import curator
-print(curator.__version__)  # "0.1.0"
+import physicsnemo_curator
+print(physicsnemo_curator.__version__)  # "0.1.0"
 
 # Check mesh dependencies
-from curator.mesh.sources.vtk import VTKSource  # requires curator[mesh]
+from physicsnemo_curator.mesh.sources.vtk import VTKSource  # requires physicsnemo_curator[mesh]
 ```
 
 ## Building Documentation

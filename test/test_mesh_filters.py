@@ -30,11 +30,11 @@ import pyarrow.parquet as pq  # noqa: E402
 import pyvista as pv  # noqa: E402
 import torch  # noqa: E402
 
-from curator.mesh.filters.mesh_info import MeshInfoFilter  # noqa: E402
-from curator.mesh.filters.precision import PrecisionFilter  # noqa: E402
-from curator.mesh.filters.stats import StatsFilter, merge_welford_stats  # noqa: E402
-from curator.mesh.sinks.mesh_writer import MeshSink  # noqa: E402
-from curator.mesh.sources.vtk import VTKSource  # noqa: E402
+from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter  # noqa: E402
+from physicsnemo_curator.mesh.filters.precision import PrecisionFilter  # noqa: E402
+from physicsnemo_curator.mesh.filters.stats import StatsFilter, merge_welford_stats  # noqa: E402
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink  # noqa: E402
+from physicsnemo_curator.mesh.sources.vtk import VTKSource  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -4,13 +4,13 @@ Rust-based ETL toolkit for deep learning data curation with Python APIs.
 
 ## Architecture
 
-- **Python API**: `src/curator/` — public Python interface
+- **Python API**: `src/physicsnemo_curator/` — public Python interface
 - **Rust core**: `src/rust/` — native extension built with PyO3 + maturin
 - **Tests**: `test/` — Python test suite (pytest)
 - **Docs**: `docs/` — Sphinx documentation
 
-The Rust extension is exposed as `curator._lib` and imported in
-`__init__.py`. Type stubs live at `src/curator/_lib.pyi`.
+The Rust extension is exposed as `physicsnemo_curator._lib` and imported in
+`__init__.py`. Type stubs live at `src/physicsnemo_curator/_lib.pyi`.
 
 ## Toolchain
 

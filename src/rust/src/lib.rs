@@ -22,7 +22,7 @@ fn rust_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
-/// The native Rust extension module for curator.
+/// The native Rust extension module for physicsnemo_curator.
 #[pymodule]
 fn _lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rust_version, m)?)?;

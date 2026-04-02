@@ -6,7 +6,7 @@ license = "Apache-2.0"
 description = "Rust core for physicsnemo-curator ETL toolkit"
 
 [lib]
-name = "curator"
+name = "physicsnemo_curator"
 crate-type = ["cdylib"]
 
 [dependencies]

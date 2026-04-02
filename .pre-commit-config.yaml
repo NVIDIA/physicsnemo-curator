@@ -51,7 +51,7 @@ repos:
           "--ignore-regex=reset_parameters", "--ignore-regex=extra_repr",
           "--ignore-regex=MetaData", "--ignore-regex=apply_activation",
           "--ignore-regex=exec_activation",
-          "--color", "src/curator/"]
+          "--color", "src/physicsnemo_curator/"]
       pass_filenames: false
 
 # ── Markdown ─────────────────────────────────────────────────────────────

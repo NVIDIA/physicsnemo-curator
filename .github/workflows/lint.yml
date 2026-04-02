@@ -80,7 +80,7 @@ jobs:
         run: uv sync --group dev
 
       - name: Docstring coverage (interrogate)
-        run: uv run interrogate src/curator
+        run: uv run interrogate src/physicsnemo_curator
 
   rust-format:
     name: Rust format

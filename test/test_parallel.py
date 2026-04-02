@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 
 import pytest
 
-from curator.core.base import Filter, Param, Pipeline, Sink, Source
-from curator.core.parallel import (
+from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
+from physicsnemo_curator.core.parallel import (
     _pick_auto_backend,
     _resolve_n_jobs,
     run_pipeline,
@@ -304,7 +304,7 @@ class TestErrors:
 
 class TestImports:
     def test_import_from_core(self):
-        from curator.core import run_pipeline as rp
+        from physicsnemo_curator.core import run_pipeline as rp
 
         assert callable(rp)
 

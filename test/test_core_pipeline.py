@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 import pytest
 
-from curator.core.base import REQUIRED, Filter, Param, Pipeline, Sink, Source
+from physicsnemo_curator.core.base import REQUIRED, Filter, Param, Pipeline, Sink, Source
 
 pytestmark = pytest.mark.unit
 
@@ -267,7 +267,7 @@ class TestPipeline:
 
 class TestRegistry:
     def test_register_and_query(self):
-        from curator.core.registry import Registry
+        from physicsnemo_curator.core.registry import Registry
 
         reg = Registry()
         reg.register_submodule("test", "Test submodule", "builtins")
@@ -281,28 +281,28 @@ class TestRegistry:
         assert "Collector" in reg.sinks("test")
 
     def test_submodule_available(self):
-        from curator.core.registry import Registry
+        from physicsnemo_curator.core.registry import Registry
 
         reg = Registry()
         reg.register_submodule("test", "Test", "builtins")
         assert reg.submodules()["test"].available is True
 
     def test_submodule_not_available(self):
-        from curator.core.registry import Registry
+        from physicsnemo_curator.core.registry import Registry
 
         reg = Registry()
         reg.register_submodule("test", "Test", "nonexistent.module.xyz")
         assert reg.submodules()["test"].available is False
 
     def test_unregistered_submodule_raises(self):
-        from curator.core.registry import Registry
+        from physicsnemo_curator.core.registry import Registry
 
         reg = Registry()
         with pytest.raises(KeyError, match="not registered"):
             reg.register_source("nope", IntSource)
 
     def test_repr(self):
-        from curator.core.registry import Registry
+        from physicsnemo_curator.core.registry import Registry
 
         reg = Registry()
         reg.register_submodule("test", "Test", "builtins")
@@ -313,7 +313,7 @@ class TestRegistry:
         assert "0 stores" in text
 
     def test_register_store(self):
-        from curator.core.registry import Registry
+        from physicsnemo_curator.core.registry import Registry
 
         reg = Registry()
         reg.register_submodule("test", "Test", "builtins")
@@ -331,7 +331,7 @@ class TestRegistry:
         assert stores["Dummy store"] is DummyStore
 
     def test_register_multiple_stores(self):
-        from curator.core.registry import Registry
+        from physicsnemo_curator.core.registry import Registry
 
         reg = Registry()
         reg.register_submodule("test", "Test", "builtins")
@@ -358,14 +358,14 @@ class TestRegistry:
         assert "Store B" in stores
 
     def test_stores_empty_by_default(self):
-        from curator.core.registry import Registry
+        from physicsnemo_curator.core.registry import Registry
 
         reg = Registry()
         reg.register_submodule("test", "Test", "builtins")
         assert reg.stores("test") == {}
 
     def test_register_store_unregistered_submodule_raises(self):
-        from curator.core.registry import Registry
+        from physicsnemo_curator.core.registry import Registry
 
         class DummyStore:
             def __len__(self):

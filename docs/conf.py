@@ -39,7 +39,7 @@ extensions = [
 # ---------------------------------------------------------------------------
 # AutoAPI (static analysis — reads .pyi stubs without importing)
 # ---------------------------------------------------------------------------
-autoapi_dirs = ["../src/curator"]
+autoapi_dirs = ["../src/physicsnemo_curator"]
 autoapi_type = "python"
 autoapi_options = [
     "members",

@@ -8,13 +8,13 @@ PhysicsNeMo Curator.
 Every component has:
 
 1. **`name`** and **`description`** class variables for CLI display
-2. A **`params()`** classmethod returning a list of {class}`~curator.core.base.Param`
+2. A **`params()`** classmethod returning a list of {class}`~physicsnemo_curator.core.base.Param`
 3. An **`__init__`** accepting those parameters as keyword arguments
 4. A core method (`__getitem__`, `__call__`, or `__call__`) implementing the logic
 
 ## Custom FileStore
 
-A {class}`~curator.core.store.FileStore` maps integer indices to local
+A {class}`~physicsnemo_curator.core.store.FileStore` maps integer indices to local
 file paths.  Any object with `__len__` and `__getitem__` (returning a
 `str` path) satisfies the protocol:
 
@@ -38,7 +38,7 @@ Register custom stores with the global registry so the interactive CLI
 can offer them as a data-source option:
 
 ```python
-from curator.core.registry import registry
+from physicsnemo_curator.core.registry import registry
 
 registry.register_store("mesh", "My Database", DatabaseFileStore)
 ```
@@ -48,15 +48,15 @@ The CLI will then show "My Database" alongside "Local directory" and
 
 ## Custom Source
 
-A source reads data from a {class}`~curator.core.store.FileStore` and
-yields items.  Subclass {class}`~curator.core.base.Source` and implement
+A source reads data from a {class}`~physicsnemo_curator.core.store.FileStore` and
+yields items.  Subclass {class}`~physicsnemo_curator.core.base.Source` and implement
 `__len__`, `__getitem__`, and `params`:
 
 ```python
 from __future__ import annotations
 from typing import ClassVar, TYPE_CHECKING
-from curator.core.base import Source, Param
-from curator.core.store import FileStore
+from physicsnemo_curator.core.base import Source, Param
+from physicsnemo_curator.core.store import FileStore
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -102,12 +102,12 @@ Key points:
 ## Custom Filter
 
 A filter transforms a stream of items.  Subclass
-{class}`~curator.core.base.Filter`:
+{class}`~physicsnemo_curator.core.base.Filter`:
 
 ```python
 from __future__ import annotations
 from typing import ClassVar, TYPE_CHECKING
-from curator.core.base import Filter, Param
+from physicsnemo_curator.core.base import Filter, Param
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -189,12 +189,12 @@ The interactive CLI calls `flush()` automatically on any filter that has it.
 ## Custom Sink
 
 A sink persists items and returns file paths.  Subclass
-{class}`~curator.core.base.Sink`:
+{class}`~physicsnemo_curator.core.base.Sink`:
 
 ```python
 from __future__ import annotations
 from typing import ClassVar, TYPE_CHECKING
-from curator.core.base import Sink, Param
+from physicsnemo_curator.core.base import Sink, Param
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -228,9 +228,9 @@ To make components discoverable by the CLI, register them in your
 submodule's `__init__.py`:
 
 ```python
-# src/curator/mymodule/__init__.py
-from curator.core.registry import registry
-from curator.core.store import LocalFileStore, FsspecFileStore
+# src/physicsnemo_curator/mymodule/__init__.py
+from physicsnemo_curator.core.registry import registry
+from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
 
 from .sources.my_source import MySource
 from .filters.my_filter import MyFilter
@@ -248,7 +248,7 @@ registry.register_filter("mymodule", MyFilter)
 registry.register_sink("mymodule", MySink)
 ```
 
-The CLI will discover the submodule when `curator.mymodule` is imported.
+The CLI will discover the submodule when `physicsnemo_curator.mymodule` is imported.
 
 ## Testing
 
@@ -260,8 +260,8 @@ import pytest
 
 pytestmark = pytest.mark.requires("mesh")
 
-from curator.core.store import LocalFileStore
-from curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.core.store import LocalFileStore
+from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
 class TestMySource:
     def test_len(self, tmp_path):
@@ -290,11 +290,11 @@ make test-e2e       # End-to-end tests
 
 ## Executing Components
 
-Once components are registered, use {func}`~curator.core.parallel.run_pipeline`
+Once components are registered, use {func}`~physicsnemo_curator.core.parallel.run_pipeline`
 to execute a pipeline efficiently:
 
 ```python
-from curator import run_pipeline
+from physicsnemo_curator import run_pipeline
 
 pipeline = (
     MySource(store=store)
