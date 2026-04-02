@@ -29,6 +29,9 @@ from __future__ import annotations
 from curator.core.registry import registry
 from curator.core.store import FsspecFileStore, LocalFileStore, RunIndexedFileStore
 from curator.mesh.filters.mean import MeanFilter
+from curator.mesh.filters.mesh_info import MeshInfoFilter
+from curator.mesh.filters.precision import PrecisionFilter
+from curator.mesh.filters.stats import StatsFilter, merge_welford_stats
 from curator.mesh.sinks.mesh_writer import MeshSink
 from curator.mesh.sources.ahmedml import AhmedMLSource
 from curator.mesh.sources.drivaerml import DrivAerMLSource
@@ -47,14 +50,21 @@ registry.register_source("mesh", AhmedMLSource)
 registry.register_source("mesh", WindsorMLSource)
 registry.register_source("mesh", WindTunnelSource)
 registry.register_filter("mesh", MeanFilter)
+registry.register_filter("mesh", MeshInfoFilter)
+registry.register_filter("mesh", StatsFilter)
+registry.register_filter("mesh", PrecisionFilter)
 registry.register_sink("mesh", MeshSink)
 
 __all__ = [
     "AhmedMLSource",
     "DrivAerMLSource",
     "MeanFilter",
+    "MeshInfoFilter",
     "MeshSink",
+    "PrecisionFilter",
+    "StatsFilter",
     "VTKSource",
     "WindsorMLSource",
     "WindTunnelSource",
+    "merge_welford_stats",
 ]
