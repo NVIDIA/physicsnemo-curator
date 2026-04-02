@@ -26,12 +26,28 @@ you need.  Each submodule has its own group:
 | Group | Contents | Install |
 |-------|----------|---------|
 | **mesh** | physicsnemo, pyvista, pyarrow, torch | `pip install .[mesh]` or `uv sync --group mesh` |
-| **xr** | *(planned)* xarray, zarr | — |
-| **mdt** | *(planned)* torch | — |
+| **da** | xarray, earth2studio, zarr, gcsfs | `uv sync --group da` |
+| **mdt** | *(planned)* | — |
 | **cli** | click, questionary | `pip install .[cli]` |
-| **parallel** | joblib, dask | `pip install .[parallel]` |
 | **dev** | ruff, ty, pytest, maturin, interrogate, pre-commit | `uv sync --group dev` |
 | **docs** | sphinx, nvidia-sphinx-theme, myst-parser, etc. | `uv sync --group docs` |
+
+### Execution Backend Extras
+
+The `run_pipeline()` function supports multiple execution backends. The basic
+backends (sequential, thread_pool, process_pool) work out of the box. For
+advanced backends, install the corresponding extra:
+
+| Extra | Backend | Install |
+|-------|---------|---------|
+| **loky** | joblib/loky (robust process pool) | `pip install 'physicsnemo-curator[loky]'` |
+| **dask** | Dask bags (distributed execution) | `pip install 'physicsnemo-curator[dask]'` |
+| **prefect** | Prefect (workflow orchestration) | `pip install 'physicsnemo-curator[prefect]'` |
+
+```bash
+# Install multiple backend extras
+pip install 'physicsnemo-curator[loky,dask]'
+```
 
 ### Installing Multiple Groups
 

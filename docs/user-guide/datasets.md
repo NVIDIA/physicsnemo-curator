@@ -9,10 +9,10 @@ file discovery, caching, and format conversion transparently.
 
 | Source | Dataset | Samples | Mesh Types | Size |
 |--------|---------|---------|------------|------|
-| {py:class}`~curator.mesh.sources.drivaerml.DrivAerMLSource` | [DrivAerML](https://huggingface.co/datasets/neashton/drivaerml) | ~484 | boundary, volume, slices | ~31 TB |
-| {py:class}`~curator.mesh.sources.ahmedml.AhmedMLSource` | [AhmedML](https://huggingface.co/datasets/neashton/ahmedml) | 500 | boundary, volume, slices | ~2 TB |
-| {py:class}`~curator.mesh.sources.windsorml.WindsorMLSource` | [WindsorML](https://huggingface.co/datasets/neashton/windsorml) | 355 | boundary, volume | ~8 TB |
-| {py:class}`~curator.mesh.sources.windtunnel.WindTunnelSource` | [WindTunnel-20k](https://huggingface.co/datasets/inductiva/windtunnel-20k) | 19,812 | pressure_field | ~300 GB |
+| {py:class}`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource` | [DrivAerML](https://huggingface.co/datasets/neashton/drivaerml) | ~484 | boundary, volume, slices | ~31 TB |
+| {py:class}`~physicsnemo_curator.mesh.sources.ahmedml.AhmedMLSource` | [AhmedML](https://huggingface.co/datasets/neashton/ahmedml) | 500 | boundary, volume, slices | ~2 TB |
+| {py:class}`~physicsnemo_curator.mesh.sources.windsorml.WindsorMLSource` | [WindsorML](https://huggingface.co/datasets/neashton/windsorml) | 355 | boundary, volume | ~8 TB |
+| {py:class}`~physicsnemo_curator.mesh.sources.windtunnel.WindTunnelSource` | [WindTunnel-20k](https://huggingface.co/datasets/inductiva/windtunnel-20k) | 19,812 | pressure_field | ~300 GB |
 
 All datasets require the `mesh` dependency group:
 
@@ -25,7 +25,7 @@ pip install physicsnemo-curator[mesh]
 ### DrivAerML — Boundary Meshes
 
 ```python
-from curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
 
 # Load boundary (surface) meshes
 source = DrivAerMLSource(mesh_type="boundary")
@@ -49,10 +49,10 @@ for mesh in source[0]:
 ### AhmedML — Full Pipeline
 
 ```python
-from curator.mesh.sources.ahmedml import AhmedMLSource
-from curator.mesh.filters.mean import MeanFilter
-from curator.mesh.sinks.mesh_writer import MeshSink
-from curator import run_pipeline
+from physicsnemo_curator.mesh.sources.ahmedml import AhmedMLSource
+from physicsnemo_curator.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator import run_pipeline
 
 pipeline = (
     AhmedMLSource(mesh_type="boundary")
@@ -68,7 +68,7 @@ print(f"Wrote {sum(len(r) for r in results)} files")
 ### WindsorML
 
 ```python
-from curator.mesh.sources.windsorml import WindsorMLSource
+from physicsnemo_curator.mesh.sources.windsorml import WindsorMLSource
 
 source = WindsorMLSource(mesh_type="boundary")
 print(f"Found {len(source)} runs (run_0 through run_354)")
@@ -79,7 +79,7 @@ mesh = next(source[0])
 ### WindTunnel-20k
 
 ```python
-from curator.mesh.sources.windtunnel import WindTunnelSource
+from physicsnemo_curator.mesh.sources.windtunnel import WindTunnelSource
 
 # Load pressure field meshes from the training split
 source = WindTunnelSource(split="train")
@@ -141,11 +141,11 @@ source = DrivAerMLSource(
 ## RunIndexedFileStore
 
 Under the hood, the run-indexed datasets (DrivAerML, AhmedML, WindsorML)
-use {py:class}`~curator.core.store.RunIndexedFileStore`, which discovers
+use {py:class}`~physicsnemo_curator.core.store.RunIndexedFileStore`, which discovers
 `run_<i>/` directories and resolves per-run file templates:
 
 ```python
-from curator.core.store import RunIndexedFileStore
+from physicsnemo_curator.core.store import RunIndexedFileStore
 
 store = RunIndexedFileStore(
     url="hf://datasets/neashton/drivaerml",

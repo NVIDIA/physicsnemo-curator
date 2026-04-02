@@ -15,11 +15,11 @@ uv sync --group mesh
 
 ## Step 1: Create a FileStore
 
-A {class}`~curator.core.store.FileStore` maps integer indices to local file
+A {class}`~physicsnemo_curator.core.store.FileStore` maps integer indices to local file
 paths.  It decouples *where* data lives from *how* it's read.
 
 ```python
-from curator.core.store import LocalFileStore, FsspecFileStore
+from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
 
 # Local directory
 store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
@@ -35,13 +35,13 @@ print(f"Found {len(store)} remote files")
 
 ## Step 2: Read VTK Files
 
-The {class}`~curator.mesh.sources.vtk.VTKSource` accepts a
-{class}`~curator.core.store.FileStore` and converts each VTK file to a
+The {class}`~physicsnemo_curator.mesh.sources.vtk.VTKSource` accepts a
+{class}`~physicsnemo_curator.core.store.FileStore` and converts each VTK file to a
 {class}`physicsnemo.mesh.Mesh` using
 {func}`physicsnemo.mesh.io.from_pyvista`.
 
 ```python
-from curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
 source = VTKSource(store=store)
 print(f"Source has {len(source)} items")
@@ -88,11 +88,11 @@ source = VTKSource(
 ## Step 3: Add Filters
 
 Filters transform the data stream.  The
-{class}`~curator.mesh.filters.mean.MeanFilter` computes per-field spatial
+{class}`~physicsnemo_curator.mesh.filters.mean.MeanFilter` computes per-field spatial
 means and accumulates them into a Parquet summary table:
 
 ```python
-from curator.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.mesh.filters.mean import MeanFilter
 
 mean_filter = MeanFilter(output="stats.parquet")
 ```
@@ -103,11 +103,11 @@ unchanged.
 
 ## Step 4: Write Output
 
-The {class}`~curator.mesh.sinks.mesh_writer.MeshSink` saves meshes in the
+The {class}`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` saves meshes in the
 physicsnemo native tensordict format:
 
 ```python
-from curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 
 sink = MeshSink(output_dir="./output/")
 ```
@@ -117,10 +117,10 @@ sink = MeshSink(output_dir="./output/")
 Chain the components together using the fluent API:
 
 ```python
-from curator.core.store import LocalFileStore
-from curator.mesh.sources.vtk import VTKSource
-from curator.mesh.filters.mean import MeanFilter
-from curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.core.store import LocalFileStore
+from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 
 store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
 pipeline = (
@@ -146,19 +146,19 @@ Source → Filter → Sink chain and returns the output file path(s).
 
 ### Using `run_pipeline` (recommended)
 
-For batch execution, use {func}`~curator.core.parallel.run_pipeline`
+For batch execution, use {func}`~physicsnemo_curator.core.parallel.run_pipeline`
 instead of a manual loop.  It handles progress bars, index management,
 and supports parallel backends:
 
 ```python
-from curator import run_pipeline
+from physicsnemo_curator import run_pipeline
 
 # Sequential with progress bar
 results = run_pipeline(pipeline)
 print(f"Wrote {sum(len(r) for r in results)} files")
 
 # Parallel across 4 worker processes
-results = run_pipeline(pipeline, n_jobs=4, backend="processes")
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 
 # Use all CPUs with automatic backend selection
 results = run_pipeline(pipeline, n_jobs=-1)

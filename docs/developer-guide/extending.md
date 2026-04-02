@@ -290,7 +290,7 @@ make test-e2e       # End-to-end tests
 
 ## Executing Components
 
-Once components are registered, use {func}`~physicsnemo_curator.core.parallel.run_pipeline`
+Once components are registered, use {func}`~physicsnemo_curator.run.run_pipeline`
 to execute a pipeline efficiently:
 
 ```python

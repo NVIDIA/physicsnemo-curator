@@ -7,13 +7,13 @@ and returns the collected sink outputs.  It replaces the manual
 ## Quick Start
 
 ```python
-from curator import run_pipeline
+from physicsnemo_curator import run_pipeline
 
 # Sequential (default)
 results = run_pipeline(pipeline)
 
 # Parallel with 4 worker processes
-results = run_pipeline(pipeline, n_jobs=4, backend="processes")
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 
 # Use all CPUs
 results = run_pipeline(pipeline, n_jobs=-1)
@@ -30,20 +30,48 @@ results = run_pipeline(pipeline, indices=[0, 5, 10])
 | Backend | Dependency | Description |
 |---------|-----------|-------------|
 | `"sequential"` | None | Simple for-loop.  Always used when `n_jobs=1`. |
-| `"processes"` | None | `concurrent.futures.ProcessPoolExecutor`.  Zero extra deps. |
+| `"thread_pool"` | None | `ThreadPoolExecutor`.  Good for I/O-bound tasks. |
+| `"process_pool"` | None | `ProcessPoolExecutor`.  True parallelism for CPU-bound tasks. |
 | `"loky"` | `joblib` | joblib's robust process pool.  Better memory handling for large arrays. |
 | `"dask"` | `dask` | `dask.bag` for distributed execution.  Scales to clusters. |
-| `"auto"` | Varies | Picks the best available: dask → loky → processes. |
+| `"prefect"` | `prefect` | Prefect workflow orchestration with observability, retries, and scheduling. |
+| `"auto"` | Varies | Picks the best available: dask → loky → process_pool. |
 
 ### Installing optional backends
 
 ```bash
-# Both joblib and dask
-pip install 'physicsnemo-curator[parallel]'
+# Install individual backend extras
+pip install 'physicsnemo-curator[loky]'
+pip install 'physicsnemo-curator[dask]'
+pip install 'physicsnemo-curator[prefect]'
 
-# Or individually
-pip install joblib
-pip install dask
+# Or install multiple
+pip install 'physicsnemo-curator[loky,dask]'
+```
+
+### Custom backends
+
+You can register your own backends:
+
+```python
+from physicsnemo_curator.run import register_backend, RunBackend, RunConfig
+
+class MyBackend(RunBackend):
+    name = "my_backend"
+    description = "My custom execution backend"
+    requires = ("my_package",)  # Optional dependencies
+
+    def run(self, pipeline, config):
+        # Your execution logic here
+        results = []
+        for idx in config.indices or range(len(pipeline)):
+            results.append(pipeline[idx])
+        return results
+
+register_backend(MyBackend)
+
+# Now use it:
+results = run_pipeline(pipeline, n_jobs=4, backend="my_backend")
 ```
 
 ## Parameters
@@ -53,7 +81,7 @@ run_pipeline(
     pipeline,          # Pipeline with source + filters + sink
     *,
     n_jobs=1,          # Workers.  -1 = all CPUs.
-    backend="auto",    # "auto", "sequential", "processes", "loky", "dask"
+    backend="auto",    # "auto", "sequential", "thread_pool", "process_pool", "loky", "dask", "prefect"
     indices=None,      # Subset of source indices, or None for all
     progress=True,     # Show progress bar (tqdm / dask diagnostics)
     **backend_kwargs,  # Extra args forwarded to the backend executor
@@ -65,7 +93,7 @@ list contains file paths returned by the sink for that index.
 
 ## Process Isolation
 
-All multiprocess backends (`"processes"`, `"loky"`, `"dask"`) execute each
+All multiprocess backends (`"process_pool"`, `"loky"`, `"dask"`, `"prefect"`) execute each
 index in a **separate process**.  This means:
 
 - Each worker gets an independent copy of the pipeline, source, filters, and sink.
@@ -89,10 +117,10 @@ Or implement a post-hoc merge step that combines per-worker outputs.
 ### Basic parallel ETL
 
 ```python
-from curator.core.store import LocalFileStore
-from curator.mesh.sources.vtk import VTKSource
-from curator.mesh.sinks.mesh_writer import MeshSink
-from curator import run_pipeline
+from physicsnemo_curator.core.store import LocalFileStore
+from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator import run_pipeline
 
 pipeline = (
     VTKSource.from_path("./cfd_results/")
@@ -100,16 +128,16 @@ pipeline = (
 )
 
 # Process all items with 8 workers
-results = run_pipeline(pipeline, n_jobs=8, backend="processes")
+results = run_pipeline(pipeline, n_jobs=8, backend="process_pool")
 print(f"Wrote {sum(len(r) for r in results)} files")
 ```
 
 ### With HuggingFace dataset sources
 
 ```python
-from curator.mesh.sources.drivaerml import DrivAerMLSource
-from curator.mesh.sinks.mesh_writer import MeshSink
-from curator import run_pipeline
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator import run_pipeline
 
 pipeline = (
     DrivAerMLSource(mesh_type="boundary")
@@ -120,13 +148,39 @@ pipeline = (
 results = run_pipeline(pipeline, n_jobs=4, indices=list(range(10)))
 ```
 
+### Using Prefect with retries
+
+```python
+from physicsnemo_curator import run_pipeline
+
+# Prefect provides automatic retries, logging, and observability
+results = run_pipeline(
+    pipeline,
+    n_jobs=4,
+    backend="prefect",
+    retries=3,
+    retry_delay_seconds=10,
+)
+```
+
 ### Choosing a backend at runtime
 
 ```python
 import os
-from curator import run_pipeline
+from physicsnemo_curator import run_pipeline
 
 # CI uses sequential; production uses all CPUs
 n = 1 if os.getenv("CI") else -1
 results = run_pipeline(pipeline, n_jobs=n)
+```
+
+### Listing available backends
+
+```python
+from physicsnemo_curator.run import list_backends
+
+backends = list_backends()
+for name, info in backends.items():
+    status = "available" if info["available"] else f"requires {info['requires']}"
+    print(f"{name}: {info['description']} ({status})")
 ```

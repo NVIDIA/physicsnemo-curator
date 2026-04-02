@@ -38,11 +38,11 @@ pip install physicsnemo-curator[cli]
 ## Minimal Example
 
 ```python
-from curator import run_pipeline
-from curator.core.store import LocalFileStore
-from curator.mesh.sources.vtk import VTKSource
-from curator.mesh.filters.mean import MeanFilter
-from curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator import run_pipeline
+from physicsnemo_curator.core.store import LocalFileStore
+from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 
 # Create a file store for local VTK data
 store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
@@ -58,7 +58,7 @@ pipeline = (
 results = run_pipeline(pipeline)
 
 # Or process in parallel across 8 workers
-results = run_pipeline(pipeline, n_jobs=8, backend="processes")
+results = run_pipeline(pipeline, n_jobs=8, backend="process_pool")
 
 # Flush stateful filters (only needed for sequential runs)
 pipeline.filters[0].flush()

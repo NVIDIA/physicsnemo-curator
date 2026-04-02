@@ -75,8 +75,10 @@ Defined in `pyproject.toml` under `[dependency-groups]`:
 
 Optional extras in `[project.optional-dependencies]`:
 
-- **parallel**: joblib, dask (for `run_pipeline` multiprocess backends)
 - **cli**: click, questionary (for interactive CLI)
+- **loky**: joblib (for `run_pipeline` loky backend)
+- **dask**: dask (for `run_pipeline` dask backend)
+- **prefect**: prefect (for `run_pipeline` prefect backend)
 
 Install with: `uv sync --group dev` or `uv sync --group docs`
 

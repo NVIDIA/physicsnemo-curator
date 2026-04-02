@@ -18,16 +18,16 @@ dependencies.
 
 ### VTKSource
 
-{class}`~curator.mesh.sources.vtk.VTKSource` reads VTK files via a
-{class}`~curator.core.store.FileStore` and converts each to a
+{class}`~physicsnemo_curator.mesh.sources.vtk.VTKSource` reads VTK files via a
+{class}`~physicsnemo_curator.core.store.FileStore` and converts each to a
 {class}`physicsnemo.mesh.Mesh` using {func}`physicsnemo.mesh.io.from_pyvista`.
 
 The primary constructor accepts a `FileStore` directly — this is the
 recommended pattern for programmatic use:
 
 ```python
-from curator.core.store import LocalFileStore, FsspecFileStore
-from curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
+from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
 # Local directory
 store = LocalFileStore("./data/", extensions=frozenset({".vtk", ".vtu"}))
@@ -46,10 +46,10 @@ source = VTKSource(store=my_database_store, point_source="cell_centroids")
 
 Convenience classmethods are also available for quick one-liners:
 
-- {meth}`~curator.mesh.sources.vtk.VTKSource.from_path` — wraps a
-  {class}`~curator.core.store.LocalFileStore`
-- {meth}`~curator.mesh.sources.vtk.VTKSource.from_url` — wraps a
-  {class}`~curator.core.store.FsspecFileStore`
+- {meth}`~physicsnemo_curator.mesh.sources.vtk.VTKSource.from_path` — wraps a
+  {class}`~physicsnemo_curator.core.store.LocalFileStore`
+- {meth}`~physicsnemo_curator.mesh.sources.vtk.VTKSource.from_url` — wraps a
+  {class}`~physicsnemo_curator.core.store.FsspecFileStore`
 
 ```python
 # One-liner shortcuts
@@ -100,8 +100,8 @@ All conversion parameters from the constructor table above (``manifold_dim``,
 **Examples:**
 
 ```python
-from curator.core.store import LocalFileStore, FsspecFileStore
-from curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
+from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
 # --- Primary pattern: construct store + inject ---
 
@@ -145,7 +145,7 @@ source = VTKSource.from_url("s3://my-bucket/cfd-data/", storage_options={"anon":
 
 ### MeanFilter
 
-{class}`~curator.mesh.filters.mean.MeanFilter` computes the spatial mean
+{class}`~physicsnemo_curator.mesh.filters.mean.MeanFilter` computes the spatial mean
 of every field in `point_data` and `cell_data` for each mesh, accumulates
 the results in memory, and writes them to a Parquet file on `flush()`.
 
@@ -172,7 +172,7 @@ are filled with `NULL` in the Parquet output.
 **Example:**
 
 ```python
-from curator.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.mesh.filters.mean import MeanFilter
 
 filt = MeanFilter(output="stats.parquet")
 
@@ -192,7 +192,7 @@ print(table.to_pandas())
 
 ### MeshSink
 
-{class}`~curator.mesh.sinks.mesh_writer.MeshSink` saves
+{class}`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` saves
 {class}`physicsnemo.mesh.Mesh` objects using the native tensordict
 memory-mapped format ({meth}`Mesh.save`).
 
@@ -217,7 +217,7 @@ mesh = Mesh.load("./output/mesh_0000_0")
 **Example:**
 
 ```python
-from curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 
 sink = MeshSink(output_dir="./output/")
 
@@ -229,10 +229,10 @@ paths = pipeline[0]  # ['./output/mesh_0000_0']
 ## Full Pipeline Example
 
 ```python
-from curator.core.store import LocalFileStore, FsspecFileStore
-from curator.mesh.sources.vtk import VTKSource
-from curator.mesh.filters.mean import MeanFilter
-from curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
+from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 
 # Local data with explicit store
 store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))

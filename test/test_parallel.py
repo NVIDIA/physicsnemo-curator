@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for :mod:`curator.core.parallel` — ``run_pipeline()``."""
+"""Tests for :mod:`physicsnemo_curator.run` — ``run_pipeline()``."""
 
 from __future__ import annotations
 
@@ -27,11 +27,12 @@ if TYPE_CHECKING:
 import pytest
 
 from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
-from physicsnemo_curator.core.parallel import (
-    _pick_auto_backend,
-    _resolve_n_jobs,
+from physicsnemo_curator.run import (
+    RunConfig,
+    list_backends,
     run_pipeline,
 )
+from physicsnemo_curator.run import _pick_auto_backend
 
 pytestmark = pytest.mark.unit
 
@@ -126,31 +127,36 @@ def no_filter_pipeline() -> Pipeline[int]:
 
 
 # ---------------------------------------------------------------------------
-# _resolve_n_jobs tests
+# RunConfig tests (replaces _resolve_n_jobs)
 # ---------------------------------------------------------------------------
 
 
-class TestResolveNJobs:
+class TestRunConfig:
     def test_positive_passthrough(self):
-        assert _resolve_n_jobs(4) == 4
+        config = RunConfig(n_jobs=4)
+        assert config.resolved_n_jobs == 4
 
     def test_one_is_one(self):
-        assert _resolve_n_jobs(1) == 1
+        config = RunConfig(n_jobs=1)
+        assert config.resolved_n_jobs == 1
 
     def test_negative_one_uses_all_cpus(self):
         import os
 
         expected = os.cpu_count() or 1
-        assert _resolve_n_jobs(-1) == expected
+        config = RunConfig(n_jobs=-1)
+        assert config.resolved_n_jobs == expected
 
     def test_negative_two_is_cpus_minus_one(self):
         import os
 
         cpu = os.cpu_count() or 1
-        assert _resolve_n_jobs(-2) == max(1, cpu - 1)
+        config = RunConfig(n_jobs=-2)
+        assert config.resolved_n_jobs == max(1, cpu - 1)
 
     def test_very_negative_floors_at_one(self):
-        assert _resolve_n_jobs(-999) >= 1
+        config = RunConfig(n_jobs=-999)
+        assert config.resolved_n_jobs >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -206,14 +212,14 @@ class TestSequentialBackend:
 
 class TestProcessesBackend:
     def test_basic_parallel(self, simple_pipeline):
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="processes", progress=False)
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="process_pool", progress=False)
         assert len(results) == 5
         # Order should be preserved
         assert results[0] == ["item_0_0"]
         assert results[4] == ["item_4_12"]
 
     def test_subset_parallel(self, simple_pipeline):
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="processes", indices=[0, 2, 4], progress=False)
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="process_pool", indices=[0, 2, 4], progress=False)
         assert len(results) == 3
         assert results[0] == ["item_0_0"]
         assert results[1] == ["item_2_6"]
@@ -223,7 +229,7 @@ class TestProcessesBackend:
         """Stateful sink in parent is not mutated by child processes."""
         sink = StatefulSink()
         pipeline = NumberSource(4).write(sink)
-        results = run_pipeline(pipeline, n_jobs=2, backend="processes", progress=False)
+        results = run_pipeline(pipeline, n_jobs=2, backend="process_pool", progress=False)
         # Results should still be correct
         assert len(results) == 4
         # But parent sink should NOT have been called (children have copies)
@@ -267,6 +273,43 @@ class TestDaskBackend:
 
 
 # ---------------------------------------------------------------------------
+# run_pipeline — thread_pool backend
+# ---------------------------------------------------------------------------
+
+
+class TestThreadPoolBackend:
+    def test_thread_pool_runs(self, simple_pipeline):
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="thread_pool", progress=False)
+        assert len(results) == 5
+        assert results[0] == ["item_0_0"]
+        assert results[4] == ["item_4_12"]
+
+    def test_thread_pool_subset(self, simple_pipeline):
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="thread_pool", indices=[1, 3], progress=False)
+        assert len(results) == 2
+        assert results[0] == ["item_1_3"]
+        assert results[1] == ["item_3_9"]
+
+
+# ---------------------------------------------------------------------------
+# run_pipeline — prefect backend (optional)
+# ---------------------------------------------------------------------------
+
+
+class TestPrefectBackend:
+    def test_prefect_runs(self, simple_pipeline):
+        pytest.importorskip("prefect")
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="prefect", progress=False)
+        assert len(results) == 5
+        assert results[0] == ["item_0_0"]
+        assert results[4] == ["item_4_12"]
+
+    def test_prefect_missing_raises(self, simple_pipeline):
+        with patch.dict("sys.modules", {"prefect": None}), pytest.raises(ImportError, match="prefect"):
+            run_pipeline(simple_pipeline, n_jobs=2, backend="prefect", progress=False)
+
+
+# ---------------------------------------------------------------------------
 # run_pipeline — auto backend
 # ---------------------------------------------------------------------------
 
@@ -278,7 +321,7 @@ class TestAutoBackend:
 
     def test_pick_auto_backend_returns_valid(self):
         result = _pick_auto_backend()
-        assert result in ("dask", "loky", "processes")
+        assert result in ("dask", "loky", "process_pool")
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +352,19 @@ class TestImports:
         assert callable(rp)
 
     def test_import_from_top_level(self):
-        from curator import run_pipeline as rp
+        from physicsnemo_curator import run_pipeline as rp
 
         assert callable(rp)
+
+    def test_import_from_run_module(self):
+        from physicsnemo_curator.run import run_pipeline as rp
+
+        assert callable(rp)
+
+    def test_list_backends(self):
+        backends = list_backends()
+        assert "sequential" in backends
+        assert "process_pool" in backends
+        assert "thread_pool" in backends
+        assert all("description" in info for info in backends.values())
+        assert all("available" in info for info in backends.values())
