@@ -68,16 +68,42 @@ pipeline.filters[0].flush()
 
 ```{toctree}
 :maxdepth: 2
+:caption: User Guide
 
 user-guide/installation
 user-guide/quickstart
 user-guide/architecture
-user-guide/mesh
-user-guide/da
-user-guide/datasets
 user-guide/parallel
 user-guide/cli
+user-guide/datasets
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Domains
+
+domains/mesh
+domains/da
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Examples
+
+auto_examples/index
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Developer Guide
+
 developer-guide/extending
 developer-guide/benchmarking
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: API Reference
+
 autoapi/index
 ```

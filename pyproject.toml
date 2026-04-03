@@ -86,6 +86,7 @@ docs = [
     "sphinx-autoapi>=3.8,<4",
     "sphinx-copybutton>=0.5",
     "sphinx-design>=0.6",
+    "sphinx-gallery>=0.19",
     "numpydoc>=1.10",
 ]
 
@@ -152,6 +153,7 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "test/**" = ["S101", "D"]
+"examples/**" = ["D"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

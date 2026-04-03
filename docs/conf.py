@@ -16,6 +16,8 @@
 
 """Sphinx configuration for physicsnemo-curator documentation."""
 
+import os
+
 project = "physicsnemo-curator"
 copyright = "2025 - 2026, NVIDIA CORPORATION & AFFILIATES"  # noqa: A001
 author = "NVIDIA"
@@ -27,14 +29,33 @@ release = "0.1.0"
 # ---------------------------------------------------------------------------
 extensions = [
     "autoapi.extension",
+    "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx_autodoc_typehints",
+    "sphinx_gallery.gen_gallery",
     "myst_parser",
     "sphinx_copybutton",
     "sphinx_design",
 ]
+
+# ---------------------------------------------------------------------------
+# Sphinx-Gallery (executable examples)
+# ---------------------------------------------------------------------------
+# Set PLOT_GALLERY=0 to skip example execution during doc builds.
+sphinx_gallery_conf = {
+    "examples_dirs": ["../examples"],
+    "gallery_dirs": ["auto_examples"],
+    "filename_pattern": r"/.+\.py$",
+    "run_stale_examples": os.environ.get("RUN_STALE_EXAMPLES", "False").lower() in ("1", "true"),
+    "plot_gallery": os.environ.get("PLOT_GALLERY", "0"),
+}
+
+# ---------------------------------------------------------------------------
+# Autosummary
+# ---------------------------------------------------------------------------
+autosummary_generate = False  # we use autosummary for compact tables only
 
 # ---------------------------------------------------------------------------
 # AutoAPI (static analysis — reads .pyi stubs without importing)
@@ -83,6 +104,9 @@ templates_path = ["_templates"]
 # PyData Sphinx Theme options (nvidia-sphinx-theme extends pydata-sphinx-theme)
 html_theme_options = {
     "github_url": "https://github.com/NVIDIA/physicsnemo-curator",
+    "navbar_align": "content",
+    "navbar_start": ["navbar-logo", "navbar-nav"],
+    "navbar_center": [],
 }
 
 # ---------------------------------------------------------------------------

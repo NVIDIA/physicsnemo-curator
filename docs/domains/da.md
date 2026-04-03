@@ -230,4 +230,4 @@ accumulate statistics **independently** in each process — their results are
 **not merged** automatically.  For accurate statistics across all indices,
 use ``n_jobs=1`` (sequential) or post-process the per-worker outputs.
 
-See the {doc}`parallel execution guide <parallel>` for details.
+See the {doc}`parallel execution guide </user-guide/parallel>` for details.
