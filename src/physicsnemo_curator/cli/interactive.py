@@ -26,12 +26,35 @@ import importlib
 import sys
 from typing import Any
 
-import click
 import questionary
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+from rich.table import Table
+from rich.text import Text
+from rich.theme import Theme
 
 from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
 from physicsnemo_curator.core.registry import registry
 from physicsnemo_curator.core.store import FileStore, FsspecFileStore, LocalFileStore
+
+# Custom theme with NVIDIA green accent
+CURATOR_THEME = Theme(
+    {
+        "info": "cyan",
+        "success": "bold green",
+        "warning": "bold yellow",
+        "error": "bold red",
+        "header": "bold magenta",
+        "highlight": "bold cyan",
+        "dim": "dim white",
+        "step": "bold blue",
+        "nvidia": "bold #76B900",  # NVIDIA green
+    }
+)
+
+# Shared console for colored output
+console = Console(theme=CURATOR_THEME)
 
 # Map submodule names to their Python module paths so we can import them
 # on demand (triggering component registration).
@@ -40,6 +63,48 @@ _SUBMODULE_IMPORTS: dict[str, str] = {
     "da": "curator.da",
     "mdt": "curator.mdt",
 }
+
+
+def _print_banner() -> None:
+    """Print the welcome banner with styling."""
+    banner_text = Text()
+    banner_text.append("PhysicsNeMo ", style="nvidia")
+    banner_text.append("Curator", style="bold white")
+
+    subtitle = Text("Interactive ETL Pipeline Builder", style="dim")
+
+    panel = Panel(
+        Text.assemble(banner_text, "\n", subtitle),
+        border_style="nvidia",
+        padding=(1, 2),
+    )
+    console.print(panel)
+
+
+def _print_step(step_num: int, total: int, description: str) -> None:
+    """Print a step header."""
+    console.print()
+    console.print(f"[step]Step {step_num}/{total}:[/step] [highlight]{description}[/highlight]")
+
+
+def _print_success(message: str) -> None:
+    """Print a success message."""
+    console.print(f"  [success]\u2713[/success] {message}")
+
+
+def _print_error(message: str) -> None:
+    """Print an error message."""
+    console.print(f"  [error]\u2717[/error] {message}")
+
+
+def _print_info(message: str) -> None:
+    """Print an info message."""
+    console.print(f"  [info]\u2022[/info] {message}")
+
+
+def _print_warning(message: str) -> None:
+    """Print a warning message."""
+    console.print(f"  [warning]\u26a0[/warning] {message}")
 
 
 def _ensure_submodules_registered() -> None:
@@ -96,7 +161,7 @@ def _prompt_params(component_cls: Any) -> dict[str, Any]:
 
         if answer is None:
             # User pressed Ctrl-C.
-            click.echo("Aborted.")
+            _print_error("Aborted.")
             sys.exit(1)
 
         # Use the default if the user left the input empty.
@@ -153,22 +218,22 @@ def _build_store(store_cls: type) -> FileStore:
     if store_cls is LocalFileStore:
         path = questionary.text("  Path to file or directory:").ask()
         if path is None:
-            click.echo("Aborted.")
+            _print_error("Aborted.")
             sys.exit(1)
         pattern = questionary.text("  Glob pattern [*]:", default="*").ask()
         if pattern is None:
-            click.echo("Aborted.")
+            _print_error("Aborted.")
             sys.exit(1)
         return LocalFileStore(path=path, pattern=pattern or "*")
 
     if store_cls is FsspecFileStore:
         url = questionary.text("  Remote URL (s3://, hf://, https://):").ask()
         if url is None:
-            click.echo("Aborted.")
+            _print_error("Aborted.")
             sys.exit(1)
         pattern = questionary.text("  Glob pattern [**]:", default="**").ask()
         if pattern is None:
-            click.echo("Aborted.")
+            _print_error("Aborted.")
             sys.exit(1)
         cache = questionary.text("  Local cache directory (leave empty for temp):", default="").ask()
         return FsspecFileStore(
@@ -178,24 +243,43 @@ def _build_store(store_cls: type) -> FileStore:
         )
 
     # Generic fallback for user-registered stores.
-    click.echo("  (custom store — no interactive prompts, constructing with defaults)")
+    _print_info("Custom store — no interactive prompts, constructing with defaults")
     return store_cls()
+
+
+def _print_pipeline_summary(source_name: str, filter_names: list[str], sink_name: str) -> None:
+    """Print a nicely formatted pipeline summary."""
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_column(style="dim")
+    table.add_column(style="bold")
+
+    # Build pipeline chain
+    chain_parts = [f"[cyan]{source_name}[/cyan]"]
+    for fname in filter_names:
+        chain_parts.append(f"[yellow]{fname}[/yellow]")
+    chain_parts.append(f"[green]{sink_name}[/green]")
+
+    pipeline_str = " [dim]\u2192[/dim] ".join(chain_parts)
+
+    console.print()
+    console.print(Panel(pipeline_str, title="[bold]Pipeline[/bold]", border_style="blue"))
 
 
 def run_interactive() -> None:
     """Run the full interactive pipeline builder flow."""
-    click.echo()
-    click.echo("Welcome to PhysicsNeMo Curator!")
-    click.echo()
+    _print_banner()
+
+    total_steps = 6
 
     # ------------------------------------------------------------------
     # 1. Discover and register available submodules
     # ------------------------------------------------------------------
+    _print_step(1, total_steps, "Select Submodule")
     _ensure_submodules_registered()
     submodules = registry.submodules()
 
     if not submodules:
-        click.echo("No submodules registered. Install an extra (e.g. curator[mesh]).")
+        _print_error("No submodules registered. Install an extra (e.g. curator[mesh]).")
         sys.exit(1)
 
     # ------------------------------------------------------------------
@@ -217,18 +301,21 @@ def run_interactive() -> None:
             )
 
     if not available_names:
-        click.echo("No submodules with installed dependencies found.")
-        click.echo("Install an extra, e.g.: pip install 'curator[mesh]'")
+        _print_error("No submodules with installed dependencies found.")
+        _print_info("Install an extra, e.g.: pip install 'curator[mesh]'")
         sys.exit(1)
 
     submodule_name: str | None = questionary.select("Select a submodule:", choices=choices).ask()
     if submodule_name is None:
-        click.echo("Aborted.")
+        _print_error("Aborted.")
         sys.exit(1)
+
+    _print_success(f"Selected submodule: [highlight]{submodule_name}[/highlight]")
 
     # ------------------------------------------------------------------
     # 3. Select and build store (data location)
     # ------------------------------------------------------------------
+    _print_step(2, total_steps, "Configure Data Store")
     stores = registry.stores(submodule_name)
     store_instance: FileStore | None = None
 
@@ -236,21 +323,21 @@ def run_interactive() -> None:
         store_choices = [questionary.Choice(title=name, value=name) for name in stores]
         store_name: str | None = questionary.select("Select a data store:", choices=store_choices).ask()
         if store_name is None:
-            click.echo("Aborted.")
+            _print_error("Aborted.")
             sys.exit(1)
 
         store_cls = stores[store_name]
-        click.echo(f"\nConfigure {store_name}:")
+        console.print(f"\n  [header]Configure {store_name}:[/header]")
         store_instance = _build_store(store_cls)
-        click.echo(f"  Found {len(store_instance)} file(s) in store.")
-        click.echo()
+        _print_success(f"Found [highlight]{len(store_instance)}[/highlight] file(s) in store")
 
     # ------------------------------------------------------------------
     # 4. Select source
     # ------------------------------------------------------------------
+    _print_step(3, total_steps, "Select Source/Reader")
     sources = registry.sources(submodule_name)
     if not sources:
-        click.echo(f"No sources registered for {submodule_name!r}.")
+        _print_error(f"No sources registered for {submodule_name!r}.")
         sys.exit(1)
 
     source_choices = [
@@ -258,11 +345,11 @@ def run_interactive() -> None:
     ]
     source_name: str | None = questionary.select("Select a source/reader:", choices=source_choices).ask()
     if source_name is None:
-        click.echo("Aborted.")
+        _print_error("Aborted.")
         sys.exit(1)
 
     source_cls = sources[source_name]
-    click.echo(f"\nConfigure {source_cls.name}:")
+    console.print(f"\n  [header]Configure {source_cls.name}:[/header]")
     source_kwargs = _prompt_params(source_cls)
 
     # Remove store-related params that are now handled by the store step.
@@ -276,14 +363,15 @@ def run_interactive() -> None:
         # No stores registered — fall back to passing kwargs directly.
         source_instance = source_cls(**source_kwargs)
 
-    click.echo(f"  Found {len(source_instance)} item(s) in source.")
-    click.echo()
+    _print_success(f"Found [highlight]{len(source_instance)}[/highlight] item(s) in source")
 
     # ------------------------------------------------------------------
     # 5. Select filters (multi-select)
     # ------------------------------------------------------------------
+    _print_step(4, total_steps, "Select Filters")
     filters = registry.filters(submodule_name)
     filter_instances: list[Filter[Any]] = []
+    filter_names: list[str] = []
 
     if filters:
         filter_choices = [
@@ -295,25 +383,30 @@ def run_interactive() -> None:
         ).ask()
 
         if selected_filter_names is None:
-            click.echo("Aborted.")
+            _print_error("Aborted.")
             sys.exit(1)
 
         for fname in selected_filter_names:
             filter_cls = filters[fname]
-            click.echo(f"\nConfigure {filter_cls.name}:")
+            console.print(f"\n  [header]Configure {filter_cls.name}:[/header]")
             fkwargs = _prompt_params(filter_cls)
             filter_instances.append(filter_cls(**fkwargs))
-    else:
-        click.echo("No filters available for this submodule.")
+            filter_names.append(filter_cls.name)
 
-    click.echo()
+        if selected_filter_names:
+            _print_success(f"Selected [highlight]{len(selected_filter_names)}[/highlight] filter(s)")
+        else:
+            _print_info("No filters selected")
+    else:
+        _print_warning("No filters available for this submodule")
 
     # ------------------------------------------------------------------
     # 6. Select sink
     # ------------------------------------------------------------------
+    _print_step(5, total_steps, "Select Sink/Writer")
     sinks = registry.sinks(submodule_name)
     if not sinks:
-        click.echo(f"No sinks registered for {submodule_name!r}.")
+        _print_error(f"No sinks registered for {submodule_name!r}.")
         sys.exit(1)
 
     sink_choices = [
@@ -321,39 +414,56 @@ def run_interactive() -> None:
     ]
     sink_name: str | None = questionary.select("Select a sink/writer:", choices=sink_choices).ask()
     if sink_name is None:
-        click.echo("Aborted.")
+        _print_error("Aborted.")
         sys.exit(1)
 
     sink_cls = sinks[sink_name]
-    click.echo(f"\nConfigure {sink_cls.name}:")
+    console.print(f"\n  [header]Configure {sink_cls.name}:[/header]")
     sink_kwargs = _prompt_params(sink_cls)
     sink_instance: Sink[Any] = sink_cls(**sink_kwargs)
 
+    _print_success(f"Configured sink: [highlight]{sink_cls.name}[/highlight]")
+
     # ------------------------------------------------------------------
-    # 7. Build pipeline
+    # 7. Build and show pipeline summary
     # ------------------------------------------------------------------
-    click.echo()
-    chain_parts = [source_cls.name]
-    chain_parts.extend(f.name for f in filter_instances)
-    chain_parts.append(sink_cls.name)
-    click.echo(f"Pipeline: {' → '.join(chain_parts)}")
-    click.echo()
+    _print_step(6, total_steps, "Execute Pipeline")
+
+    _print_pipeline_summary(source_cls.name, filter_names, sink_cls.name)
 
     pipeline: Pipeline[Any] = Pipeline(source=source_instance, filters=filter_instances, sink=sink_instance)
 
     # ------------------------------------------------------------------
-    # 8. Execute pipeline
+    # 8. Execute pipeline with progress bar
     # ------------------------------------------------------------------
     n = len(pipeline)
-    click.echo(f"Processing {n} item(s)...")
+    console.print()
 
     all_paths: list[list[str]] = []
-    for i in range(n):
-        paths = pipeline[i]
-        all_paths.append(paths)
-        click.echo(f"  [{i + 1}/{n}] → {', '.join(paths)}")
 
-    click.echo()
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=40),
+        TaskProgressColumn(),
+        TextColumn("[dim]{task.fields[current_file]}[/dim]"),
+        console=console,
+        transient=False,
+    ) as progress:
+        task = progress.add_task(
+            "[cyan]Processing...[/cyan]",
+            total=n,
+            current_file="",
+        )
+
+        for i in range(n):
+            paths = pipeline[i]
+            all_paths.append(paths)
+            progress.update(
+                task,
+                advance=1,
+                current_file=paths[0] if paths else "",
+            )
 
     # ------------------------------------------------------------------
     # 9. Flush any stateful filters (e.g. MeanFilter)
@@ -363,7 +473,25 @@ def run_interactive() -> None:
             flush = getattr(f, "flush")  # noqa: B009
             result = flush()
             if result:
-                click.echo(f"Statistics saved to {result}")
+                _print_info(f"Statistics saved to {result}")
 
+    # ------------------------------------------------------------------
+    # Final summary
+    # ------------------------------------------------------------------
+    console.print()
     total_outputs = sum(len(p) for p in all_paths)
-    click.echo(f"\nDone! {n} source item(s) processed, {total_outputs} output(s) written.")
+
+    summary_table = Table(show_header=False, box=None, padding=(0, 2))
+    summary_table.add_column(style="dim")
+    summary_table.add_column(style="bold")
+
+    summary_table.add_row("Source items processed:", f"[cyan]{n}[/cyan]")
+    summary_table.add_row("Outputs written:", f"[green]{total_outputs}[/green]")
+
+    console.print(
+        Panel(
+            summary_table,
+            title="[bold green]\u2713 Complete[/bold green]",
+            border_style="green",
+        )
+    )

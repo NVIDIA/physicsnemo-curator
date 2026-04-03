@@ -33,6 +33,7 @@ dependencies = [
 cli = [
     "click>=8.0",
     "questionary>=2.0",
+    "rich>=13.0",
 ]
 loky = [
     "joblib>=1.3",

@@ -9,6 +9,12 @@ you through building and executing a pipeline without writing code.
 pip install physicsnemo-curator[cli]
 ```
 
+This installs the required dependencies:
+
+- `click` — CLI framework
+- `questionary` — interactive prompts
+- `rich` — colored output and progress bars
+
 You also need the domain submodule installed (e.g. `pip install physicsnemo-curator[mesh]`).
 
 ## Usage
@@ -17,7 +23,8 @@ You also need the domain submodule installed (e.g. `pip install physicsnemo-cura
 curator
 ```
 
-The CLI walks through six steps:
+The CLI displays a styled welcome banner and walks through six steps with
+colored output and progress indicators.
 
 ### 1. Select Submodule
 
@@ -25,10 +32,16 @@ The CLI discovers registered submodules and shows which have their
 dependencies installed:
 
 ```text
+╭─────────────────────────────────────╮
+│   PhysicsNeMo Curator               │
+│   Interactive ETL Pipeline Builder  │
+╰─────────────────────────────────────╯
+
+Step 1/6: Select Submodule
 ? Select a submodule:
-  ▸ mesh — Mesh processing (physicsnemo.mesh.Mesh) [available]
-    xr — XArray processing [not installed]
-    mdt — Molecular dynamics tensors [not installed]
+  ▸ mesh — Mesh processing (physicsnemo.mesh.Mesh)
+    da — DataArray processing (xarray.DataArray) (not installed)
+    mdt — Molecular dynamics tensor tuples (not installed)
 ```
 
 ### 2. Select Data Store
@@ -37,9 +50,10 @@ Choose where the input data lives.  Built-in stores are registered per
 submodule (see {ref}`store-registration`):
 
 ```text
+Step 2/6: Configure Data Store
 ? Select a data store:
-  ▸ Local directory
-    Remote (fsspec)
+  ▸ LocalFileStore
+    FsspecFileStore
 ```
 
 You are then prompted for store-specific inputs:
@@ -47,18 +61,20 @@ You are then prompted for store-specific inputs:
 **Local directory:**
 
 ```text
+  Configure LocalFileStore:
   Path to file or directory: ./cfd_results/
   Glob pattern [*]: *.vtk
-  Found 42 file(s) in store.
+  ✓ Found 42 file(s) in store
 ```
 
 **Remote (fsspec):**
 
 ```text
+  Configure FsspecFileStore:
   Remote URL (s3://, hf://, https://): hf://datasets/neashton/drivaerml/run_1/slices
   Glob pattern [**]: *.vtp
   Local cache directory (leave empty for temp):
-  Found 68 file(s) in store.
+  ✓ Found 68 file(s) in store
 ```
 
 ### 3. Select Source
@@ -66,6 +82,7 @@ You are then prompted for store-specific inputs:
 Choose from the registered sources for the selected submodule:
 
 ```text
+Step 3/6: Select Source/Reader
 ? Select a source/reader:
   ▸ VTK Reader — Read VTK files (.vtk, .vtp, .vtu, .vts, .vtm)
 ```
@@ -73,10 +90,11 @@ Choose from the registered sources for the selected submodule:
 You are then prompted for source-specific parameters (conversion options):
 
 ```text
-Configure VTK Reader:
-? manifold_dim (Target manifold dimension) [auto]: auto
-? point_source (Point source mode) [vertices]: vertices
-? warn_on_lost_data (Warn when data arrays are discarded) [True]:
+  Configure VTK Reader:
+  ? manifold_dim (Target manifold dimension) [auto]: auto
+  ? point_source (Point source mode) [vertices]: vertices
+  ? warn_on_lost_data (Warn when data arrays are discarded) [True]:
+  ✓ Found 42 item(s) in source
 ```
 
 ### 4. Select Filters
@@ -84,8 +102,10 @@ Configure VTK Reader:
 Choose zero or more filters (multi-select with checkboxes):
 
 ```text
+Step 4/6: Select Filters
 ? Select filters (space to toggle, enter to confirm):
   ▸ ☑ Mean Statistics — Compute spatial means and save to Parquet
+  ✓ Selected 1 filter(s)
 ```
 
 Each selected filter's parameters are prompted in order.
@@ -95,23 +115,47 @@ Each selected filter's parameters are prompted in order.
 Choose the output writer:
 
 ```text
+Step 5/6: Select Sink/Writer
 ? Select a sink:
   ▸ PhysicsNeMo Mesh Writer — Save in native tensordict format
+  ✓ Configured sink: PhysicsNeMo Mesh Writer
 ```
 
 ### 6. Execute
 
-The CLI builds the pipeline and processes all items with a progress
-indicator.  Stateful filters are flushed automatically after execution.
+The CLI builds the pipeline, displays a summary, and processes all items
+with an animated progress bar.  Stateful filters are flushed automatically
+after execution.
 
 ```text
-Processing 42 items...
-  Item 0 → ['./output/mesh_0000_0']
-  Item 1 → ['./output/mesh_0001_0']
-  ...
-Done. Processed 42 items.
-Flushed Mean Statistics → stats.parquet
+Step 6/6: Execute Pipeline
+
+╭──────────────────── Pipeline ────────────────────╮
+│ VTK Reader → Mean Statistics → Mesh Writer       │
+╰──────────────────────────────────────────────────╯
+
+⠋ Processing... ━━━━━━━━━━━━━━━━━━━━ 100% 42/42 ./output/mesh_0041_0
+
+• Statistics saved to stats.parquet
+
+╭─────────────── ✓ Complete ───────────────╮
+│ Source items processed:        42        │
+│ Outputs written:               42        │
+╰──────────────────────────────────────────╯
 ```
+
+## Color Scheme
+
+The CLI uses a consistent color scheme throughout:
+
+| Element | Color |
+|---------|-------|
+| Branding | NVIDIA green |
+| Step headers | Blue |
+| Highlights | Cyan |
+| Success (✓) | Green |
+| Warnings (⚠) | Yellow |
+| Errors (✗) | Red |
 
 ## Programmatic Equivalent
 

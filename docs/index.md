@@ -31,7 +31,7 @@ pip install physicsnemo-curator[mesh]
 # With parallel backends (joblib, dask)
 pip install physicsnemo-curator[parallel]
 
-# With CLI support (click, questionary)
+# With CLI support (click, questionary, rich)
 pip install physicsnemo-curator[cli]
 ```
 

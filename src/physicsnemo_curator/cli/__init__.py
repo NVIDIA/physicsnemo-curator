@@ -17,14 +17,18 @@
 """CLI entry point for PhysicsNeMo Curator.
 
 Run ``curator`` to launch the interactive pipeline builder.  Requires the
-``curator[cli]`` extra (click, questionary).
+``curator[cli]`` extra (click, questionary, rich).
 """
 
 from __future__ import annotations
 
 import click
+from rich.console import Console
 
 from physicsnemo_curator.cli.interactive import run_interactive
+
+# Shared console for colored output
+console = Console()
 
 
 @click.command()
