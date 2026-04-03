@@ -23,6 +23,9 @@ pub enum VTKParseError {
     /// UTF-8 encoding error.
     #[error("UTF-8 error: {0}")]
     Utf8(#[from] std::str::Utf8Error),
+    /// I/O error.
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Data format in VTK XML.
@@ -129,8 +132,12 @@ fn parse_ascii_u8(text: &str) -> Vec<u8> {
 /// # Errors
 ///
 /// Returns `VTKParseError` if the XML is malformed or contains invalid data.
-pub fn parse_vtk<R: BufRead>(reader: R, format: &str) -> Result<VTKMesh, VTKParseError> {
-    let mut xml_reader = Reader::from_reader(reader);
+pub fn parse_vtk<R: BufRead>(mut reader: R, format: &str) -> Result<VTKMesh, VTKParseError> {
+    // Read all content into a buffer first for read_text compatibility
+    let mut content = Vec::new();
+    reader.read_to_end(&mut content)?;
+
+    let mut xml_reader = Reader::from_reader(content.as_slice());
     xml_reader.config_mut().trim_text(true);
 
     let mut mesh = VTKMesh::new(format);
@@ -142,7 +149,8 @@ pub fn parse_vtk<R: BufRead>(reader: R, format: &str) -> Result<VTKMesh, VTKPars
     loop {
         match xml_reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
-                let name = std::str::from_utf8(e.name().as_ref())?;
+                let name_qname = e.name();
+                let name = std::str::from_utf8(name_qname.as_ref())?;
                 match name {
                     "Piece" => {
                         for attr in e.attributes().flatten() {
@@ -179,7 +187,8 @@ pub fn parse_vtk<R: BufRead>(reader: R, format: &str) -> Result<VTKMesh, VTKPars
                 }
             }
             Ok(Event::End(e)) => {
-                let name = std::str::from_utf8(e.name().as_ref())?;
+                let name_qname = e.name();
+                let name = std::str::from_utf8(name_qname.as_ref())?;
                 match name {
                     "Points" | "Cells" | "Polys" | "Verts" => current_section = None,
                     "PointData" => in_point_data = false,

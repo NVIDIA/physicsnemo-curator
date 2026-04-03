@@ -16,6 +16,8 @@
 
 use pyo3::prelude::*;
 
+mod vtk;
+
 /// Returns the version of the native Rust library.
 #[pyfunction]
 fn rust_version() -> &'static str {
@@ -26,5 +28,6 @@ fn rust_version() -> &'static str {
 #[pymodule]
 fn _lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rust_version, m)?)?;
+    vtk::bindings::register_vtk_module(m)?;
     Ok(())
 }
