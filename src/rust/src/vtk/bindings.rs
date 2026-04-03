@@ -129,10 +129,17 @@ pub fn py_read_vtk_parallel(paths: Vec<String>) -> PyResult<Vec<PyVTKMesh>> {
 
 /// Register the VTK submodule.
 pub fn register_vtk_module(parent: &Bound<'_, PyModule>) -> PyResult<()> {
-    let vtk = PyModule::new(parent.py(), "vtk")?;
+    let py = parent.py();
+    let vtk = PyModule::new(py, "vtk")?;
     vtk.add_class::<PyVTKMesh>()?;
     vtk.add_function(wrap_pyfunction!(py_read_vtk, &vtk)?)?;
     vtk.add_function(wrap_pyfunction!(py_read_vtk_parallel, &vtk)?)?;
     parent.add_submodule(&vtk)?;
+
+    // Register in sys.modules so `from _lib import vtk` works
+    let sys = py.import("sys")?;
+    let modules = sys.getattr("modules")?;
+    modules.set_item("physicsnemo_curator._lib.vtk", &vtk)?;
+
     Ok(())
 }
