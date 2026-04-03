@@ -47,6 +47,9 @@ if TYPE_CHECKING:
 #: File extensions recognised as VTK formats.
 _VTK_EXTENSIONS: frozenset[str] = frozenset({".vtk", ".vtp", ".vtu", ".vts", ".vtm"})
 
+#: Valid backend options for VTK reading.
+Backend = Literal["pyvista", "rust"]
+
 
 class VTKSource(Source[Mesh]):
     """Read VTK files and yield :class:`~physicsnemo.mesh.Mesh` objects.
@@ -81,6 +84,13 @@ class VTKSource(Source[Mesh]):
         If *True* (default), emit a warning when the conversion discards
         non-empty data arrays (e.g. cell data lost during dimension
         reduction).
+    backend : {"pyvista", "rust"}
+        VTK reading backend:
+
+        - ``"pyvista"`` (default): use PyVista for full-featured reading.
+        - ``"rust"``: use the native Rust backend for faster reading.
+          Note: The Rust backend only supports ASCII VTU/VTP files and
+          does not support ``manifold_dim`` or ``point_source`` options.
 
     Examples
     --------
@@ -101,6 +111,10 @@ class VTKSource(Source[Mesh]):
 
     >>> store = MyCustomFileStore(...)
     >>> source = VTKSource(store=store, manifold_dim=2)
+
+    Using the fast Rust backend:
+
+    >>> source = VTKSource.from_path("./cfd_results/", backend="rust")
     """
 
     name: ClassVar[str] = "VTK Reader"
@@ -140,6 +154,13 @@ class VTKSource(Source[Mesh]):
                 type=bool,
                 default=True,
             ),
+            Param(
+                name="backend",
+                description="VTK reading backend: pyvista (default) or rust (faster)",
+                type=str,
+                default="pyvista",
+                choices=["pyvista", "rust"],
+            ),
         ]
 
     # -- Constructors --------------------------------------------------------
@@ -150,11 +171,13 @@ class VTKSource(Source[Mesh]):
         manifold_dim: int | Literal["auto"] = "auto",
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
+        backend: Backend = "pyvista",
     ) -> None:
         self._store = store
         self._manifold_dim = manifold_dim
         self._point_source = point_source
         self._warn_on_lost_data = warn_on_lost_data
+        self._backend: Backend = backend
 
     @classmethod
     def from_path(
@@ -165,6 +188,7 @@ class VTKSource(Source[Mesh]):
         manifold_dim: int | Literal["auto"] = "auto",
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
+        backend: Backend = "pyvista",
     ) -> VTKSource:
         """Create a :class:`VTKSource` from a local directory or file.
 
@@ -180,6 +204,8 @@ class VTKSource(Source[Mesh]):
             Point source mode.
         warn_on_lost_data : bool
             Warn when data arrays are discarded.
+        backend : {"pyvista", "rust"}
+            VTK reading backend.
 
         Returns
         -------
@@ -197,6 +223,7 @@ class VTKSource(Source[Mesh]):
             manifold_dim=manifold_dim,
             point_source=point_source,
             warn_on_lost_data=warn_on_lost_data,
+            backend=backend,
         )
 
     @classmethod
@@ -210,6 +237,7 @@ class VTKSource(Source[Mesh]):
         manifold_dim: int | Literal["auto"] = "auto",
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
+        backend: Backend = "pyvista",
     ) -> VTKSource:
         """Create a :class:`VTKSource` from an ``fsspec``-compatible URL.
 
@@ -235,6 +263,8 @@ class VTKSource(Source[Mesh]):
             Point source mode.
         warn_on_lost_data : bool
             Warn when data arrays are discarded.
+        backend : {"pyvista", "rust"}
+            VTK reading backend.
 
         Returns
         -------
@@ -262,6 +292,7 @@ class VTKSource(Source[Mesh]):
             manifold_dim=manifold_dim,
             point_source=point_source,
             warn_on_lost_data=warn_on_lost_data,
+            backend=backend,
         )
 
     # -- Source interface -----------------------------------------------------
@@ -273,9 +304,10 @@ class VTKSource(Source[Mesh]):
     def __getitem__(self, index: int) -> Generator[Mesh]:
         """Read the *index*-th VTK file and yield a Mesh.
 
-        The file is loaded with :func:`pyvista.read` and converted via
-        :func:`physicsnemo.mesh.io.from_pyvista` using the conversion
-        parameters supplied at construction time.
+        The file is loaded with the configured backend and converted to
+        a :class:`~physicsnemo.mesh.Mesh`. When using the PyVista backend,
+        the mesh is converted via :func:`physicsnemo.mesh.io.from_pyvista`
+        using the conversion parameters supplied at construction time.
 
         Parameters
         ----------
@@ -288,11 +320,69 @@ class VTKSource(Source[Mesh]):
             The converted physicsnemo Mesh.
         """
         path = self._store[index]
+        mesh = self._read_with_rust(path) if self._backend == "rust" else self._read_with_pyvista(path)
+        yield mesh
+
+    def _read_with_pyvista(self, path: str) -> Mesh:
+        """Read VTK file using PyVista backend.
+
+        Parameters
+        ----------
+        path : str
+            Path to the VTK file.
+
+        Returns
+        -------
+        Mesh
+            Converted physicsnemo Mesh.
+        """
         pv_mesh = pv.read(path)
-        mesh = from_pyvista(
+        return from_pyvista(
             pv_mesh,
             manifold_dim=self._manifold_dim,
             point_source=self._point_source,
             warn_on_lost_data=self._warn_on_lost_data,
         )
-        yield mesh
+
+    def _read_with_rust(self, path: str) -> Mesh:
+        """Read VTK file using Rust backend.
+
+        The Rust backend returns raw mesh data without the from_pyvista
+        conversion. Currently only supports ASCII VTU/VTP files and does
+        not support manifold_dim or point_source options.
+
+        Parameters
+        ----------
+        path : str
+            Path to the VTK file.
+
+        Returns
+        -------
+        Mesh
+            Raw mesh with points and point_data from the VTK file.
+        """
+        import torch
+        from tensordict import TensorDict
+
+        from physicsnemo_curator._lib import vtk
+
+        rust_mesh = vtk.read_vtk(path)
+
+        # Convert Rust mesh to physicsnemo Mesh
+        points = torch.from_numpy(rust_mesh.points().reshape(-1, 3))
+
+        # Build point_data TensorDict from Rust arrays
+        point_data_dict = {}
+        for name, (data, num_components) in rust_mesh.point_data().items():
+            arr = torch.from_numpy(data)
+            if num_components > 1:
+                arr = arr.reshape(-1, num_components)
+            point_data_dict[name] = arr
+
+        point_data = TensorDict(point_data_dict, batch_size=[rust_mesh.n_points]) if point_data_dict else None
+
+        return Mesh(
+            points=points,
+            point_data=point_data,
+            # Note: cells/faces not converted - Rust backend is for raw data access
+        )
