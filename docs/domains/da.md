@@ -1,4 +1,4 @@
-# DataArray Processing (``da``)
+# DataArray Submodule (``da``)
 
 The ``da`` submodule provides pipeline components for working with
 {class}`xarray.DataArray` objects — the standard data structure for
