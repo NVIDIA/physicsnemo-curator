@@ -206,6 +206,195 @@ class TestERA5Source:
 
 
 # ===================================================================
+# Multi-backend routing tests
+# ===================================================================
+
+
+class TestERA5MultiBackend:
+    """Tests for multi-backend routing in ERA5Source."""
+
+    def test_routing_single_backend(self) -> None:
+        """All variables route to the single requested backend."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.era5 import ERA5Source
+
+        mock_arco = MagicMock()
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: v in {"t2m", "u10m"}
+
+        with (
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_backend",
+                return_value=mock_arco,
+            ),
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                return_value=mock_lexicon,
+            ),
+        ):
+            source = ERA5Source(
+                times=_TIMES,
+                variables=["t2m", "u10m"],
+                backend="arco",
+            )
+        assert source.variable_routing == {"t2m": "arco", "u10m": "arco"}
+        assert source.backends_used == {"arco"}
+        assert source.active_backend == "arco"
+
+    def test_routing_multi_backend_fallback(self) -> None:
+        """Variables route to first backend whose lexicon contains them."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.era5 import ERA5Source
+
+        mock_arco = MagicMock()
+        mock_ncar = MagicMock()
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: v in {"t2m", "u10m"}
+        ncar_lexicon = MagicMock()
+        ncar_lexicon.__contains__ = lambda self, v: v in {"t2m", "u10m", "cp"}
+
+        def import_backend(name, **kwargs):
+            return {"arco": mock_arco, "ncar": mock_ncar}[name]
+
+        def import_lexicon(name):
+            return {"arco": arco_lexicon, "ncar": ncar_lexicon}[name]
+
+        with (
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_backend",
+                side_effect=import_backend,
+            ),
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                side_effect=import_lexicon,
+            ),
+        ):
+            source = ERA5Source(
+                times=_TIMES,
+                variables=["t2m", "cp"],
+                backend=["arco", "ncar"],
+            )
+        assert source.variable_routing == {"t2m": "arco", "cp": "ncar"}
+        assert source.backends_used == {"arco", "ncar"}
+        assert source.active_backend is None
+
+    def test_routing_unresolvable_raises(self) -> None:
+        """ValueError raised when a variable isn't in any backend."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.era5 import ERA5Source
+
+        empty_lexicon = MagicMock()
+        empty_lexicon.__contains__ = lambda self, v: False
+
+        with (
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_backend",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                return_value=empty_lexicon,
+            ),
+        ):
+            with pytest.raises(ValueError, match="not found in any backend"):
+                ERA5Source(
+                    times=_TIMES,
+                    variables=["nonexistent_var"],
+                    backend="arco",
+                )
+
+    def test_backend_options_forwarded(self) -> None:
+        """Backend-specific options are forwarded to the constructor."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.era5 import ERA5Source
+
+        mock_ncar = MagicMock()
+        ncar_lexicon = MagicMock()
+        ncar_lexicon.__contains__ = lambda self, v: True
+
+        captured_kwargs: dict = {}
+
+        def import_backend(name, **kwargs):
+            captured_kwargs.update(kwargs)
+            return mock_ncar
+
+        with (
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_backend",
+                side_effect=import_backend,
+            ),
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                return_value=ncar_lexicon,
+            ),
+        ):
+            ERA5Source(
+                times=_TIMES,
+                variables=["t2m"],
+                backend="ncar",
+                backend_options={"ncar": {"max_workers": 8}},
+            )
+        assert captured_kwargs.get("max_workers") == 8
+
+    def test_cds_unavailable_fallback(self) -> None:
+        """When CDS fails to instantiate, next backend is tried with warning."""
+        import warnings
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.era5 import ERA5Source
+
+        mock_arco = MagicMock()
+        cds_lexicon = MagicMock()
+        cds_lexicon.__contains__ = lambda self, v: True
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        def import_backend(name, **kwargs):
+            if name == "cds":
+                raise Exception("CDS API key not found")
+            return mock_arco
+
+        def import_lexicon(name):
+            return {"cds": cds_lexicon, "arco": arco_lexicon}[name]
+
+        with (
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_backend",
+                side_effect=import_backend,
+            ),
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                side_effect=import_lexicon,
+            ),
+        ):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                source = ERA5Source(
+                    times=_TIMES,
+                    variables=["t2m"],
+                    backend=["cds", "arco"],
+                )
+            assert len(w) == 1
+            assert "cds" in str(w[0].message).lower()
+        assert source.variable_routing == {"t2m": "arco"}
+
+    def test_invalid_backend_name_raises(self) -> None:
+        """ValueError raised for unknown backend name."""
+        from physicsnemo_curator.da.sources.era5 import ERA5Source
+
+        with pytest.raises(ValueError, match="Unknown backend"):
+            ERA5Source(
+                times=_TIMES,
+                variables=["t2m"],
+                backend="fake_backend",
+            )
+
+
+# ===================================================================
 # ZarrSink tests
 # ===================================================================
 
