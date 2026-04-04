@@ -112,6 +112,12 @@ pipeline.filters[0].flush()
 
 Or implement a post-hoc merge step that combines per-worker outputs.
 
+## Profiling
+
+To measure wall-clock time, memory, and GPU usage across parallel backends,
+wrap your pipeline with `ProfiledPipeline`. See [Profiling](profiling.md)
+for details.
+
 ## Examples
 
 ### Basic parallel ETL
