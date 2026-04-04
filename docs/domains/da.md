@@ -1,6 +1,6 @@
-# DataArray Submodule (``da``)
+# DataArray Submodule
 
-The ``da`` submodule provides pipeline components for working with
+The `curator.da` submodule provides pipeline components for working with
 {class}`xarray.DataArray` objects — the standard data structure for
 labelled multi-dimensional arrays in the scientific Python ecosystem.
 
