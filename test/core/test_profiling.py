@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import pickle
 import sys
@@ -542,3 +543,20 @@ class TestOutputFormats:
         assert "total_wall_time_ns" in s
         assert "mean_index_time_ns" in s
         assert "indices" in s
+
+
+class TestConcurrentMetrics:
+    """Test metrics collection under concurrent access."""
+
+    def test_concurrent_getitem(self):
+        """Multiple threads calling __getitem__ concurrently."""
+        pipeline = _TimedSource(20, delay=0.0).filter(_DoubleFilter()).write(_CollectSink())
+        profiled = ProfiledPipeline(pipeline)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [pool.submit(profiled.__getitem__, i) for i in range(20)]
+            results = [f.result() for f in futures]
+
+        assert len(results) == 20
+        metrics = profiled.collect_metrics()
+        assert len(metrics.indices) == 20
