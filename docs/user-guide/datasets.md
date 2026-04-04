@@ -90,6 +90,81 @@ source_all = WindTunnelSource(split="all")
 print(f"Total: {len(source_all)} simulations")
 ```
 
+## ERA5 Reanalysis
+
+The {py:class}`~physicsnemo_curator.da.sources.era5.ERA5Source` fetches
+ERA5 reanalysis data from earth2studio.  It supports four backends with
+automatic per-variable routing.
+
+### Quick Start
+
+```python
+from datetime import datetime
+from physicsnemo_curator.da.sources.era5 import ERA5Source
+
+# Default: uses ARCO (largest variable coverage)
+source = ERA5Source(
+    times=[datetime(2020, 6, 1, 0), datetime(2020, 6, 1, 6)],
+    variables=["t2m", "u10m", "v10m"],
+)
+da = next(source[0])  # xr.DataArray (time, variable, lat, lon)
+```
+
+### Multi-Backend Routing
+
+Some variables are only available in certain backends.  Pass a
+priority-ordered list and each variable routes to the first backend
+that supports it:
+
+```python
+source = ERA5Source(
+    times=[datetime(2020, 6, 1, 0)],
+    variables=["t2m", "cp"],       # cp is NCAR-only
+    backend=["arco", "ncar"],
+)
+print(source.variable_routing)
+# {'t2m': 'arco', 'cp': 'ncar'}
+```
+
+### Available Backends
+
+| Backend | Name | Variables | Time Resolution | Requirements |
+|---------|------|-----------|-----------------|--------------|
+| ARCO | `"arco"` | 1,408 | 1 hr | None |
+| WB2 | `"wb2"` | 103 | 6 hr | None |
+| NCAR | `"ncar"` | 276 | 1 hr | None |
+| CDS | `"cds"` | 117 | 1 hr | CDS API key |
+
+All backends produce 0.25° (721×1440) grids.  84 core variables
+(surface + 13 pressure levels) are common to all four.
+
+### Backend Options
+
+Per-backend constructor arguments can be forwarded:
+
+```python
+source = ERA5Source(
+    times=[datetime(2020, 6, 1, 0)],
+    variables=["t2m"],
+    backend="ncar",
+    backend_options={"ncar": {"max_workers": 8}},
+)
+```
+
+### Introspection
+
+```python
+source.variable_routing   # dict: variable -> backend name
+source.backends_used       # set of backend names in use
+source.active_backend      # str if single backend, else None
+```
+
+Requires the ``da`` dependency group:
+
+```bash
+uv sync --group da
+```
+
 ## Mesh Types
 
 Each dataset organises its data into different mesh types:
