@@ -395,8 +395,9 @@ class TestERA5MultiBackend:
 
     def test_single_backend_no_concat(self) -> None:
         """When all variables use one backend, result is returned directly."""
-        import xarray as xr
         from unittest.mock import MagicMock, patch
+
+        import xarray as xr
 
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
@@ -474,9 +475,10 @@ class TestERA5MultiBackend:
 
     def test_grid_alignment_check(self) -> None:
         """Mismatched grids raise ValueError."""
+        from unittest.mock import MagicMock, patch
+
         import numpy as np
         import xarray as xr
-        from unittest.mock import MagicMock, patch
 
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
@@ -575,6 +577,7 @@ class TestERA5MultiBackend:
         # After concat: [v10m, t2m] (arco group) + [cp] (ncar group) = [v10m, t2m, cp]
         # This matches the grouped order, not the original input order.
         # The spec says "grouped by backend" so this is correct.
+        assert list(merged.coords["variable"].values) == ["v10m", "t2m", "cp"]
         assert merged.sizes["variable"] == 3
 
 
