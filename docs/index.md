@@ -74,6 +74,7 @@ user-guide/installation
 user-guide/quickstart
 user-guide/architecture
 user-guide/parallel
+user-guide/profiling
 user-guide/cli
 user-guide/datasets
 ```

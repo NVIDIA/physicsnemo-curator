@@ -17,6 +17,83 @@ Within a submodule (e.g. `mesh`), all components communicate through a
 single data type `T`.  For the mesh submodule, `T` is
 {class}`physicsnemo.mesh.Mesh`.
 
+## Design Pattern: Pipes and Filters
+
+PhysicsNeMo Curator implements the **Pipes and Filters** architectural style.
+In this pattern a system is decomposed into a series of independent processing
+elements (*filters*) connected by channels (*pipes*) that carry a uniform data
+stream.  Each filter reads from its input, transforms the data, and writes to
+its output without knowledge of its neighbours.
+
+```{note}
+**Classical references**
+
+- **Shaw, M. & Garlan, D. (1996).** *Software Architecture: Perspectives on an
+  Emerging Discipline.* Prentice Hall, Chapter 2.  Formalises Pipes and Filters
+  as one of the canonical architectural styles alongside Layered, Repository,
+  and Implicit Invocation.
+
+- **Buschmann, F., Meunier, R., Rohnert, H., Sommerlad, P., & Stal, M.
+  (1996).** *Pattern-Oriented Software Architecture, Volume 1: A System of
+  Patterns (POSA).* Wiley, pp. 53–70.  Catalogues Pipes and Filters as a
+  fundamental architectural pattern with detailed structure, dynamics, and
+  known-uses sections.
+
+- **Gamma, E., Helm, R., Johnson, R., & Vlissides, J. (1994).** *Design
+  Patterns: Elements of Reusable Object-Oriented Software.* Addison-Wesley.
+  Defines the complementary **Strategy** and **Decorator** patterns used in the
+  execution and profiling layers.
+
+- **Hohpe, G. & Woolf, B. (2003).** *Enterprise Integration Patterns.*
+  Addison-Wesley, Chapter 3.  Extends Pipes and Filters to message-based and
+  streaming integration contexts, directly analogous to the generator-based
+  streaming used here.
+```
+
+### Mapping to the classical vocabulary
+
+The table below shows how the abstract Pipes and Filters vocabulary maps to
+concrete PhysicsNeMo Curator classes.
+
+| Pattern concept | Curator equivalent | Role |
+|-----------------|--------------------|------|
+| **Data source** | {class}`~physicsnemo_curator.core.base.Source` | Produces a stream of typed items from external storage |
+| **Filter** | {class}`~physicsnemo_curator.core.base.Filter` | Transforms, expands, contracts, or observes the stream |
+| **Pipe** | Python generators (`Generator[T]`) | Lazy, pull-driven connectors between stages |
+| **Data sink** | {class}`~physicsnemo_curator.core.base.Sink` | Consumes the stream and persists output |
+| **Pipeline** | {class}`~physicsnemo_curator.core.base.Pipeline` | Composite that chains a source, zero or more filters, and a sink into a single executable unit |
+
+### Why Pipes and Filters?
+
+This pattern is a natural fit for ETL (Extract-Transform-Load) workloads for
+several reasons:
+
+1. **Independent stages** — each Source, Filter, and Sink can be developed,
+   tested, and reused in isolation.  Any Filter that operates on type `T`
+   composes with any Source or Sink of the same type.
+2. **Lazy evaluation** — Python generators serve as pipes, so items flow
+   through the entire chain one at a time without materialising the full
+   dataset in memory.
+3. **Parallelism** — because each source index produces an independent stream,
+   the pipeline is *embarrassingly parallel* across indices.  The
+   {func}`~physicsnemo_curator.run.run_pipeline` function exploits this with six
+   pluggable backends (see {doc}`/user-guide/parallel`).
+4. **Extensibility** — adding a new stage requires implementing a single
+   abstract method (`__getitem__` for sources, `__call__` for filters and
+   sinks`) and nothing else.
+
+### Complementary patterns
+
+Beyond the primary Pipes and Filters architecture several classical design
+patterns (Gamma et al., 1994) reinforce the framework:
+
+| Pattern | Where used | Purpose |
+|---------|-----------|---------|
+| **Strategy** | {class}`~physicsnemo_curator.run.base.RunBackend` and its six implementations | Decouple pipeline definition from execution policy |
+| **Decorator / Proxy** | {class}`~physicsnemo_curator.core.profiling.ProfiledPipeline` | Wrap an existing pipeline with instrumentation without modifying it |
+| **Plugin / Microkernel** | {class}`~physicsnemo_curator.core.registry.Registry` with domain submodules (`mesh`, `da`) | Keep the core domain-agnostic; submodules register components at import time |
+| **Protocol / Dependency Injection** | {class}`~physicsnemo_curator.core.store.FileStore` | Decouple file discovery from file reading so sources work with local, remote, or custom storage |
+
 ## Core Components
 
 ### Source
