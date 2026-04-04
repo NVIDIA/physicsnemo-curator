@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 import pytest
 
 from physicsnemo_curator.core.base import Filter, Param, Sink, Source
+from physicsnemo_curator.core.profiling import IndexMetrics, PipelineMetrics, StageMetrics
 
 pytestmark = pytest.mark.unit
 
@@ -172,16 +173,12 @@ class TestStageMetrics:
 
     def test_creation(self):
         """StageMetrics holds name and wall_time_ns."""
-        from physicsnemo_curator.core.profiling import StageMetrics
-
         m = StageMetrics(name="source", wall_time_ns=1_000_000)
         assert m.name == "source"
         assert m.wall_time_ns == 1_000_000
 
     def test_to_dict(self):
         """StageMetrics.to_dict() returns expected keys."""
-        from physicsnemo_curator.core.profiling import StageMetrics
-
         m = StageMetrics(name="DoubleFilter", wall_time_ns=500_000)
         d = m.to_dict()
         assert d == {"name": "DoubleFilter", "wall_time_ns": 500_000}
@@ -192,8 +189,6 @@ class TestIndexMetrics:
 
     def test_creation(self):
         """IndexMetrics has index, stages, wall_time_ns, peak_memory_bytes, gpu_memory_bytes."""
-        from physicsnemo_curator.core.profiling import IndexMetrics, StageMetrics
-
         stages = [StageMetrics(name="source", wall_time_ns=1000)]
         m = IndexMetrics(
             index=0,
@@ -208,8 +203,6 @@ class TestIndexMetrics:
 
     def test_to_dict(self):
         """IndexMetrics.to_dict() returns nested structure."""
-        from physicsnemo_curator.core.profiling import IndexMetrics, StageMetrics
-
         m = IndexMetrics(
             index=3,
             stages=[StageMetrics(name="source", wall_time_ns=100)],
@@ -228,8 +221,6 @@ class TestPipelineMetrics:
 
     def test_computed_properties(self):
         """Computed properties aggregate correctly."""
-        from physicsnemo_curator.core.profiling import IndexMetrics, PipelineMetrics, StageMetrics
-
         idx0 = IndexMetrics(
             index=0,
             stages=[StageMetrics(name="source", wall_time_ns=100)],
@@ -251,8 +242,6 @@ class TestPipelineMetrics:
 
     def test_empty_metrics(self):
         """Empty PipelineMetrics has zero totals."""
-        from physicsnemo_curator.core.profiling import PipelineMetrics
-
         pm = PipelineMetrics(indices=[])
         assert pm.total_wall_time_ns == 0
         assert pm.mean_index_time_ns == 0.0
