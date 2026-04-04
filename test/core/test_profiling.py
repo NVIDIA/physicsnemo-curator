@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 import pickle
 import sys
 import time
@@ -455,3 +456,89 @@ class TestProfiledPipeline:
         assert metrics_dir.exists()
         profiled.cleanup()
         assert not metrics_dir.exists()
+
+
+class TestOutputFormats:
+    """Tests for PipelineMetrics output methods."""
+
+    def _make_metrics(self):
+        """Build a small PipelineMetrics for output testing."""
+        idx0 = IndexMetrics(
+            index=0,
+            stages=[
+                StageMetrics(name="source", wall_time_ns=1_000_000),
+                StageMetrics(name="DoubleFilter", wall_time_ns=500_000),
+                StageMetrics(name="sink", wall_time_ns=200_000),
+            ],
+            wall_time_ns=1_700_000,
+            peak_memory_bytes=1_048_576,
+            gpu_memory_bytes=None,
+        )
+        idx1 = IndexMetrics(
+            index=1,
+            stages=[
+                StageMetrics(name="source", wall_time_ns=900_000),
+                StageMetrics(name="DoubleFilter", wall_time_ns=400_000),
+                StageMetrics(name="sink", wall_time_ns=300_000),
+            ],
+            wall_time_ns=1_600_000,
+            peak_memory_bytes=2_097_152,
+            gpu_memory_bytes=4096,
+        )
+        return PipelineMetrics(indices=[idx0, idx1])
+
+    def test_to_json(self, tmp_path):
+        """to_json writes valid JSON with expected keys."""
+        pm = self._make_metrics()
+        out = tmp_path / "metrics.json"
+        pm.to_json(out)
+
+        data = json.loads(out.read_text())
+        assert data["num_indices"] == 2
+        assert data["total_wall_time_ns"] == 3_300_000
+        assert len(data["indices"]) == 2
+        assert data["indices"][0]["index"] == 0
+
+    def test_to_csv(self, tmp_path):
+        """to_csv writes valid CSV with per-index rows and stage columns."""
+        pm = self._make_metrics()
+        out = tmp_path / "metrics.csv"
+        pm.to_csv(out)
+
+        lines = out.read_text().strip().split("\n")
+        assert len(lines) == 3  # header + 2 rows
+        header = lines[0]
+        assert "index" in header
+        assert "stage_source_ns" in header
+        assert "stage_DoubleFilter_ns" in header
+
+    def test_to_csv_empty(self, tmp_path):
+        """to_csv with no indices writes empty file."""
+        pm = PipelineMetrics(indices=[])
+        out = tmp_path / "empty.csv"
+        pm.to_csv(out)
+        assert out.read_text() == ""
+
+    def test_to_console(self, capsys):
+        """to_console writes to stdout without errors."""
+        pm = self._make_metrics()
+        pm.to_console()
+        captured = capsys.readouterr()
+        assert "Pipeline Profiling Results" in captured.out
+        assert "1.70" in captured.out or "1,70" in captured.out  # total_ms for index 0
+
+    def test_to_console_empty(self, capsys):
+        """to_console with empty metrics prints a message."""
+        pm = PipelineMetrics(indices=[])
+        pm.to_console()
+        captured = capsys.readouterr()
+        assert "No profiling metrics" in captured.out
+
+    def test_summary_dict(self):
+        """summary() returns dict with expected structure."""
+        pm = self._make_metrics()
+        s = pm.summary()
+        assert s["num_indices"] == 2
+        assert "total_wall_time_ns" in s
+        assert "mean_index_time_ns" in s
+        assert "indices" in s
