@@ -560,3 +560,19 @@ class TestConcurrentMetrics:
         assert len(results) == 20
         metrics = profiled.collect_metrics()
         assert len(metrics.indices) == 20
+
+
+class TestPublicAPI:
+    """Test that profiling classes are exported from the package."""
+
+    def test_import_profiled_pipeline(self):
+        """ProfiledPipeline is importable from top-level package."""
+        from physicsnemo_curator import ProfiledPipeline
+
+        assert ProfiledPipeline is not None
+
+    def test_import_pipeline_metrics(self):
+        """PipelineMetrics is importable from top-level package."""
+        from physicsnemo_curator import PipelineMetrics
+
+        assert PipelineMetrics is not None
