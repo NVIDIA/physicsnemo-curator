@@ -491,13 +491,13 @@ class ProfiledPipeline(Generic[T]):
             current_stream: _TimedGenerator[T] = timed_source
 
             for f in self._pipeline.filters:
-                raw_output = f(current_stream)
+                raw_output = f(current_stream)  # type: ignore
                 wrapped = _TimedGenerator(raw_output)
                 filter_wrappers.append(wrapped)
                 current_stream = wrapped
 
             # 3. Run the sink (forces full chain evaluation)
-            result = self._pipeline.sink(current_stream, index)  # type: ignore[misc]
+            result = self._pipeline.sink(current_stream, index)  # type: ignore
 
             overall_elapsed = time.perf_counter_ns() - overall_start
 

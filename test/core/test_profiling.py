@@ -266,6 +266,7 @@ class TestTimedGenerator:
         """_TimedGenerator yields same values as wrapped generator."""
 
         def gen():
+            """Yield three integers."""
             yield 1
             yield 2
             yield 3
@@ -277,6 +278,7 @@ class TestTimedGenerator:
         """_TimedGenerator.elapsed_ns is positive after iteration."""
 
         def slow_gen():
+            """Yield one integer after a short sleep."""
             time.sleep(0.01)
             yield 1
 
@@ -288,6 +290,7 @@ class TestTimedGenerator:
         """_TimedGenerator handles empty generators."""
 
         def empty():
+            """Return immediately, yielding nothing."""
             return
             yield  # make it a generator
 
