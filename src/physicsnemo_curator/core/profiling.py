@@ -35,8 +35,16 @@ from __future__ import annotations
 import csv
 import json
 import pathlib
+import shutil
+import tempfile
+import time
+import tracemalloc
+import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
+
+from physicsnemo_curator.core.base import Filter, Pipeline, Sink, Source
 
 T = TypeVar("T")
 
@@ -307,3 +315,314 @@ class PipelineMetrics:
                 print(f"    {name:<30s} {avg_ms:>10.2f} ms (avg)")
 
         print()
+
+
+class _TimedGenerator(Generic[T]):
+    """Generator wrapper that accumulates wall-clock time across ``__next__`` calls.
+
+    This is used internally by :class:`ProfiledPipeline` to attribute time
+    to each pipeline stage. The wrapper preserves the full iterator protocol.
+
+    Parameters
+    ----------
+    inner : Iterator[T]
+        The generator or iterator to wrap.
+    """
+
+    def __init__(self, inner: Iterator[T]) -> None:
+        """Initialize with the inner iterator."""
+        self._inner = inner
+        self._elapsed_ns: int = 0
+
+    @property
+    def elapsed_ns(self) -> int:
+        """Total nanoseconds spent inside ``__next__`` of the inner iterator.
+
+        Returns
+        -------
+        int
+            Accumulated wall-clock nanoseconds.
+        """
+        return self._elapsed_ns
+
+    def __iter__(self) -> _TimedGenerator[T]:
+        """Return self (iterator protocol)."""
+        return self
+
+    def __next__(self) -> T:
+        """Delegate to inner iterator, timing the call.
+
+        Returns
+        -------
+        T
+            Next value from the inner iterator.
+
+        Raises
+        ------
+        StopIteration
+            When the inner iterator is exhausted.
+        """
+        start = time.perf_counter_ns()
+        try:
+            value = next(self._inner)
+        except StopIteration:
+            self._elapsed_ns += time.perf_counter_ns() - start
+            raise
+        self._elapsed_ns += time.perf_counter_ns() - start
+        return value
+
+
+class ProfiledPipeline(Generic[T]):
+    """Transparent profiling wrapper around :class:`~physicsnemo_curator.core.base.Pipeline`.
+
+    Duck-type compatible with ``Pipeline`` — exposes ``source``, ``filters``,
+    ``sink``, ``__len__``, and ``__getitem__``. Can be passed directly to
+    :func:`~physicsnemo_curator.run.run_pipeline` without any backend changes.
+
+    Metrics are collected per-index and serialized to a temp directory as
+    JSON files. After ``run_pipeline()`` completes, call :attr:`metrics` or
+    :meth:`collect_metrics` to aggregate results.
+
+    Parameters
+    ----------
+    pipeline : Pipeline[T]
+        The pipeline to wrap.
+    track_gpu : bool
+        If ``True``, record GPU memory usage via ``torch.cuda``.
+        Requires PyTorch with CUDA support.
+
+    Examples
+    --------
+    >>> from physicsnemo_curator import Pipeline, ProfiledPipeline, run_pipeline
+    >>> profiled = ProfiledPipeline(pipeline, track_gpu=True)
+    >>> results = run_pipeline(profiled, n_jobs=4, backend="process_pool")
+    >>> profiled.metrics.to_console()
+    """
+
+    def __init__(self, pipeline: Pipeline[T], *, track_gpu: bool = False) -> None:
+        """Initialize the profiling wrapper."""
+        self._pipeline = pipeline
+        self._track_gpu = track_gpu
+        self._session_id = uuid.uuid4().hex[:12]
+        self._metrics_dir = pathlib.Path(tempfile.gettempdir()) / f"pnc_profile_{self._session_id}"
+        self._metrics_dir.mkdir(exist_ok=True)
+
+    # -- Duck-type compatibility with Pipeline --------------------------------
+
+    @property
+    def source(self) -> Source[T]:
+        """The wrapped pipeline's source.
+
+        Returns
+        -------
+        Source[T]
+            The underlying source.
+        """
+        return self._pipeline.source
+
+    @property
+    def filters(self) -> list[Filter[T]]:
+        """The wrapped pipeline's filter list.
+
+        Returns
+        -------
+        list[Filter[T]]
+            The underlying filters.
+        """
+        return self._pipeline.filters
+
+    @property
+    def sink(self) -> Sink[T] | None:
+        """The wrapped pipeline's sink.
+
+        Returns
+        -------
+        Sink[T] | None
+            The underlying sink, or ``None``.
+        """
+        return self._pipeline.sink
+
+    def __len__(self) -> int:
+        """Return the number of items in the source.
+
+        Returns
+        -------
+        int
+            Number of source items.
+        """
+        return len(self._pipeline)
+
+    def __getitem__(self, index: int) -> list[str]:
+        """Process the given index with full profiling instrumentation.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the source.
+
+        Returns
+        -------
+        list[str]
+            File paths produced by the sink (same contract as ``Pipeline``).
+        """
+        # --- GPU baseline ---
+        gpu_baseline: int | None = None
+        if self._track_gpu:
+            gpu_baseline = self._gpu_setup()
+
+        # --- Memory tracking ---
+        was_tracing = tracemalloc.is_tracing()
+        if not was_tracing:
+            tracemalloc.start()
+        tracemalloc.reset_peak()
+
+        overall_start = time.perf_counter_ns()
+        stage_metrics: list[StageMetrics] = []
+
+        try:
+            # 1. Wrap source generator with timing
+            source_gen = self._pipeline.source[index]
+            timed_source = _TimedGenerator(source_gen)
+
+            # 2. Chain through filters, wrapping each output
+            filter_wrappers: list[_TimedGenerator[T]] = []
+            current_stream: _TimedGenerator[T] = timed_source
+
+            for f in self._pipeline.filters:
+                raw_output = f(current_stream)
+                wrapped = _TimedGenerator(raw_output)
+                filter_wrappers.append(wrapped)
+                current_stream = wrapped
+
+            # 3. Time the sink (forces full chain evaluation)
+            sink_start = time.perf_counter_ns()
+            result = self._pipeline.sink(current_stream, index)  # type: ignore[misc]
+            sink_elapsed = time.perf_counter_ns() - sink_start
+
+            overall_elapsed = time.perf_counter_ns() - overall_start
+
+            # 4. Compute per-stage times using chain subtraction
+            source_time = timed_source.elapsed_ns
+            stage_metrics.append(StageMetrics(name="source", wall_time_ns=source_time))
+
+            # Filter times: filter N own time = wrapper N elapsed - wrapper N-1 elapsed
+            prev_elapsed = source_time
+            for i_f, fw in enumerate(filter_wrappers):
+                filter_own_time = fw.elapsed_ns - prev_elapsed
+                filter_own_time = max(0, filter_own_time)
+                fname = type(self._pipeline.filters[i_f]).name
+                stage_metrics.append(StageMetrics(name=fname, wall_time_ns=filter_own_time))
+                prev_elapsed = fw.elapsed_ns
+
+            # Sink time
+            last_elapsed = filter_wrappers[-1].elapsed_ns if filter_wrappers else source_time
+            sink_own_time = max(0, overall_elapsed - last_elapsed)
+            stage_metrics.append(StageMetrics(name="sink", wall_time_ns=sink_own_time))
+
+        except BaseException:
+            raise
+        finally:
+            _, peak = tracemalloc.get_traced_memory()
+            if not was_tracing:
+                tracemalloc.stop()
+
+        # GPU measurement
+        gpu_delta: int | None = None
+        if self._track_gpu and gpu_baseline is not None:
+            gpu_delta = self._gpu_measure(gpu_baseline)
+
+        # Build and serialize IndexMetrics
+        idx_metrics = IndexMetrics(
+            index=index,
+            stages=stage_metrics,
+            wall_time_ns=overall_elapsed,
+            peak_memory_bytes=peak,
+            gpu_memory_bytes=gpu_delta,
+        )
+        self._write_index_metrics(idx_metrics)
+
+        return result
+
+    # -- Metrics collection ---------------------------------------------------
+
+    def collect_metrics(self) -> PipelineMetrics:
+        """Read serialized metrics from the temp directory and aggregate.
+
+        Returns
+        -------
+        PipelineMetrics
+            Aggregated metrics across all processed indices.
+        """
+        index_metrics: list[IndexMetrics] = []
+        if self._metrics_dir.exists():
+            for json_file in sorted(self._metrics_dir.glob("*.json")):
+                data = json.loads(json_file.read_text())
+                index_metrics.append(IndexMetrics.from_dict(data))
+        return PipelineMetrics(indices=index_metrics)
+
+    @property
+    def metrics(self) -> PipelineMetrics:
+        """Convenience property: calls :meth:`collect_metrics`.
+
+        Returns
+        -------
+        PipelineMetrics
+            Aggregated metrics.
+        """
+        return self.collect_metrics()
+
+    def cleanup(self) -> None:
+        """Remove the temporary metrics directory and all files."""
+        if self._metrics_dir.exists():
+            shutil.rmtree(self._metrics_dir)
+
+    # -- Private helpers ------------------------------------------------------
+
+    def _write_index_metrics(self, idx_metrics: IndexMetrics) -> None:
+        """Serialize IndexMetrics to a JSON file in the temp directory.
+
+        Parameters
+        ----------
+        idx_metrics : IndexMetrics
+            Metrics to serialize.
+        """
+        fname = f"{idx_metrics.index:010d}_{uuid.uuid4().hex[:8]}.json"
+        filepath = self._metrics_dir / fname
+        tmp_path = filepath.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(idx_metrics.to_dict()))
+        tmp_path.rename(filepath)
+
+    def _gpu_setup(self) -> int | None:
+        """Reset GPU peak stats and return baseline memory.
+
+        Returns
+        -------
+        int | None
+            Baseline GPU memory in bytes, or None if unavailable.
+        """
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
+                return torch.cuda.memory_allocated()
+        except ImportError:
+            pass
+        return None
+
+    def _gpu_measure(self, baseline: int) -> int:
+        """Measure peak GPU memory delta from baseline.
+
+        Parameters
+        ----------
+        baseline : int
+            GPU memory at start of ``__getitem__``.
+
+        Returns
+        -------
+        int
+            Peak GPU memory minus baseline (bytes).
+        """
+        import torch
+
+        return torch.cuda.max_memory_allocated() - baseline
