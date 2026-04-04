@@ -24,3 +24,4 @@ docs/_build/
 # Sphinx-Gallery auto-generated output
 docs/auto_examples/
 docs/sg_execution_times.rst
+docs/superpowers/
