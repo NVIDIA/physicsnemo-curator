@@ -40,11 +40,13 @@ import tempfile
 import time
 import tracemalloc
 import uuid
-from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from physicsnemo_curator.core.base import Filter, Pipeline, Sink, Source
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from physicsnemo_curator.core.base import Filter, Pipeline, Sink, Source
 
 T = TypeVar("T")
 
@@ -494,10 +496,8 @@ class ProfiledPipeline(Generic[T]):
                 filter_wrappers.append(wrapped)
                 current_stream = wrapped
 
-            # 3. Time the sink (forces full chain evaluation)
-            sink_start = time.perf_counter_ns()
+            # 3. Run the sink (forces full chain evaluation)
             result = self._pipeline.sink(current_stream, index)  # type: ignore[misc]
-            sink_elapsed = time.perf_counter_ns() - sink_start
 
             overall_elapsed = time.perf_counter_ns() - overall_start
 
@@ -519,8 +519,6 @@ class ProfiledPipeline(Generic[T]):
             sink_own_time = max(0, overall_elapsed - last_elapsed)
             stage_metrics.append(StageMetrics(name="sink", wall_time_ns=sink_own_time))
 
-        except BaseException:
-            raise
         finally:
             _, peak = tracemalloc.get_traced_memory()
             if not was_tracing:

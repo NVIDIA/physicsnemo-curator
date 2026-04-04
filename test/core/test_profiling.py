@@ -30,7 +30,13 @@ if TYPE_CHECKING:
 import pytest
 
 from physicsnemo_curator.core.base import Filter, Param, Sink, Source
-from physicsnemo_curator.core.profiling import IndexMetrics, PipelineMetrics, StageMetrics
+from physicsnemo_curator.core.profiling import (
+    IndexMetrics,
+    PipelineMetrics,
+    ProfiledPipeline,
+    StageMetrics,
+    _TimedGenerator,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -256,7 +262,6 @@ class TestTimedGenerator:
 
     def test_iterates_correctly(self):
         """_TimedGenerator yields same values as wrapped generator."""
-        from physicsnemo_curator.core.profiling import _TimedGenerator
 
         def gen():
             yield 1
@@ -268,7 +273,6 @@ class TestTimedGenerator:
 
     def test_accumulates_time(self):
         """_TimedGenerator.elapsed_ns is positive after iteration."""
-        from physicsnemo_curator.core.profiling import _TimedGenerator
 
         def slow_gen():
             time.sleep(0.01)
@@ -280,7 +284,6 @@ class TestTimedGenerator:
 
     def test_empty_generator(self):
         """_TimedGenerator handles empty generators."""
-        from physicsnemo_curator.core.profiling import _TimedGenerator
 
         def empty():
             return
@@ -296,7 +299,6 @@ class TestProfiledPipeline:
 
     def test_duck_type_compatibility(self):
         """ProfiledPipeline exposes source, filters, sink, __len__."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(3).filter(_DoubleFilter()).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -307,7 +309,6 @@ class TestProfiledPipeline:
 
     def test_getitem_returns_correct_results(self):
         """ProfiledPipeline.__getitem__ returns same results as Pipeline."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(3, delay=0.0).filter(_DoubleFilter()).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -317,7 +318,6 @@ class TestProfiledPipeline:
 
     def test_basic_metrics_collection(self):
         """Single index produces IndexMetrics with correct stage count."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(2, delay=0.001).filter(_SlowFilter(delay=0.001)).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -335,7 +335,6 @@ class TestProfiledPipeline:
 
     def test_per_stage_timing_positive(self):
         """Each stage has positive wall time."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(1, delay=0.005).filter(_SlowFilter(delay=0.005)).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -347,7 +346,6 @@ class TestProfiledPipeline:
 
     def test_stage_times_approximate_total(self):
         """Sum of stage times should approximate total index time."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(1, delay=0.01).filter(_SlowFilter(delay=0.01)).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -362,7 +360,6 @@ class TestProfiledPipeline:
 
     def test_memory_tracking(self):
         """Peak memory is non-trivial for source that allocates."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _AllocSource(1, alloc_bytes=500_000).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -373,7 +370,6 @@ class TestProfiledPipeline:
 
     def test_gpu_tracking_disabled_by_default(self):
         """GPU memory is None when track_gpu=False."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(1, delay=0.0).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -383,7 +379,6 @@ class TestProfiledPipeline:
 
     def test_gpu_tracking_mocked(self):
         """GPU tracking works with mocked torch.cuda."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
@@ -400,7 +395,6 @@ class TestProfiledPipeline:
 
     def test_multiple_indices(self):
         """Metrics are collected for all indices."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(5, delay=0.0).filter(_DoubleFilter()).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -413,7 +407,6 @@ class TestProfiledPipeline:
 
     def test_no_filter_pipeline(self):
         """Pipeline with no filters still profiles source and sink."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(1, delay=0.001).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -427,7 +420,6 @@ class TestProfiledPipeline:
 
     def test_error_propagation(self):
         """Errors in stages propagate without being swallowed."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(1, delay=0.0).filter(_ErrorFilter()).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -436,7 +428,6 @@ class TestProfiledPipeline:
 
     def test_pickle_roundtrip(self):
         """ProfiledPipeline survives pickle round-trip."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(3, delay=0.0).filter(_DoubleFilter()).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -448,7 +439,6 @@ class TestProfiledPipeline:
 
     def test_metrics_property(self):
         """The .metrics property is a shortcut for collect_metrics()."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(1, delay=0.0).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
@@ -457,7 +447,6 @@ class TestProfiledPipeline:
 
     def test_cleanup(self):
         """cleanup() removes the temp metrics directory."""
-        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _TimedSource(1, delay=0.0).write(_CollectSink())
         profiled = ProfiledPipeline(pipeline)
