@@ -26,7 +26,6 @@ from __future__ import annotations
 import pathlib
 from datetime import datetime
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -128,56 +127,88 @@ class TestERA5Source:
 
         params = ERA5Source.params()
         names = {p.name for p in params}
-        assert {"times", "variables", "cache"} == names
+        assert {"times", "variables", "backend", "cache"} == names
 
     def test_name_and_description(self) -> None:
         """ERA5Source has correct name and description."""
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        assert ERA5Source.name == "ERA5 (ARCO)"
+        assert ERA5Source.name == "ERA5"
         assert "ERA5" in ERA5Source.description
 
-    @patch("curator.da.sources.era5.ARCO")
-    def test_len(self, mock_arco_cls: MagicMock) -> None:
+    def test_len(self) -> None:
         """Length equals number of timestamps."""
+        from unittest.mock import MagicMock, patch
+
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        source = ERA5Source(times=_TIMES, variables=_VARS)
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=MagicMock()),
+            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+        ):
+            source = ERA5Source(times=_TIMES, variables=_VARS)
         assert len(source) == 2
 
-    @patch("curator.da.sources.era5.ARCO")
-    def test_getitem(self, mock_arco_cls: MagicMock) -> None:
+    def test_getitem(self) -> None:
         """__getitem__ yields a DataArray from ARCO."""
+        from unittest.mock import MagicMock, patch
+
         import xarray as xr
 
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        mock_instance = mock_arco_cls.return_value
-        mock_instance.return_value = _make_dataarray(times=[_TIMES[0]])
+        mock_arco = MagicMock()
+        mock_arco.return_value = _make_dataarray(times=[_TIMES[0]])
 
-        source = ERA5Source(times=_TIMES, variables=_VARS)
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+        ):
+            source = ERA5Source(times=_TIMES, variables=_VARS)
         results = list(source[0])
         assert len(results) == 1
         assert isinstance(results[0], xr.DataArray)
 
-    @patch("curator.da.sources.era5.ARCO")
-    def test_getitem_negative_index(self, mock_arco_cls: MagicMock) -> None:
+    def test_getitem_negative_index(self) -> None:
         """Negative indexing works."""
+        from unittest.mock import MagicMock, patch
+
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        mock_instance = mock_arco_cls.return_value
-        mock_instance.return_value = _make_dataarray(times=[_TIMES[-1]])
+        mock_arco = MagicMock()
+        mock_arco.return_value = _make_dataarray(times=[_TIMES[-1]])
 
-        source = ERA5Source(times=_TIMES, variables=_VARS)
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+        ):
+            source = ERA5Source(times=_TIMES, variables=_VARS)
         results = list(source[-1])
         assert len(results) == 1
 
-    @patch("curator.da.sources.era5.ARCO")
-    def test_getitem_out_of_range(self, mock_arco_cls: MagicMock) -> None:
+    def test_getitem_out_of_range(self) -> None:
         """Out-of-range index raises IndexError."""
+        from unittest.mock import MagicMock, patch
+
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        source = ERA5Source(times=_TIMES, variables=_VARS)
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=MagicMock()),
+            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+        ):
+            source = ERA5Source(times=_TIMES, variables=_VARS)
         with pytest.raises(IndexError):
             list(source[999])
 
@@ -195,12 +226,20 @@ class TestERA5Source:
         with pytest.raises(ValueError, match="non-empty"):
             ERA5Source(times=_TIMES, variables=[])
 
-    @patch("curator.da.sources.era5.ARCO")
-    def test_properties(self, mock_arco_cls: MagicMock) -> None:
+    def test_properties(self) -> None:
         """Properties return copies of the constructor inputs."""
+        from unittest.mock import MagicMock, patch
+
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        source = ERA5Source(times=_TIMES, variables=_VARS)
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=MagicMock()),
+            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+        ):
+            source = ERA5Source(times=_TIMES, variables=_VARS)
         assert source.times == _TIMES
         assert source.variables == _VARS
 
@@ -298,13 +337,13 @@ class TestERA5MultiBackend:
                 "physicsnemo_curator.da.sources.era5._import_lexicon",
                 return_value=empty_lexicon,
             ),
+            pytest.raises(ValueError, match="not found in any backend"),
         ):
-            with pytest.raises(ValueError, match="not found in any backend"):
-                ERA5Source(
-                    times=_TIMES,
-                    variables=["nonexistent_var"],
-                    backend="arco",
-                )
+            ERA5Source(
+                times=_TIMES,
+                variables=["nonexistent_var"],
+                backend="arco",
+            )
 
     def test_backend_options_forwarded(self) -> None:
         """Backend-specific options are forwarded to the constructor."""
@@ -579,6 +618,34 @@ class TestERA5MultiBackend:
         # The spec says "grouped by backend" so this is correct.
         assert list(merged.coords["variable"].values) == ["v10m", "t2m", "cp"]
         assert merged.sizes["variable"] == 3
+
+    def test_backward_compat_default_arco(self) -> None:
+        """Default backend='arco' behaves like the old ARCO-only source."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.era5 import ERA5Source
+
+        mock_arco = MagicMock()
+        mock_arco.return_value = _make_dataarray(times=[_TIMES[0]])
+
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_backend",
+                return_value=mock_arco,
+            ),
+            patch(
+                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                return_value=arco_lexicon,
+            ),
+        ):
+            source = ERA5Source(times=_TIMES, variables=_VARS)
+        assert source.active_backend == "arco"
+        results = list(source[0])
+        assert len(results) == 1
+        mock_arco.assert_called_once()
 
 
 # ===================================================================
@@ -1109,7 +1176,7 @@ class TestRegistration:
         from physicsnemo_curator.core.registry import registry
 
         sources = registry.sources("da")
-        assert "ERA5 (ARCO)" in sources
+        assert "ERA5" in sources
 
     def test_zarrsink_registered(self) -> None:
         """ZarrSink is discoverable via the registry."""
@@ -1144,22 +1211,30 @@ class TestRegistration:
 class TestDAPipeline:
     """Integration tests using synthetic data (no network)."""
 
-    @patch("curator.da.sources.era5.ARCO")
-    def test_full_pipeline(self, mock_arco_cls: MagicMock, tmp_path: Path) -> None:
+    def test_full_pipeline(self, tmp_path: Path) -> None:
         """Full pipeline: ERA5Source -> MomentsFilter -> ZarrSink."""
+        from unittest.mock import MagicMock, patch
+
         from physicsnemo_curator.da.filters.moments import MomentsFilter
         from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        mock_instance = mock_arco_cls.return_value
+        mock_arco = MagicMock()
 
-        # Mock returns different data per call
-        def side_effect(time, variable):  # type: ignore[override]
+        def side_effect(time, variable):
             return _make_dataarray(times=time, variables=variable)
 
-        mock_instance.side_effect = side_effect
+        mock_arco.side_effect = side_effect
 
-        source = ERA5Source(times=_TIMES, variables=_VARS)
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+        ):
+            source = ERA5Source(times=_TIMES, variables=_VARS)
+
         filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
 
@@ -1177,37 +1252,56 @@ class TestDAPipeline:
         stats_path = filt.flush()
         assert stats_path is not None
 
-    @patch("curator.da.sources.era5.ARCO")
-    def test_pipeline_without_filter(self, mock_arco_cls: MagicMock, tmp_path: Path) -> None:
+    def test_pipeline_without_filter(self, tmp_path: Path) -> None:
         """Pipeline with just source and sink (no filter)."""
+        from unittest.mock import MagicMock, patch
+
         from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        mock_instance = mock_arco_cls.return_value
-        mock_instance.return_value = _make_dataarray(times=[_TIMES[0]])
+        mock_arco = MagicMock()
+        mock_arco.return_value = _make_dataarray(times=[_TIMES[0]])
 
-        source = ERA5Source(times=_TIMES[:1], variables=_VARS)
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+        ):
+            source = ERA5Source(times=_TIMES[:1], variables=_VARS)
+
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
-
         pipeline = source.write(sink)
         paths = pipeline[0]
         assert len(paths) == 2  # one per variable
 
-    @patch("curator.da.sources.era5.ARCO")
-    def test_full_pipeline_netcdf4(self, mock_arco_cls: MagicMock, tmp_path: Path) -> None:
+    def test_full_pipeline_netcdf4(self, tmp_path: Path) -> None:
         """Full pipeline: ERA5Source -> MomentsFilter -> NetCDF4Sink."""
+        from unittest.mock import MagicMock, patch
+
+        import xarray as xr
+
         from physicsnemo_curator.da.filters.moments import MomentsFilter
         from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        mock_instance = mock_arco_cls.return_value
+        mock_arco = MagicMock()
 
-        def side_effect(time, variable):  # type: ignore[override]
+        def side_effect(time, variable):
             return _make_dataarray(times=time, variables=variable)
 
-        mock_instance.side_effect = side_effect
+        mock_arco.side_effect = side_effect
 
-        source = ERA5Source(times=_TIMES, variables=_VARS)
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+        ):
+            source = ERA5Source(times=_TIMES, variables=_VARS)
+
         filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
         sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
 
@@ -1220,9 +1314,6 @@ class TestDAPipeline:
             paths = pipeline[i]
             all_paths.append(paths)
             assert len(paths) > 0
-
-            # Verify .nc files were created
-            import xarray as xr
 
             for var in _VARS:
                 nc_dir = tmp_path / "output_nc" / var
@@ -1237,18 +1328,26 @@ class TestDAPipeline:
         stats_path = filt.flush()
         assert stats_path is not None
 
-    @patch("curator.da.sources.era5.ARCO")
-    def test_pipeline_netcdf4_no_filter(self, mock_arco_cls: MagicMock, tmp_path: Path) -> None:
+    def test_pipeline_netcdf4_no_filter(self, tmp_path: Path) -> None:
         """Pipeline with just source and NetCDF4Sink (no filter)."""
+        from unittest.mock import MagicMock, patch
+
         from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
         from physicsnemo_curator.da.sources.era5 import ERA5Source
 
-        mock_instance = mock_arco_cls.return_value
-        mock_instance.return_value = _make_dataarray(times=[_TIMES[0]])
+        mock_arco = MagicMock()
+        mock_arco.return_value = _make_dataarray(times=[_TIMES[0]])
 
-        source = ERA5Source(times=_TIMES[:1], variables=_VARS)
+        arco_lexicon = MagicMock()
+        arco_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+        ):
+            source = ERA5Source(times=_TIMES[:1], variables=_VARS)
+
         sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
-
         pipeline = source.write(sink)
         paths = pipeline[0]
         assert len(paths) == 2  # one per variable
