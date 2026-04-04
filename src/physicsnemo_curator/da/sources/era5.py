@@ -200,7 +200,6 @@ class ERA5Source(Source["xr.DataArray"]):
 
         self._times = list(times)
         self._variables = list(variables)
-        self._cache = cache
 
         # Normalize backend to a list.
         backend_names = [backend] if isinstance(backend, str) else list(backend)
@@ -273,10 +272,10 @@ class ERA5Source(Source["xr.DataArray"]):
         """
         routing: dict[str, str] = {}
         unresolved: list[str] = []
+        lexicons = {b: _import_lexicon(b) for b in backend_names}
         for var in variables:
             for bname in backend_names:
-                lexicon = _import_lexicon(bname)
-                if var in lexicon:
+                if var in lexicons[bname]:
                     routing[var] = bname
                     break
             else:
@@ -309,7 +308,7 @@ class ERA5Source(Source["xr.DataArray"]):
             where ``time`` is length-1.
         """
         import numpy as np
-        import xarray as xr_mod
+        import xarray as xr
 
         n = len(self._times)
         if index < 0:
@@ -347,7 +346,7 @@ class ERA5Source(Source["xr.DataArray"]):
                 if not np.allclose(part.coords["lon"].values, ref_lon):
                     msg = f"Longitude grid mismatch between backend 0 and {i}"
                     raise ValueError(msg)
-            result = xr_mod.concat(parts, dim="variable")
+            result = xr.concat(parts, dim="variable")
 
         yield result
 
