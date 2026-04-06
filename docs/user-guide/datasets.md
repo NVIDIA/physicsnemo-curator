@@ -11,16 +11,21 @@ Sources that yield {py:class}`~physicsnemo.mesh.Mesh` objects from CFD
 benchmark datasets hosted on [HuggingFace Hub](https://huggingface.co).
 Requires the `mesh` dependency group (`uv sync --group mesh`).
 
-```{eval-rst}
-.. autosummary::
-   :nosignatures:
+```{list-table}
+:widths: 30 70
 
-   physicsnemo_curator.mesh.sources.vtk.VTKSource
-   physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource
-   physicsnemo_curator.mesh.sources.ahmedml.AhmedMLSource
-   physicsnemo_curator.mesh.sources.windsorml.WindsorMLSource
-   physicsnemo_curator.mesh.sources.windtunnel.WindTunnelSource
-   physicsnemo_curator.mesh.sources.ns_cylinder.NavierStokesCylinderSource
+* - {py:class}`~physicsnemo_curator.mesh.sources.vtk.VTKSource`
+  - Generic VTK file source
+* - {py:class}`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
+  - DrivAerML dataset source
+* - {py:class}`~physicsnemo_curator.mesh.sources.ahmedml.AhmedMLSource`
+  - AhmedML dataset source
+* - {py:class}`~physicsnemo_curator.mesh.sources.windsorml.WindsorMLSource`
+  - WindsorML dataset source
+* - {py:class}`~physicsnemo_curator.mesh.sources.windtunnel.WindTunnelSource`
+  - Wind Tunnel dataset source
+* - {py:class}`~physicsnemo_curator.mesh.sources.ns_cylinder.NavierStokesCylinderSource`
+  - Navier-Stokes Cylinder dataset source
 ```
 
 ## DataArray Sources
@@ -29,9 +34,9 @@ Sources that yield {py:class}`xarray.DataArray` objects from reanalysis
 and climate datasets.  Requires the `da` dependency group
 (`uv sync --group da`).
 
-```{eval-rst}
-.. autosummary::
-   :nosignatures:
+```{list-table}
+:widths: 30 70
 
-   physicsnemo_curator.da.sources.era5.ERA5Source
+* - {py:class}`~physicsnemo_curator.da.sources.era5.ERA5Source`
+  - ERA5 reanalysis dataset source
 ```

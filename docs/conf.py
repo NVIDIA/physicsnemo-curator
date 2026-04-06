@@ -29,7 +29,6 @@ release = "0.1.0"
 # ---------------------------------------------------------------------------
 extensions = [
     "autoapi.extension",
-    "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
@@ -51,11 +50,6 @@ sphinx_gallery_conf = {
     "run_stale_examples": os.environ.get("RUN_STALE_EXAMPLES", "False").lower() in ("1", "true"),
     "plot_gallery": os.environ.get("PLOT_GALLERY", "0"),
 }
-
-# ---------------------------------------------------------------------------
-# Autosummary
-# ---------------------------------------------------------------------------
-autosummary_generate = False  # we use autosummary for compact tables only
 
 # ---------------------------------------------------------------------------
 # AutoAPI (static analysis — reads .pyi stubs without importing)
