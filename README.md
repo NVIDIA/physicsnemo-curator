@@ -65,11 +65,11 @@ git clone git@github.com:NVIDIA/physicsnemo-curator.git
 cd physicsnemo-curator
 
 # Install all dev dependencies and build the Rust extension
-make install
-make develop
+uv sync --group dev
+uv run maturin develop
 
 # (Optional) Install pre-commit hooks
-pre-commit install
+uv run pre-commit install
 ```
 
 ### Quick Start
