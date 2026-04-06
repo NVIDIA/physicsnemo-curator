@@ -115,8 +115,41 @@ nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo" }
 # ---------------------------------------------------------------------------
 [tool.ty]
 
+[tool.ty.environment]
+python-version = "3.12"
+
 [tool.ty.rules]
 unresolved-import = "ignore"
+
+# Per-file overrides for pre-existing false positives from dict[str, object]
+# value types and ProfiledPipeline not extending Pipeline.
+[[tool.ty.overrides]]
+include = ["src/physicsnemo_curator/mesh/filters/mesh_info.py"]
+[tool.ty.overrides.rules]
+not-iterable = "ignore"
+not-subscriptable = "ignore"
+unresolved-attribute = "ignore"
+unsupported-operator = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/physicsnemo_curator/mesh/filters/precision.py"]
+[tool.ty.overrides.rules]
+invalid-assignment = "ignore"
+not-subscriptable = "ignore"
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["src/physicsnemo_curator/mesh/filters/stats.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+not-subscriptable = "ignore"
+unresolved-attribute = "ignore"
+unsupported-operator = "ignore"
+
+[[tool.ty.overrides]]
+include = ["test/run/test_profiling_backends.py"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
 
 # ---------------------------------------------------------------------------
 # Maturin (Rust/PyO3 build)
