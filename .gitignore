@@ -25,3 +25,6 @@ docs/_build/
 docs/auto_examples/
 docs/sg_execution_times.rst
 docs/superpowers/
+
+# Opencode
+.opencode/
