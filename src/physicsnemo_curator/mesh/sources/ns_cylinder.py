@@ -89,6 +89,11 @@ class NavierStokesCylinderSource(Source[Mesh]):
     >>> len(source)  # doctest: +SKIP
     500
     >>> mesh = next(source[0])  # doctest: +SKIP
+
+    Note
+    ----
+    - Dataset: `SISSAmathLab/navier-stokes-cylinder <https://huggingface.co/datasets/SISSAmathLab/navier-stokes-cylinder>`_
+    - License: `Apache-2.0 <https://huggingface.co/datasets/SISSAmathLab/navier-stokes-cylinder/blob/main/README.md>`_
     """
 
     name: ClassVar[str] = "Navier-Stokes Cylinder"

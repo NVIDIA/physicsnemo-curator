@@ -97,6 +97,12 @@ class WindsorMLSource(Source[Mesh]):
     >>> len(source)
     355
     >>> mesh = next(source[0])
+
+    Note
+    ----
+    - Dataset: `neashton/windsorml <https://huggingface.co/datasets/neashton/windsorml>`_
+    - Paper: `arXiv:2407.19320 <https://arxiv.org/abs/2407.19320>`_
+    - License: `CC-BY-SA-4.0 <https://huggingface.co/datasets/neashton/windsorml/blob/main/LICENSE>`_
     """
 
     name: ClassVar[str] = "WindsorML"

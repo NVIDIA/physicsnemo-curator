@@ -90,6 +90,11 @@ class WindTunnelSource(Source[Mesh]):
     >>> source = WindTunnelSource(split="all")
     >>> len(source)
     19812
+
+    Note
+    ----
+    - Dataset: `inductiva/windtunnel-20k <https://huggingface.co/datasets/inductiva/windtunnel-20k>`_
+    - License: `CC-BY-4.0 <https://huggingface.co/datasets/inductiva/windtunnel-20k/blob/main/README.md>`_
     """
 
     name: ClassVar[str] = "WindTunnel-20k"

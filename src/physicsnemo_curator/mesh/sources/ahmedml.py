@@ -97,6 +97,12 @@ class AhmedMLSource(Source[Mesh]):
     >>> source = AhmedMLSource(mesh_type="slices")
     >>> for mesh in source[0]:
     ...     print(mesh.n_points)
+
+    Note
+    ----
+    - Dataset: `neashton/ahmedml <https://huggingface.co/datasets/neashton/ahmedml>`_
+    - Paper: `arXiv:2407.20801 <https://arxiv.org/abs/2407.20801>`_
+    - License: `CC-BY-SA-4.0 <https://huggingface.co/datasets/neashton/ahmedml/blob/main/LICENSE>`_
     """
 
     name: ClassVar[str] = "AhmedML"

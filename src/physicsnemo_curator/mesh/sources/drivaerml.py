@@ -101,6 +101,12 @@ class DrivAerMLSource(Source[Mesh]):
     >>> source = DrivAerMLSource(mesh_type="slices")
     >>> for mesh in source[0]:  # yields multiple slice planes
     ...     print(mesh.n_points)
+
+    Note
+    ----
+    - Dataset: `neashton/drivaerml <https://huggingface.co/datasets/neashton/drivaerml>`_
+    - Paper: `arXiv:2408.11969 <https://arxiv.org/abs/2408.11969>`_
+    - License: `CC-BY-SA-4.0 <https://huggingface.co/datasets/neashton/drivaerml/blob/main/LICENSE>`_
     """
 
     name: ClassVar[str] = "DrivAerML"

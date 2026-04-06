@@ -115,6 +115,11 @@ class VTKSource(Source[Mesh]):
     Using the fast Rust backend:
 
     >>> source = VTKSource.from_path("./cfd_results/", backend="rust")
+
+    Note
+    ----
+    - VTK format: `VTK File Formats <https://docs.vtk.org/en/latest/design_documents/VTKFileFormats.html>`_
+    - PyVista: `PyVista documentation <https://docs.pyvista.org/>`_
     """
 
     name: ClassVar[str] = "VTK Reader"

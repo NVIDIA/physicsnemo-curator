@@ -142,6 +142,12 @@ class ERA5Source(Source["xr.DataArray"]):
     ... )
     >>> source.variable_routing  # doctest: +SKIP
     {'t2m': 'arco', 'cp': 'ncar'}
+
+    Note
+    ----
+    - ERA5 documentation: `ECMWF ERA5 <https://www.ecmwf.int/en/forecasts/dataset/ecmwf-reanalysis-v5>`_
+    - earth2studio: `NVIDIA earth2studio <https://nvidia.github.io/earth2studio/>`_
+    - CDS API: `Climate Data Store <https://cds.climate.copernicus.eu/>`_
     """
 
     name: ClassVar[str] = "ERA5"
