@@ -32,8 +32,10 @@ from physicsnemo_curator.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.mesh.filters.stats import StatsFilter, merge_welford_stats
+from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.mesh.sources.ahmedml import AhmedMLSource
+from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
@@ -45,6 +47,7 @@ registry.register_submodule("mesh", "Mesh processing (physicsnemo.mesh.Mesh)", "
 registry.register_store("mesh", "Local directory", LocalFileStore)
 registry.register_store("mesh", "Remote (fsspec)", FsspecFileStore)
 registry.register_store("mesh", "Run-indexed (remote)", RunIndexedFileStore)
+registry.register_source("mesh", D3PlotSource)
 registry.register_source("mesh", VTKSource)
 registry.register_source("mesh", DrivAerMLSource)
 registry.register_source("mesh", AhmedMLSource)
@@ -55,10 +58,12 @@ registry.register_filter("mesh", MeanFilter)
 registry.register_filter("mesh", MeshInfoFilter)
 registry.register_filter("mesh", StatsFilter)
 registry.register_filter("mesh", PrecisionFilter)
+registry.register_filter("mesh", WallNodeFilter)
 registry.register_sink("mesh", MeshSink)
 
 __all__ = [
     "AhmedMLSource",
+    "D3PlotSource",
     "DrivAerMLSource",
     "MeanFilter",
     "MeshInfoFilter",
@@ -67,6 +72,7 @@ __all__ = [
     "PrecisionFilter",
     "StatsFilter",
     "VTKSource",
+    "WallNodeFilter",
     "WindsorMLSource",
     "WindTunnelSource",
     "merge_welford_stats",

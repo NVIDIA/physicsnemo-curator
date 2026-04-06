@@ -38,6 +38,9 @@ cli = [
 loky = [
     "joblib>=1.3",
 ]
+lsdyna = [
+    "lasso-python>=2.0",
+]
 dask = [
     "dask>=2024.1",
 ]
