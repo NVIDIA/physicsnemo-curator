@@ -130,6 +130,25 @@ directly or exported as a Jupyter notebook.
 | [Ansys Thermal](examples/mesh/mesh_ansys_thermal.py) | Mesh | Ansys .rst thermal analysis pipeline |
 | [ERA5 Reanalysis](examples/da/da_era5_etl.py) | DataArray | ERA5 climate data with temporal statistics |
 
+## CLI
+
+PhysicsNeMo Curator includes an interactive pipeline builder that walks you
+through selecting a source, filters, and sink without writing any code.
+
+```bash
+pip install 'physicsnemo-curator[cli]'
+curator
+```
+
+The `curator` command launches a guided workflow:
+
+1. **Select submodule** — mesh or DataArray
+2. **Configure data store** — local path or remote URL
+3. **Select source** — dataset-specific reader
+4. **Select filters** — toggle any combination of filters
+5. **Select sink** — output format and destination
+6. **Execute** — runs the pipeline with a progress bar
+
 ## Development
 
 ### Code Conventions
