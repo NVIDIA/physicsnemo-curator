@@ -188,7 +188,7 @@ class TestNavierStokesCylinderSourceLocal:
 
         source = NavierStokesCylinderSource(url=str(self.mock_root))
         mesh = next(source[0])
-        assert "viscosity" in mesh.global_data.keys()
+        assert "viscosity" in mesh.global_data
 
     def test_different_indices_different_data(self) -> None:
         """Different snapshot indices should yield different field values."""
@@ -297,7 +297,7 @@ class TestNavierStokesCylinderSourceE2E:
     def test_mesh_has_global_viscosity(self) -> None:
         """Mesh should carry viscosity as global data."""
         mesh = next(self.source[0])
-        assert "viscosity" in mesh.global_data.keys()
+        assert "viscosity" in mesh.global_data
         visc = mesh.global_data["viscosity"]
         assert visc.numel() == 1
         assert visc.item() > 0
