@@ -64,30 +64,34 @@ results = run_pipeline(pipeline, n_jobs=8, backend="process_pool")
 pipeline.filters[0].flush()
 ```
 
+## User Guide
+
 ```{toctree}
 :maxdepth: 3
-:caption: User Guide
 
 user-guide/index
 ```
 
+Domains
+
 ```{toctree}
 :maxdepth: 2
-:caption: Domains
 
 domains/index
 ```
 
+## API
+
 ```{toctree}
 :maxdepth: 2
-:caption: API
 
 API <autoapi/index>
 ```
 
+## Examples
+
 ```{toctree}
 :maxdepth: 2
-:caption: Examples
 
 auto_examples/index
 ```
