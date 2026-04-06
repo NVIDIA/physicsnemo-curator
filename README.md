@@ -182,8 +182,6 @@ If PhysicsNeMo Curator helped your research, please refer to the
 
 - **GitHub Discussions** — new data formats, transformations, Physics-ML research
 - **GitHub Issues** — bug reports, feature requests, installation issues
-- **[PhysicsNeMo Forum](https://forums.developer.nvidia.com/t/welcome-to-the-physicsnemo-ml-model-framework-forum/178556)** —
-  general chat, online discussions, collaboration
 
 ## Feedback
 
