@@ -11,9 +11,10 @@
 
 <!-- markdownlint-enable MD013 MD033 -->
 
-**PhysicsNeMo Curator** is a Rust-accelerated ETL toolkit for curating
-engineering and scientific datasets for deep learning. It provides a
-composable Python API built on a high-performance native extension (PyO3)
+**PhysicsNeMo Curator** is a Rust-accelerated ETL toolkit for building
+AI-ready datasets across multiple scientific and engineering domains,
+including CAE, weather/climate, molecular dynamics, and more. It provides
+a composable Python API built on a high-performance native extension (PyO3)
 for reading, filtering, and writing simulation data at scale.
 
 [**Docs**](https://nvidia.github.io/physicsnemo-curator/)
