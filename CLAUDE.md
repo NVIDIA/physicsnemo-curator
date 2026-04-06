@@ -98,6 +98,7 @@ Claude tools in `.claude/tools/`:
 | `cargo-nextest` | Run Rust tests with nextest |
 | `cargo-deny` | Audit Rust dependencies |
 | `asv` | Run ASV historical benchmarks |
+| `open-pr` | **Open a PR** from fork to NVIDIA/physicsnemo-curator using the repo PR template |
 
 ## Commit Message Convention
 
@@ -118,3 +119,4 @@ The `commit` tool enforces this automatically — always use it instead of raw `
 ## Skills Available
 
 - **testing**: Comprehensive guide for running Python and Rust tests, coverage, and benchmarks.
+- **add-source**: Guide for adding a new data source (discovery questions, implementation, testing, registration).
