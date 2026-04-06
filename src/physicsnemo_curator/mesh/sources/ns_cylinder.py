@@ -85,10 +85,10 @@ class NavierStokesCylinderSource(Source[Mesh]):
 
     Examples
     --------
-    >>> source = NavierStokesCylinderSource()
-    >>> len(source)
+    >>> source = NavierStokesCylinderSource()  # doctest: +SKIP
+    >>> len(source)  # doctest: +SKIP
     500
-    >>> mesh = next(source[0])
+    >>> mesh = next(source[0])  # doctest: +SKIP
     """
 
     name: ClassVar[str] = "Navier-Stokes Cylinder"
@@ -129,12 +129,13 @@ class NavierStokesCylinderSource(Source[Mesh]):
     ) -> None:
         self._url = url
         self._storage_options = storage_options or {}
-        self._cache_storage = cache_storage or tempfile.mkdtemp(prefix="curator_ns_cylinder_")
+        self._cache_storage = cache_storage if cache_storage else tempfile.mkdtemp(prefix="curator_ns_cylinder_")
 
         # Lazily loaded caches (populated on first access).
         self._geometry_loaded = False
         self._points: torch.Tensor | None = None
         self._cells: torch.Tensor | None = None
+        self._snapshots_table: pa.Table | None = None
 
         # Eagerly discover length from the parameters table (tiny file).
         self._viscosities: np.ndarray = self._read_parameters()
@@ -219,7 +220,12 @@ class NavierStokesCylinderSource(Source[Mesh]):
         """
         full_path = f"{self._url}/{subpath}"
         logger.debug("Reading Parquet: %s", full_path)
-        with fsspec.open(full_path, "rb", **self._storage_options) as f:
+        # Use simplecache for remote URLs to avoid re-downloading.
+        open_kwargs: dict[str, object] = dict(self._storage_options)
+        if "://" in self._url:
+            full_path = f"simplecache::{full_path}"
+            open_kwargs["simplecache"] = {"cache_storage": self._cache_storage}
+        with fsspec.open(full_path, "rb", **open_kwargs) as f:
             return pq.read_table(f)
 
     def _load_geometry(self) -> None:
@@ -237,6 +243,9 @@ class NavierStokesCylinderSource(Source[Mesh]):
 
         connectivity = row["connectivity"][0]
         cells_np = np.array(connectivity, dtype=np.int64)
+        if cells_np.ndim != 2 or cells_np.shape[1] != 3:
+            msg = f"Expected triangular connectivity (n_cells, 3), got {cells_np.shape}"
+            raise ValueError(msg)
         self._cells = torch.from_numpy(cells_np)
 
         self._geometry_loaded = True
@@ -270,8 +279,9 @@ class NavierStokesCylinderSource(Source[Mesh]):
         dict[str, np.ndarray]
             Mapping of field name to 1-D NumPy array.
         """
-        table = self._open_parquet(f"snapshots/{_PARQUET_FILENAME}")
-        row = table.slice(index, 1).to_pydict()
+        if self._snapshots_table is None:
+            self._snapshots_table = self._open_parquet(f"snapshots/{_PARQUET_FILENAME}")
+        row = self._snapshots_table.slice(index, 1).to_pydict()
         return {
             "velocity_x": np.array(row["velocity_x"][0], dtype=np.float64),
             "velocity_y": np.array(row["velocity_y"][0], dtype=np.float64),
