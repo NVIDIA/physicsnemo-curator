@@ -151,18 +151,6 @@ The `curator` command launches a guided workflow:
 5. **Select sink** — output format and destination
 6. **Execute** — runs the pipeline with a progress bar
 
-## Development
-
-### Code Conventions
-
-- **Python**: ruff defaults, line length 120, NumPy-style docstrings
-- **Rust**: rustfmt defaults, all clippy warnings are errors (`-D warnings`)
-- **Docstrings**: 99% coverage enforced by interrogate
-- **Type checking**: all Python code must pass `ty check`
-- **License**: Apache-2.0 with SPDX headers on all source files
-- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/)
-  format (`feat`, `fix`, `refactor`, `test`, `docs`, etc.)
-
 ## Contributing to PhysicsNeMo Curator
 
 PhysicsNeMo Curator is an open source project and its success is rooted in
