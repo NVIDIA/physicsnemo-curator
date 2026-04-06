@@ -119,19 +119,6 @@ pip install physicsnemo-curator[dask]    # Dask backend
 pip install physicsnemo-curator[prefect] # Prefect backend
 ```
 
-## Examples
-
-Runnable Sphinx Gallery scripts in `examples/`. Each can be executed
-directly or exported as a Jupyter notebook.
-
-| Example | Domain | Description |
-|---------|--------|-------------|
-| [DrivAerML ETL](examples/mesh/mesh_drivaerml_etl.py) | Mesh | Boundary mesh curation with spatial means |
-| [External Aerodynamics](examples/mesh/mesh_external_aerodynamics.py) | Mesh | Multi-pipeline surface + volume ETL |
-| [Crash Simulation](examples/mesh/mesh_crash_simulation.py) | Mesh | LS-DYNA d3plot with wall-node filtering |
-| [Ansys Thermal](examples/mesh/mesh_ansys_thermal.py) | Mesh | Ansys .rst thermal analysis pipeline |
-| [ERA5 Reanalysis](examples/da/da_era5_etl.py) | DataArray | ERA5 climate data with temporal statistics |
-
 ## CLI
 
 PhysicsNeMo Curator includes an interactive pipeline builder that walks you
