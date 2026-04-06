@@ -35,6 +35,7 @@ from physicsnemo_curator.mesh.filters.stats import StatsFilter, merge_welford_st
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.mesh.sources.ahmedml import AhmedMLSource
 from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
 from physicsnemo_curator.mesh.sources.windsorml import WindsorMLSource
 from physicsnemo_curator.mesh.sources.windtunnel import WindTunnelSource
@@ -49,6 +50,7 @@ registry.register_source("mesh", DrivAerMLSource)
 registry.register_source("mesh", AhmedMLSource)
 registry.register_source("mesh", WindsorMLSource)
 registry.register_source("mesh", WindTunnelSource)
+registry.register_source("mesh", NavierStokesCylinderSource)
 registry.register_filter("mesh", MeanFilter)
 registry.register_filter("mesh", MeshInfoFilter)
 registry.register_filter("mesh", StatsFilter)
@@ -61,6 +63,7 @@ __all__ = [
     "MeanFilter",
     "MeshInfoFilter",
     "MeshSink",
+    "NavierStokesCylinderSource",
     "PrecisionFilter",
     "StatsFilter",
     "VTKSource",
