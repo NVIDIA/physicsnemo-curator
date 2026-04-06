@@ -64,51 +64,30 @@ results = run_pipeline(pipeline, n_jobs=8, backend="process_pool")
 pipeline.filters[0].flush()
 ```
 
-## User Guide
-
-Information about getting PhysicsNeMo Curator up and running, as well as key concepts.
-
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 3
+:caption: User Guide
 
-user-guide/installation
-user-guide/quickstart
-user-guide/architecture
-user-guide/parallel
-user-guide/profiling
-user-guide/cli
-user-guide/datasets
-developer-guide/extending
-developer-guide/benchmarking
+user-guide/index
 ```
 
-## Domains
-
-Domain-specific pipeline components for different data types.
-
 ```{toctree}
 :maxdepth: 2
+:caption: Domains
 
-domains/mesh
-domains/da
+domains/index
 ```
 
-## API
-
-The content of the exposed `physicsnemo_curator` API.
-
 ```{toctree}
 :maxdepth: 2
+:caption: API
 
 API <autoapi/index>
 ```
 
-## Examples
-
-Examples demonstrating various common PhysicsNeMo Curator usage patterns.
-
 ```{toctree}
 :maxdepth: 2
+:caption: Examples
 
 auto_examples/index
 ```
