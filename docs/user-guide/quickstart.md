@@ -1,221 +1,138 @@
 # Quickstart
 
-This guide walks through building your first ETL pipeline with PhysicsNeMo
-Curator using the mesh submodule.
+This guide walks through building ETL pipelines with PhysicsNeMo Curator
+for two common domains: **CAE mesh processing** and **weather/climate
+reanalysis**.
 
-## Prerequisites
+Both examples follow the same pattern: **Source → Filter → Sink →
+`run_pipeline`**.
 
-Install the package with mesh support:
+## CAE: DrivAerML Surface Meshes
+
+Process automotive CFD boundary meshes from the
+[DrivAerML](https://huggingface.co/datasets/neashton/drivaerml) dataset on
+HuggingFace Hub.  DrivAerML contains 500 parametrically morphed variants of
+the DrivAer notchback vehicle with high-fidelity scale-resolving CFD.
 
 ```bash
 pip install physicsnemo-curator[mesh]
-# or with uv:
-uv sync --group mesh
 ```
-
-## Step 1: Create a FileStore
-
-A {class}`~physicsnemo_curator.core.store.FileStore` maps integer indices to local file
-paths.  It decouples *where* data lives from *how* it's read.
-
-```python
-from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
-
-# Local directory
-store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
-print(f"Found {len(store)} files")
-
-# Or a remote dataset (HuggingFace Hub, S3, HTTPS, ...)
-store = FsspecFileStore(
-    "hf://datasets/neashton/drivaerml/run_1/slices",
-    extensions=frozenset({".vtp"}),
-)
-print(f"Found {len(store)} remote files")
-```
-
-## Step 2: Read VTK Files
-
-The {class}`~physicsnemo_curator.mesh.sources.vtk.VTKSource` accepts a
-{class}`~physicsnemo_curator.core.store.FileStore` and converts each VTK file to a
-{class}`physicsnemo.mesh.Mesh` using
-{func}`physicsnemo.mesh.io.from_pyvista`.
-
-```python
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
-
-source = VTKSource(store=store)
-print(f"Source has {len(source)} items")
-
-# Access a single mesh (lazy — returns a generator)
-mesh = next(source[0])
-print(f"Points: {mesh.n_points}, Cells: {mesh.n_cells}")
-```
-
-You can also use convenience classmethods that create the store internally:
-
-```python
-# Quick one-liners
-source = VTKSource.from_path("./cfd_results/")
-source = VTKSource.from_url("hf://datasets/neashton/drivaerml/run_1/slices")
-```
-
-### Conversion Options
-
-`VTKSource` exposes the full `from_pyvista` conversion interface.  These
-options apply regardless of which store is used:
-
-```python
-# Read as point cloud (no cell topology)
-source = VTKSource(store=store, manifold_dim=0)
-
-# Read volume meshes (tetrahedralize)
-source = VTKSource(store=store, manifold_dim=3)
-
-# Use cell centroids as points (avoids tetrahedralization for CFD)
-source = VTKSource(
-    store=store,
-    point_source="cell_centroids",
-    warn_on_lost_data=False,
-)
-```
-
-| Parameter | Values | Description |
-|-----------|--------|-------------|
-| `manifold_dim` | `"auto"`, `0`, `1`, `2`, `3` | Target topology dimension |
-| `point_source` | `"vertices"`, `"cell_centroids"` | What becomes mesh points |
-| `warn_on_lost_data` | `True` / `False` | Warn on discarded data arrays |
-
-## Step 3: Add Filters
-
-Filters transform the data stream.  The
-{class}`~physicsnemo_curator.mesh.filters.mean.MeanFilter` computes per-field spatial
-means and accumulates them into a Parquet summary table:
 
 ```python
 from physicsnemo_curator.mesh.filters.mean import MeanFilter
-
-mean_filter = MeanFilter(output="stats.parquet")
-```
-
-Filters are generators — they can yield zero, one, or many items per input.
-`MeanFilter` is a pass-through: it computes statistics and yields the mesh
-unchanged.
-
-## Step 4: Write Output
-
-The {class}`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` saves meshes in the
-physicsnemo native tensordict format:
-
-```python
+from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
-sink = MeshSink(output_dir="./output/")
-```
+# 1. Source — reads boundary VTP files from HuggingFace Hub
+source = DrivAerMLSource(mesh_type="boundary")
+print(f"Runs available: {len(source)}")
 
-## Step 5: Build and Run the Pipeline
-
-Chain the components together using the fluent API:
-
-```python
-from physicsnemo_curator.core.store import LocalFileStore
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-
-store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
+# 2. Build the pipeline: Source → MeanFilter → PrecisionFilter → Sink
 pipeline = (
-    VTKSource(store=store)
-    .filter(MeanFilter(output="stats.parquet"))
-    .write(MeshSink(output_dir="./output/"))
+    source
+    .filter(MeanFilter(output="outputs/drivaerml/mean_stats.parquet"))
+    .filter(PrecisionFilter(target_dtype="float32"))
+    .write(MeshSink(output_dir="outputs/drivaerml/meshes/"))
 )
 
-print(f"Pipeline has {len(pipeline)} items")
-
-# Process each item lazily
-for i in range(len(pipeline)):
-    paths = pipeline[i]
-    print(f"  Item {i} → {paths}")
-
-# Flush stateful filters (writes Parquet)
-mean_filter = pipeline.filters[0]
-mean_filter.flush()
-```
-
-Each call to `pipeline[i]` processes only that item through the full
-Source → Filter → Sink chain and returns the output file path(s).
-
-### Using `run_pipeline` (recommended)
-
-For batch execution, use {func}`~physicsnemo_curator.core.parallel.run_pipeline`
-instead of a manual loop.  It handles progress bars, index management,
-and supports parallel backends:
-
-```python
-from physicsnemo_curator import run_pipeline
-
-# Sequential with progress bar
-results = run_pipeline(pipeline)
-print(f"Wrote {sum(len(r) for r in results)} files")
-
-# Parallel across 4 worker processes
-results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
-
-# Use all CPUs with automatic backend selection
-results = run_pipeline(pipeline, n_jobs=-1)
-
-# Process a subset
-results = run_pipeline(pipeline, indices=[0, 1, 2])
-```
-
-```{note}
-Stateful filter side-effects (like `MeanFilter.flush()`) are **not** merged
-across processes when running in parallel.  Use sequential execution
-(`n_jobs=1`) when you need to collect filter state, or see
-{doc}`parallel` for details.
-```
-
-## Step 6: Inspect Results
-
-```python
-import pyarrow.parquet as pq
-
-# Read the statistics table
-table = pq.read_table("stats.parquet")
-print(table.to_pandas())
-
-# Load a saved mesh
-from physicsnemo.mesh import Mesh
-mesh = Mesh.load("./output/mesh_0000_0")
-print(f"Loaded mesh: {mesh.n_points} points, {mesh.n_cells} cells")
-```
-
-## Chaining Multiple Filters
-
-Filters compose naturally:
-
-```python
-store = LocalFileStore("./data/")
-pipeline = (
-    VTKSource(store=store)
-    .filter(FilterA())
-    .filter(FilterB())
-    .filter(FilterC())
-    .write(MySink(output_dir="./out/"))
+# 3. Run in parallel (first 3 runs)
+results = run_pipeline(
+    pipeline,
+    n_jobs=4,
+    backend="process_pool",
+    indices=range(3),
 )
+
+# 4. Merge per-worker statistics
+merged = gather_pipeline(pipeline)
+
+print(f"Processed {len(results)} runs")
+for path in merged:
+    print(f"Merged statistics: {path}")
 ```
 
-Each filter receives the output generator of the previous one, forming a
-lazy processing chain.
+This produces:
 
-## Using the CLI
+```text
+outputs/drivaerml/
+├── mean_stats.parquet      # Per-field spatial means
+└── meshes/
+    ├── mesh_0000_0/        # Run 0 (tensordict format)
+    ├── mesh_0001_0/        # Run 1
+    └── mesh_0002_0/        # Run 2
+```
 
-If you have the CLI extra installed (`pip install physicsnemo-curator[cli]`),
-you can build pipelines interactively:
+## Weather/Climate: ERA5 Reanalysis
+
+Download ERA5 reanalysis fields and compute temporal statistics over one
+month.  ERA5 data is accessed via
+[earth2studio](https://github.com/NVIDIA/earth2studio) backends — no API
+keys required for the default ARCO backend.
 
 ```bash
-curator
+pip install physicsnemo-curator[da]
 ```
 
-This launches a guided workflow that prompts you to select a submodule,
-source, filters, and sink, then executes the pipeline.  See {doc}`cli` for
-details.
+```python
+from datetime import datetime, timedelta
+
+from physicsnemo_curator.da.filters.moments import MomentsFilter
+from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+from physicsnemo_curator.da.sources.era5 import ERA5Source
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
+
+# 1. Source — one month of 6-hourly ERA5 snapshots
+start = datetime(2020, 1, 1)
+times = [start + timedelta(hours=6 * i) for i in range(4 * 31)]  # ~124 steps
+variables = ["t2m", "u10m", "v10m"]
+
+source = ERA5Source(times=times, variables=variables, backend="arco")
+print(f"Timesteps: {len(source)}")
+
+# 2. Build the pipeline: Source → MomentsFilter → ZarrSink
+pipeline = (
+    source
+    .filter(MomentsFilter(output="outputs/era5/moments.zarr", dims=("time",)))
+    .write(ZarrSink(output_path="outputs/era5/data.zarr"))
+)
+
+# 3. Run in parallel
+results = run_pipeline(
+    pipeline,
+    n_jobs=4,
+    backend="process_pool",
+    indices=range(len(source)),
+)
+
+# 4. Merge per-worker moment statistics
+merged = gather_pipeline(pipeline)
+
+print(f"Processed {len(results)} timesteps")
+for path in merged:
+    print(f"Merged moments: {path}")
+```
+
+This produces:
+
+```text
+outputs/era5/
+├── moments.zarr/           # Temporal statistics (mean, variance, skewness, min, max)
+│   ├── t2m/
+│   ├── u10m/
+│   └── v10m/
+└── data.zarr/              # Raw fields in Zarr format
+    ├── t2m/
+    ├── u10m/
+    └── v10m/
+```
+
+## Next Steps
+
+- See the full [Examples gallery](https://nvidia.github.io/physicsnemo-curator/auto_examples/index.html)
+  for crash simulation, external aerodynamics, and more.
+- Read the {doc}`parallel` guide for details on execution backends and
+  stateful filter handling.
+- Use the interactive CLI (`pip install physicsnemo-curator[cli]`) to build
+  pipelines without writing code — see {doc}`cli`.

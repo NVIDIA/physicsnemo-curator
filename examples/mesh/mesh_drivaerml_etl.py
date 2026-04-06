@@ -72,7 +72,9 @@ print(f"Total runs available: {len(source)}")
 # - :class:`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` writes
 #   each mesh in PhysicsNeMo's native tensordict memory-mapped format.
 
-pipeline = source.filter(MeanFilter(output="outputs/mean_stats.parquet")).write(MeshSink(output_dir="outputs/meshes/"))
+pipeline = source.filter(MeanFilter(output="outputs/drivaerml/mean_stats.parquet")).write(
+    MeshSink(output_dir="outputs/drivaerml/meshes/")
+)
 
 # %%
 # Run in Parallel
@@ -118,11 +120,11 @@ for path in merged:
     print(f"Merged statistics: {path}")
 
 # %%
-# The ``outputs/`` directory now contains:
+# The ``outputs/drivaerml/`` directory now contains:
 #
 # .. code-block:: text
 #
-#     outputs/
+#     outputs/drivaerml/
 #     ├── mean_stats.parquet      # Per-field spatial means (merged)
 #     └── meshes/
 #         ├── mesh_0000_0/        # Run 0 in tensordict format
