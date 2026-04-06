@@ -220,6 +220,56 @@ class TestNavierStokesCylinderSourceLocal:
         with pytest.raises(IndexError):
             next(source[99])
 
+    def test_malformed_connectivity_raises(self, tmp_path: pathlib.Path) -> None:
+        """Non-triangular connectivity should raise ValueError."""
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+
+        # Write a geometry file with quad cells (4 vertices) instead of triangles.
+        rng = np.random.default_rng(99)
+        root = tmp_path / "bad_geom"
+        n_points, n_cells = 8, 4
+        coords_x = rng.uniform(0.0, 10.0, size=n_points).tolist()
+        coords_y = rng.uniform(0.0, 10.0, size=n_points).tolist()
+        connectivity = [rng.integers(0, n_points, size=4).tolist() for _ in range(n_cells)]
+
+        geo_dir = root / "geometry"
+        geo_dir.mkdir(parents=True)
+        geo_table = pa.table(
+            {
+                "node_coordinates_x": pa.array([coords_x], type=pa.list_(pa.float64())),
+                "node_coordinates_y": pa.array([coords_y], type=pa.list_(pa.float64())),
+                "connectivity": pa.array([connectivity], type=pa.list_(pa.list_(pa.int32()))),
+            }
+        )
+        pq.write_table(geo_table, geo_dir / "default-00000-of-00001.parquet")
+
+        # Write minimal parameters and snapshots so the source can be constructed.
+        param_dir = root / "parameters"
+        param_dir.mkdir(parents=True)
+        pq.write_table(
+            pa.table({"viscosity": pa.array([1.0], type=pa.float64())}),
+            param_dir / "default-00000-of-00001.parquet",
+        )
+        snap_dir = root / "snapshots"
+        snap_dir.mkdir(parents=True)
+        pq.write_table(
+            pa.table(
+                {
+                    "velocity_x": pa.array([rng.standard_normal(n_points).tolist()], type=pa.list_(pa.float64())),
+                    "velocity_y": pa.array([rng.standard_normal(n_points).tolist()], type=pa.list_(pa.float64())),
+                    "pressure": pa.array([rng.standard_normal(n_points).tolist()], type=pa.list_(pa.float64())),
+                }
+            ),
+            snap_dir / "default-00000-of-00001.parquet",
+        )
+
+        source = NavierStokesCylinderSource(url=str(root))
+        with pytest.raises(ValueError, match="Expected triangular connectivity"):
+            next(source[0])
+
 
 # ---------------------------------------------------------------------------
 # Unit tests — registry integration

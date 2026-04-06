@@ -129,7 +129,7 @@ class NavierStokesCylinderSource(Source[Mesh]):
     ) -> None:
         self._url = url
         self._storage_options = storage_options or {}
-        self._cache_storage = cache_storage if cache_storage else tempfile.mkdtemp(prefix="curator_ns_cylinder_")
+        self._cache_storage = cache_storage or tempfile.mkdtemp(prefix="curator_ns_cylinder_")
 
         # Lazily loaded caches (populated on first access).
         self._geometry_loaded = False
@@ -177,20 +177,20 @@ class NavierStokesCylinderSource(Source[Mesh]):
         # Read the snapshot row for this index.
         snapshot = self._read_snapshot(index)
 
-        # Build point data TensorDict.
+        # Build point data TensorDict (float32 to match points).
         point_data = TensorDict(
             {
-                "velocity_x": torch.from_numpy(snapshot["velocity_x"]),
-                "velocity_y": torch.from_numpy(snapshot["velocity_y"]),
-                "pressure": torch.from_numpy(snapshot["pressure"]),
+                "velocity_x": torch.from_numpy(snapshot["velocity_x"]).float(),
+                "velocity_y": torch.from_numpy(snapshot["velocity_y"]).float(),
+                "pressure": torch.from_numpy(snapshot["pressure"]).float(),
             },
             batch_size=[self._points.shape[0]],
         )
 
-        # Build global data TensorDict with viscosity.
+        # Build global data TensorDict with viscosity (float32 for consistency).
         viscosity_val = float(self._viscosities[index])
         global_data = TensorDict(
-            {"viscosity": torch.tensor([viscosity_val])},
+            {"viscosity": torch.tensor([viscosity_val], dtype=torch.float32)},
             batch_size=[],
         )
 
@@ -279,6 +279,9 @@ class NavierStokesCylinderSource(Source[Mesh]):
         dict[str, np.ndarray]
             Mapping of field name to 1-D NumPy array.
         """
+        # Cache the full snapshot table on first access (~20 MB for the default
+        # 500-snapshot dataset).  This avoids re-reading the Parquet file on
+        # every ``__getitem__`` call at the cost of holding the table in memory.
         if self._snapshots_table is None:
             self._snapshots_table = self._open_parquet(f"snapshots/{_PARQUET_FILENAME}")
         row = self._snapshots_table.slice(index, 1).to_pydict()
