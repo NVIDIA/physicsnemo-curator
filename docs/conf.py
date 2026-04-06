@@ -62,12 +62,15 @@ autosummary_generate = False  # we use autosummary for compact tables only
 # ---------------------------------------------------------------------------
 autoapi_dirs = ["../src/physicsnemo_curator"]
 autoapi_type = "python"
+autoapi_template_dir = "_templates/autoapi"
 autoapi_options = [
     "members",
     "undoc-members",
     "show-inheritance",
     "show-module-summary",
 ]
+autoapi_python_class_content = "both"
+autoapi_member_order = "groupwise"
 
 # ---------------------------------------------------------------------------
 # Napoleon (NumPy-style docstrings)
