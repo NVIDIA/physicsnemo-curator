@@ -17,7 +17,6 @@ composable Python API built on a high-performance native extension (PyO3)
 for reading, filtering, and writing simulation data at scale.
 
 [**Getting Started**](#getting-started)
-| [**Architecture**](#architecture)
 | [**Examples**](#examples)
 | [**Contributing**](#contributing-to-physicsnemo-curator)
 | [**License**](#license)
@@ -36,61 +35,6 @@ for reading, filtering, and writing simulation data at scale.
   Dask, or Prefect backends
 - **Registry & CLI** — all sources, filters, and sinks are discoverable
   via a global registry and optional interactive CLI
-
-## Architecture
-
-```text
-┌─────────────────────────────────────────────────────┐
-│                   Python API Layer                   │
-│   Source[T] ──▶ Filter[T] ──▶ Sink[T] ──▶ Pipeline  │
-│                   run_pipeline(n_jobs, backend)      │
-├─────────────────────────────────────────────────────┤
-│              Rust Extension (_lib.abi3.so)           │
-│           VTK I/O · Mesh ops · Parallel readers     │
-└─────────────────────────────────────────────────────┘
-```
-
-| Layer | Location | Purpose |
-|-------|----------|---------|
-| Python API | `src/physicsnemo_curator/` | Public interface — sources, filters, sinks, pipeline runner |
-| Rust core | `src/rust/` | Native extension built with PyO3 + maturin |
-| Tests | `test/` | Python test suite (pytest) |
-| Examples | `examples/` | Sphinx Gallery scripts (runnable + notebook export) |
-| Docs | `docs/` | Sphinx documentation |
-
-## Pipeline Components
-
-### Mesh Domain
-
-Sources, filters, and sinks operating on `physicsnemo.mesh.Mesh` objects.
-
-| Component | Type | Description |
-|-----------|------|-------------|
-| `DrivAerMLSource` | Source | DrivAer notchback variants (500 runs, HuggingFace) |
-| `AhmedMLSource` | Source | Ahmed body variants (500 runs, HuggingFace) |
-| `WindsorMLSource` | Source | Windsor body variants (355 runs, HuggingFace) |
-| `WindTunnelSource` | Source | WindTunnel-20k automobile simulations |
-| `NavierStokesCylinderSource` | Source | 2D cylinder flow (Parquet-based) |
-| `VTKSource` | Source | Generic VTK reader (.vtk/.vtp/.vtu/.vts/.vtm) |
-| `D3PlotSource` | Source | LS-DYNA crash simulation d3plot files |
-| `AnsysRSTSource` | Source | Ansys .rst result files via DPF |
-| `MeanFilter` | Filter | Per-field spatial means (Parquet output) |
-| `StatsFilter` | Filter | Comprehensive statistics with Welford accumulators |
-| `MeshInfoFilter` | Filter | Mesh metadata logging (JSON-lines output) |
-| `PrecisionFilter` | Filter | In-place floating-point conversion |
-| `WallNodeFilter` | Filter | Wall-node removal for crash meshes |
-| `MeshSink` | Sink | Writes meshes in PhysicsNeMo tensordict format |
-
-### DataArray Domain
-
-Sources, filters, and sinks operating on `xarray.DataArray` objects.
-
-| Component | Type | Description |
-|-----------|------|-------------|
-| `ERA5Source` | Source | ERA5 reanalysis via earth2studio (ARCO, WB2, NCAR, CDS) |
-| `MomentsFilter` | Filter | Running temporal statistics (Welford online algorithm) |
-| `ZarrSink` | Sink | Writes to Zarr store (per-variable groups, time-append) |
-| `NetCDF4Sink` | Sink | Writes to NetCDF4 with optional year-based splitting |
 
 ## Getting Started
 
