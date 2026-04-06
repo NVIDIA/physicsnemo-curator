@@ -97,6 +97,7 @@ Claude tools in `.claude/tools/`:
 | `cargo-clippy` | Run clippy on Rust code |
 | `cargo-nextest` | Run Rust tests with nextest |
 | `cargo-deny` | Audit Rust dependencies |
+| `pytest` | Run Python tests with scope (unit/integration/e2e), group (mesh/da/core), and coverage |
 | `asv` | Run ASV historical benchmarks |
 | `open-pr` | **Open a PR** from fork to NVIDIA/physicsnemo-curator using the repo PR template |
 | `greptile-review` | Fetch Greptile AI review comments from a PR, sorted by priority, ready to address |
