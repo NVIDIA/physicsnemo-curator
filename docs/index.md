@@ -77,6 +77,8 @@ user-guide/parallel
 user-guide/profiling
 user-guide/cli
 user-guide/datasets
+developer-guide/extending
+developer-guide/benchmarking
 ```
 
 ```{toctree}
@@ -96,15 +98,7 @@ auto_examples/index
 
 ```{toctree}
 :maxdepth: 2
-:caption: Developer Guide
-
-developer-guide/extending
-developer-guide/benchmarking
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: API Reference
+:caption: API
 
 autoapi/index
 ```
