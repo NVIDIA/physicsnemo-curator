@@ -99,6 +99,7 @@ Claude tools in `.claude/tools/`:
 | `cargo-deny` | Audit Rust dependencies |
 | `asv` | Run ASV historical benchmarks |
 | `open-pr` | **Open a PR** from fork to NVIDIA/physicsnemo-curator using the repo PR template |
+| `greptile-review` | Fetch Greptile AI review comments from a PR, sorted by priority, ready to address |
 
 ## Commit Message Convention
 
