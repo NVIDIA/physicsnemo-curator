@@ -237,6 +237,27 @@ wheels = [
 ]
 
 [[package]]
+name = "ansys-dpf-core"
+version = "0.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "grpcio" },
+    { name = "importlib-metadata" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "protobuf" },
+    { name = "psutil" },
+    { name = "setuptools" },
+    { name = "tqdm" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/8f/81106e78421c6c7c2af9b3f3b59ed17de7abd24ec6e868dfa506375a68f8/ansys_dpf_core-0.15.0-py3-none-any.whl", hash = "sha256:afdf9cd52efd783b56e8493ea4105b481bb5ef8df5506b94d3783dc0e7e8ec8f", size = 2800496, upload-time = "2025-12-19T17:48:45.664Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/87/816d06cfaa7f4d7ba1907b720b17dc49c41a57ea34a139f6925a34fdbf4d/ansys_dpf_core-0.15.0-py3-none-manylinux1_x86_64.whl", hash = "sha256:c7e5400ec7456c1a37562e393d9b90af260aeb14a4c49378fbaa53e11ef3b0e1", size = 12363225, upload-time = "2025-12-19T17:48:47.275Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/e9/020c4c7162c63368b592f951e64cc03bf477f5783882d5cc7dc7799e82e4/ansys_dpf_core-0.15.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:57df5a01725eccccf59366b610a41901f4c735d99d8f318405f295feb438ddd8", size = 12363228, upload-time = "2025-12-19T17:48:49.023Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/86/16aad1b38395d1ce8d123eeb9a96601f0d71f495fbe2099e5c0d6421a1e6/ansys_dpf_core-0.15.0-py3-none-win_amd64.whl", hash = "sha256:9042aaeae149bfff824f4ede0c3942d84654028d73f03fe1bc5e207efcbbc6dd", size = 8413647, upload-time = "2025-12-19T17:48:51.071Z" },
+]
+
+[[package]]
 name = "anyio"
 version = "4.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3483,6 +3504,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+ansys = [
+    { name = "ansys-dpf-core" },
+]
 cli = [
     { name = "click" },
     { name = "questionary" },
@@ -3547,6 +3571,7 @@ mesh = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ansys-dpf-core", marker = "extra == 'ansys'", specifier = ">=0.12" },
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.0" },
     { name = "dask", marker = "extra == 'dask'", specifier = ">=2024.1" },
     { name = "fsspec", specifier = ">=2023.1.0" },
@@ -3556,7 +3581,7 @@ requires-dist = [
     { name = "questionary", marker = "extra == 'cli'", specifier = ">=2.0" },
     { name = "rich", marker = "extra == 'cli'", specifier = ">=13.0" },
 ]
-provides-extras = ["cli", "loky", "lsdyna", "dask", "prefect"]
+provides-extras = ["cli", "loky", "lsdyna", "ansys", "dask", "prefect"]
 
 [package.metadata.requires-dev]
 da = [

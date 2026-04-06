@@ -35,6 +35,7 @@ from physicsnemo_curator.mesh.filters.stats import StatsFilter, merge_welford_st
 from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.mesh.sources.ahmedml import AhmedMLSource
+from physicsnemo_curator.mesh.sources.ansys_rst import AnsysRSTSource
 from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
@@ -47,6 +48,7 @@ registry.register_submodule("mesh", "Mesh processing (physicsnemo.mesh.Mesh)", "
 registry.register_store("mesh", "Local directory", LocalFileStore)
 registry.register_store("mesh", "Remote (fsspec)", FsspecFileStore)
 registry.register_store("mesh", "Run-indexed (remote)", RunIndexedFileStore)
+registry.register_source("mesh", AnsysRSTSource)
 registry.register_source("mesh", D3PlotSource)
 registry.register_source("mesh", VTKSource)
 registry.register_source("mesh", DrivAerMLSource)
@@ -63,6 +65,7 @@ registry.register_sink("mesh", MeshSink)
 
 __all__ = [
     "AhmedMLSource",
+    "AnsysRSTSource",
     "D3PlotSource",
     "DrivAerMLSource",
     "MeanFilter",
