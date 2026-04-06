@@ -20,7 +20,6 @@ for reading, filtering, and writing simulation data at scale.
 | [**Getting Started**](#getting-started)
 | [**Examples**](https://nvidia.github.io/physicsnemo-curator/auto_examples/index.html)
 | [**Contributing**](#contributing-to-physicsnemo-curator)
-| [**License**](#license)
 
 ---
 
