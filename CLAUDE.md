@@ -88,6 +88,7 @@ Claude tools in `.claude/tools/`:
 
 | Tool | Description |
 |---|---|
+| `commit` | **Always use this to commit.** Stages files, runs pre-commit hooks, enforces Conventional Commits format |
 | `ruff` | Run ruff linter (auto-fix by default) |
 | `ruff-format` | Run ruff formatter |
 | `uv` | General-purpose uv command runner |
@@ -97,6 +98,22 @@ Claude tools in `.claude/tools/`:
 | `cargo-nextest` | Run Rust tests with nextest |
 | `cargo-deny` | Audit Rust dependencies |
 | `asv` | Run ASV historical benchmarks |
+
+## Commit Message Convention
+
+All commits **must** use [Conventional Commits](https://www.conventionalcommits.org/) format.
+The `commit` tool enforces this automatically — always use it instead of raw `git commit`.
+
+```text
+<type>(<scope>): <short summary>
+
+[optional body]
+```
+
+- **Types**: `feat`, `fix`, `refactor`, `test`, `docs`, `style`, `perf`, `ci`, `build`, `chore`
+- **Scope** (optional): `mesh`, `da`, `core`, `run`, `cli`, `rust`
+- **Summary**: imperative mood, lowercase, no trailing period, max 72 chars
+- **Pre-commit hooks** are always run before the commit is created
 
 ## Skills Available
 
