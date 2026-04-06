@@ -123,3 +123,5 @@ The `commit` tool enforces this automatically — always use it instead of raw `
 - **testing**: Comprehensive guide for running Python and Rust tests, coverage, and benchmarks.
 - **add-source**: Guide for adding a new data source (discovery questions, implementation, testing, registration).
 - **add-filter**: Guide for adding a new filter (discovery questions, implementation patterns, generator semantics, testing, registration).
+- **add-sink**: Guide for adding a new sink (discovery, implementation,
+  output naming, append/split, testing, registration).
