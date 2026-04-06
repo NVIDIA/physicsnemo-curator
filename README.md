@@ -48,14 +48,10 @@ pipeline components for users to create their own data processing pipelines.
 
 ### Installation
 
-#### Option 1: PhysicsNeMo Docker container (recommended)
+#### Option 1: pip
 
 ```bash
-docker pull nvcr.io/nvidia/physicsnemo/physicsnemo:25.08
-
-git clone git@github.com:NVIDIA/physicsnemo-curator.git
-cd physicsnemo-curator
-pip install -e ".[dev]"
+pip install physicsnemo-curator
 ```
 
 #### Option 2: From source with uv
