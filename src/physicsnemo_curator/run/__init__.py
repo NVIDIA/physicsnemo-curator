@@ -75,6 +75,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from physicsnemo_curator.core.base import Pipeline
+    from physicsnemo_curator.core.profiling import ProfiledPipeline
+
+    #: Type alias for objects accepted by :func:`run_pipeline`.
+    #: Both ``Pipeline`` and ``ProfiledPipeline`` are supported.
+    PipelineLike = Pipeline[Any] | ProfiledPipeline[Any]
 
 # ---------------------------------------------------------------------------
 # Backend Registry
@@ -190,7 +195,7 @@ register_backend(PrefectBackend)
 
 
 def run_pipeline(
-    pipeline: Pipeline[Any],
+    pipeline: PipelineLike,
     *,
     n_jobs: int = 1,
     backend: str = "auto",
@@ -205,7 +210,7 @@ def run_pipeline(
 
     Parameters
     ----------
-    pipeline : Pipeline
+    pipeline : Pipeline | ProfiledPipeline
         A fully-configured pipeline (source + filters + sink).
     n_jobs : int
         Number of parallel workers. ``1`` forces sequential execution.
@@ -310,7 +315,7 @@ def run_pipeline(
 
     # Execute
     runner = backend_cls()
-    return runner.run(pipeline, config)
+    return runner.run(pipeline, config)  # ty: ignore[invalid-argument-type]  # ProfiledPipeline duck-types Pipeline
 
 
 __all__ = [

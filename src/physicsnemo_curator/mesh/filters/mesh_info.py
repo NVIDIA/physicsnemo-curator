@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
-from typing import TYPE_CHECKING, ClassVar
+from typing import IO, TYPE_CHECKING, ClassVar, TypedDict
 
 import torch
 
@@ -40,7 +40,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _extract_field_info(td: object, prefix: str = "") -> list[dict[str, object]]:
+class _FieldInfo(TypedDict):
+    """Typed dictionary for a single field metadata entry."""
+
+    name: str
+    shape: list[int]
+    dtype: str
+    nbytes: int
+
+
+def _extract_field_info(td: object, prefix: str = "") -> list[_FieldInfo]:
     """Extract field metadata from a TensorDict-like object.
 
     Parameters
@@ -52,15 +61,18 @@ def _extract_field_info(td: object, prefix: str = "") -> list[dict[str, object]]
 
     Returns
     -------
-    list[dict[str, object]]
+    list[_FieldInfo]
         List of field info dicts with name, shape, dtype, nbytes.
     """
     from tensordict import TensorDictBase
 
-    fields: list[dict[str, object]] = []
+    if not isinstance(td, TensorDictBase):
+        return []
 
-    for key in td.keys():  # type: ignore[union-attr]  # noqa: SIM118
-        child = td[key]  # type: ignore[index]
+    fields: list[_FieldInfo] = []
+
+    for key in td.keys():  # noqa: SIM118
+        child = td[key]
         full_name = f"{prefix}{key}" if prefix else key
 
         if isinstance(child, TensorDictBase):
@@ -68,12 +80,12 @@ def _extract_field_info(td: object, prefix: str = "") -> list[dict[str, object]]
             fields.extend(_extract_field_info(child, prefix=f"{full_name}/"))
         elif isinstance(child, torch.Tensor):
             fields.append(
-                {
-                    "name": full_name,
-                    "shape": list(child.shape),
-                    "dtype": str(child.dtype),
-                    "nbytes": child.numel() * child.element_size(),
-                }
+                _FieldInfo(
+                    name=full_name,
+                    shape=list(child.shape),
+                    dtype=str(child.dtype),
+                    nbytes=child.numel() * child.element_size(),
+                )
             )
 
     return fields
@@ -158,7 +170,7 @@ class MeshInfoFilter(Filter["Mesh"]):
         self._log_level = logging.INFO if log_level == "info" else logging.DEBUG
         self._include_fields = include_fields
         self._mesh_index = 0
-        self._file_handle: object = None
+        self._file_handle: IO[str] | None = None
 
     def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:
         """Extract and log mesh info, then yield the mesh unchanged.
@@ -189,7 +201,7 @@ class MeshInfoFilter(Filter["Mesh"]):
             The path of the output file, or ``None`` if no file was used.
         """
         if self._file_handle is not None:
-            self._file_handle.close()  # type: ignore[union-attr]
+            self._file_handle.close()
             self._file_handle = None
         return str(self._output_path) if self._output_path else None
 
@@ -212,17 +224,17 @@ class MeshInfoFilter(Filter["Mesh"]):
             "n_cells": mesh.n_cells,
         }
 
-        point_fields: list[dict[str, object]] = []
-        cell_fields: list[dict[str, object]] = []
+        point_fields: list[_FieldInfo] = []
+        cell_fields: list[_FieldInfo] = []
         total_memory = 0
 
         if mesh.point_data is not None:
             point_fields = _extract_field_info(mesh.point_data, prefix="")
-            total_memory += sum(f["nbytes"] for f in point_fields)  # type: ignore[misc]
+            total_memory += sum(f["nbytes"] for f in point_fields)
 
         if mesh.cell_data is not None:
             cell_fields = _extract_field_info(mesh.cell_data, prefix="")
-            total_memory += sum(f["nbytes"] for f in cell_fields)  # type: ignore[misc]
+            total_memory += sum(f["nbytes"] for f in cell_fields)
 
         # Add points tensor memory
         if mesh.points is not None:
@@ -246,7 +258,7 @@ class MeshInfoFilter(Filter["Mesh"]):
         info : dict[str, object]
             Mesh metadata dictionary.
         """
-        memory_mb = info["memory_estimate_bytes"] / (1024 * 1024)  # type: ignore[operator]
+        memory_mb = int(info.get("memory_estimate_bytes", 0)) / (1024 * 1024)  # ty: ignore[invalid-argument-type]
         msg = (
             f"Mesh {info['mesh_index']}: "
             f"{info['n_points']} points, {info['n_cells']} cells, "
@@ -256,10 +268,12 @@ class MeshInfoFilter(Filter["Mesh"]):
         logger.log(self._log_level, msg)
 
         if self._include_fields and self._log_level <= logging.DEBUG:
-            for field in info.get("point_data_fields", []):  # type: ignore[union-attr]
-                logger.debug("  point_data/%s: shape=%s, dtype=%s", field["name"], field["shape"], field["dtype"])
-            for field in info.get("cell_data_fields", []):  # type: ignore[union-attr]
-                logger.debug("  cell_data/%s: shape=%s, dtype=%s", field["name"], field["shape"], field["dtype"])
+            point_fields: list[_FieldInfo] = info.get("point_data_fields", [])  # ty: ignore[invalid-assignment]
+            cell_fields: list[_FieldInfo] = info.get("cell_data_fields", [])  # ty: ignore[invalid-assignment]
+            for fld in point_fields:
+                logger.debug("  point_data/%s: shape=%s, dtype=%s", fld["name"], fld["shape"], fld["dtype"])
+            for fld in cell_fields:
+                logger.debug("  cell_data/%s: shape=%s, dtype=%s", fld["name"], fld["shape"], fld["dtype"])
 
     def _write_to_file(self, info: dict[str, object]) -> None:
         """Write mesh info to the JSON-lines file.
@@ -277,5 +291,5 @@ class MeshInfoFilter(Filter["Mesh"]):
             self._output_path.parent.mkdir(parents=True, exist_ok=True)
             self._file_handle = self._output_path.open("w")
 
-        self._file_handle.write(json.dumps(info) + "\n")  # type: ignore[union-attr]
-        self._file_handle.flush()  # type: ignore[union-attr]
+        self._file_handle.write(json.dumps(info) + "\n")
+        self._file_handle.flush()

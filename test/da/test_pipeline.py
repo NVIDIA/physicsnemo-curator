@@ -1162,6 +1162,153 @@ class TestMomentsFilter:
         assert filt.dims == ("time", "variable")
 
 
+class TestMomentsFilterMerge:
+    """Tests for MomentsFilter.merge() classmethod."""
+
+    def test_merge_two_zarr_stores(self, tmp_path: Path) -> None:
+        """Merging two Zarr stores should produce correct combined statistics."""
+        import numpy as np
+        import xarray as xr
+
+        from physicsnemo_curator.da.filters.moments import MomentsFilter
+
+        # Worker 1: process samples 0-4
+        filt1 = MomentsFilter(output=str(tmp_path / "stats_0.zarr"), dims=("time",))
+        for i in range(5):
+            da = _make_simple_dataarray(n_samples=1, fill_value=float(i))
+
+            def gen(d=da):  # type: ignore[override]
+                yield d
+
+            list(filt1(gen()))
+        filt1.flush()
+
+        # Worker 2: process samples 5-9
+        filt2 = MomentsFilter(output=str(tmp_path / "stats_1.zarr"), dims=("time",))
+        for i in range(5, 10):
+            da = _make_simple_dataarray(n_samples=1, fill_value=float(i))
+
+            def gen(d=da):  # type: ignore[override]
+                yield d
+
+            list(filt2(gen()))
+        filt2.flush()
+
+        # Merge
+        merged_path = MomentsFilter.merge(
+            [str(tmp_path / "stats_0.zarr"), str(tmp_path / "stats_1.zarr")],
+            output=str(tmp_path / "merged.zarr"),
+        )
+
+        # Verify merged results
+        ds = xr.open_zarr(str(pathlib.Path(merged_path) / "data"))
+        assert ds.attrs["count"] == 10
+
+        expected_mean = np.mean(np.arange(10, dtype=np.float64))
+        np.testing.assert_allclose(ds["mean"].values.flat[0], expected_mean, rtol=1e-10)
+
+        expected_var = np.var(np.arange(10, dtype=np.float64))
+        np.testing.assert_allclose(ds["variance"].values.flat[0], expected_var, rtol=1e-10)
+
+        assert ds["min"].values.flat[0] == 0.0
+        assert ds["max"].values.flat[0] == 9.0
+
+    def test_merge_single_store(self, tmp_path: Path) -> None:
+        """Merging a single store should produce identical results."""
+        import numpy as np
+        import xarray as xr
+
+        from physicsnemo_curator.da.filters.moments import MomentsFilter
+
+        filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
+        for i in range(5):
+            da = _make_simple_dataarray(n_samples=1, fill_value=float(i))
+
+            def gen(d=da):  # type: ignore[override]
+                yield d
+
+            list(filt(gen()))
+        filt.flush()
+
+        merged_path = MomentsFilter.merge(
+            [str(tmp_path / "stats.zarr")],
+            output=str(tmp_path / "merged.zarr"),
+        )
+
+        original = xr.open_zarr(str(tmp_path / "stats.zarr" / "data"))
+        merged = xr.open_zarr(str(pathlib.Path(merged_path) / "data"))
+
+        np.testing.assert_allclose(merged["mean"].values, original["mean"].values)
+        np.testing.assert_allclose(merged["variance"].values, original["variance"].values)
+        assert merged.attrs["count"] == original.attrs["count"]
+
+    def test_merge_empty_raises(self) -> None:
+        """MomentsFilter.merge should raise ValueError on empty list."""
+        from physicsnemo_curator.da.filters.moments import MomentsFilter
+
+        with pytest.raises(ValueError, match="non-empty"):
+            MomentsFilter.merge([], output="out.zarr")
+
+    def test_merge_missing_store_raises(self, tmp_path: Path) -> None:
+        """MomentsFilter.merge should raise FileNotFoundError for missing store."""
+        from physicsnemo_curator.da.filters.moments import MomentsFilter
+
+        with pytest.raises(FileNotFoundError, match="not found"):
+            MomentsFilter.merge([str(tmp_path / "nonexistent.zarr")], output="out.zarr")
+
+    def test_merge_with_variables(self, tmp_path: Path) -> None:
+        """Merge should handle stores with multiple variable groups."""
+        import xarray as xr
+
+        from physicsnemo_curator.da.filters.moments import MomentsFilter
+
+        # Use DataArrays with variable dimension
+        filt1 = MomentsFilter(output=str(tmp_path / "stats_0.zarr"), dims=("time",))
+        filt2 = MomentsFilter(output=str(tmp_path / "stats_1.zarr"), dims=("time",))
+
+        for i in range(3):
+            da = _make_dataarray(
+                times=[datetime(2020, 6, 1, i)],
+                variables=["t2m", "u10"],
+                seed=i,
+            )
+
+            def gen1(d=da):  # type: ignore[override]
+                yield d
+
+            list(filt1(gen1()))
+
+        for i in range(3, 6):
+            da = _make_dataarray(
+                times=[datetime(2020, 6, 1, i)],
+                variables=["t2m", "u10"],
+                seed=i,
+            )
+
+            def gen2(d=da):  # type: ignore[override]
+                yield d
+
+            list(filt2(gen2()))
+
+        filt1.flush()
+        filt2.flush()
+
+        merged_path = MomentsFilter.merge(
+            [str(tmp_path / "stats_0.zarr"), str(tmp_path / "stats_1.zarr")],
+            output=str(tmp_path / "merged.zarr"),
+        )
+
+        # Both variable groups should be present
+        merged_dir = pathlib.Path(merged_path)
+        assert (merged_dir / "t2m").is_dir()
+        assert (merged_dir / "u10").is_dir()
+
+        ds_t2m = xr.open_zarr(str(merged_dir / "t2m"))
+        ds_u10 = xr.open_zarr(str(merged_dir / "u10"))
+        assert ds_t2m.attrs["count"] == 6
+        assert ds_u10.attrs["count"] == 6
+
+
 # ===================================================================
 # Registration tests
 # ===================================================================

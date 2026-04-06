@@ -131,6 +131,49 @@ class MeanFilter(Filter["Mesh"]):
         pq.write_table(table, str(self._output_path))
         return str(self._output_path)
 
+    @staticmethod
+    def merge(parquet_paths: list[str], output: str) -> str:
+        """Merge mean-statistics Parquet files produced by parallel workers.
+
+        Each worker writes one row per mesh.  This method concatenates all
+        rows into a single Parquet file, preserving column order.  The
+        resulting table has a contiguous row range (0 … N-1).
+
+        Parameters
+        ----------
+        parquet_paths : list[str]
+            Paths to per-worker mean-statistics Parquet files.
+        output : str
+            Path for the merged output Parquet file.
+
+        Returns
+        -------
+        str
+            The path of the written merged Parquet file.
+
+        Raises
+        ------
+        ValueError
+            If *parquet_paths* is empty.
+
+        Examples
+        --------
+        >>> paths = ["worker_0/means.parquet", "worker_1/means.parquet"]
+        >>> MeanFilter.merge(paths, output="merged_means.parquet")  # doctest: +SKIP
+        'merged_means.parquet'
+        """
+        if not parquet_paths:
+            msg = "parquet_paths must be a non-empty list."
+            raise ValueError(msg)
+
+        tables = [pq.read_table(p) for p in parquet_paths]
+        merged = pa.concat_tables(tables, promote_options="default")
+
+        out_path = pathlib.Path(output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(merged, str(out_path))
+        return str(out_path)
+
     # -- Internal helpers ----------------------------------------------------
 
     @staticmethod

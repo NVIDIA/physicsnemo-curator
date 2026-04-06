@@ -30,6 +30,7 @@ import pyarrow.parquet as pq  # noqa: E402
 import pyvista as pv  # noqa: E402
 import torch  # noqa: E402
 
+from physicsnemo_curator.mesh.filters.mean import MeanFilter  # noqa: E402
 from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter  # noqa: E402
 from physicsnemo_curator.mesh.filters.precision import PrecisionFilter  # noqa: E402
 from physicsnemo_curator.mesh.filters.stats import StatsFilter, merge_welford_stats  # noqa: E402
@@ -474,6 +475,151 @@ class TestMergeWelfordStats:
 
 
 # ---------------------------------------------------------------------------
+# MeanFilter.merge tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestMeanFilterMerge:
+    """Tests for MeanFilter.merge() classmethod."""
+
+    def test_merge_two_parquets(self, tmp_path):
+        """MeanFilter.merge should concatenate rows from two files."""
+        _create_vtk_file(tmp_path / "vtk1", "a.vtu")
+        _create_vtk_file(tmp_path / "vtk2", "b.vtu")
+
+        # Simulate two workers writing separate files.
+        source1 = VTKSource.from_path(str(tmp_path / "vtk1"))
+        filt1 = MeanFilter(output=str(tmp_path / "means_0.parquet"))
+        list(filt1(source1[0]))
+        filt1.flush()
+
+        source2 = VTKSource.from_path(str(tmp_path / "vtk2"))
+        filt2 = MeanFilter(output=str(tmp_path / "means_1.parquet"))
+        list(filt2(source2[0]))
+        filt2.flush()
+
+        merged_path = MeanFilter.merge(
+            [str(tmp_path / "means_0.parquet"), str(tmp_path / "means_1.parquet")],
+            output=str(tmp_path / "merged_means.parquet"),
+        )
+
+        table = pq.read_table(merged_path)
+        # Two meshes -> two rows
+        assert table.num_rows == 2
+        assert "n_points" in table.column_names
+        assert "point_data/temperature" in table.column_names
+
+    def test_merge_preserves_values(self, tmp_path):
+        """Merged values should match the originals."""
+        _create_vtk_file(tmp_path / "vtk1", "a.vtu")
+
+        source = VTKSource.from_path(str(tmp_path / "vtk1"))
+        filt = MeanFilter(output=str(tmp_path / "means.parquet"))
+        list(filt(source[0]))
+        filt.flush()
+
+        merged_path = MeanFilter.merge(
+            [str(tmp_path / "means.parquet")],
+            output=str(tmp_path / "merged.parquet"),
+        )
+
+        original = pq.read_table(str(tmp_path / "means.parquet"))
+        merged = pq.read_table(merged_path)
+        assert original.equals(merged)
+
+    def test_merge_empty_raises(self):
+        """MeanFilter.merge should raise ValueError on empty list."""
+        with pytest.raises(ValueError, match="non-empty"):
+            MeanFilter.merge([], output="out.parquet")
+
+    def test_merge_handles_heterogeneous_columns(self, tmp_path):
+        """Merge should handle files with different column sets."""
+        # File 1: has temperature and pressure columns
+        _create_vtk_file(tmp_path / "vtk1", "a.vtu")
+        source1 = VTKSource.from_path(str(tmp_path / "vtk1"))
+        filt1 = MeanFilter(output=str(tmp_path / "means_0.parquet"))
+        list(filt1(source1[0]))
+        filt1.flush()
+
+        # File 2: same structure (both have temperature, pressure, velocity)
+        _create_vtk_file(tmp_path / "vtk2", "b.vtu")
+        source2 = VTKSource.from_path(str(tmp_path / "vtk2"))
+        filt2 = MeanFilter(output=str(tmp_path / "means_1.parquet"))
+        list(filt2(source2[0]))
+        filt2.flush()
+
+        merged_path = MeanFilter.merge(
+            [str(tmp_path / "means_0.parquet"), str(tmp_path / "means_1.parquet")],
+            output=str(tmp_path / "merged.parquet"),
+        )
+
+        table = pq.read_table(merged_path)
+        assert table.num_rows == 2
+
+
+# ---------------------------------------------------------------------------
+# StatsFilter.merge tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestStatsFilterMerge:
+    """Tests for StatsFilter.merge() classmethod."""
+
+    def test_merge_two_parquets(self, tmp_path):
+        """StatsFilter.merge should produce correct merged statistics."""
+        _create_vtk_file(tmp_path / "vtk1", "a.vtu")
+        _create_vtk_file(tmp_path / "vtk2", "b.vtu")
+
+        source1 = VTKSource.from_path(str(tmp_path / "vtk1"))
+        filt1 = StatsFilter(output=str(tmp_path / "stats_0.parquet"))
+        list(filt1(source1[0]))
+        filt1.flush()
+
+        source2 = VTKSource.from_path(str(tmp_path / "vtk2"))
+        filt2 = StatsFilter(output=str(tmp_path / "stats_1.parquet"))
+        list(filt2(source2[0]))
+        filt2.flush()
+
+        merged_path = StatsFilter.merge(
+            [str(tmp_path / "stats_0.parquet"), str(tmp_path / "stats_1.parquet")],
+            output=str(tmp_path / "merged_stats.parquet"),
+        )
+
+        table = pq.read_table(merged_path)
+
+        # Find temperature row
+        for i in range(table.num_rows):
+            if table["field_key"][i].as_py() == "point_data/temperature":
+                welford_n = table["welford_n"][i].as_py()
+                mean_val = table["mean"][i].as_py()
+                assert welford_n == 8  # 4 + 4
+                assert abs(mean_val - 250.0) < 1e-5
+                break
+        else:
+            pytest.fail("temperature field not found in merged stats")
+
+    def test_merge_writes_file(self, tmp_path):
+        """StatsFilter.merge should write the output file."""
+        _create_vtk_file(tmp_path / "vtk", "a.vtu")
+        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        filt = StatsFilter(output=str(tmp_path / "stats.parquet"))
+        list(filt(source[0]))
+        filt.flush()
+
+        out = tmp_path / "merged.parquet"
+        result = StatsFilter.merge([str(tmp_path / "stats.parquet")], output=str(out))
+        assert out.exists()
+        assert result == str(out)
+
+    def test_merge_empty_raises(self):
+        """StatsFilter.merge should raise ValueError on empty list."""
+        with pytest.raises(ValueError, match="non-empty"):
+            StatsFilter.merge([], output="out.parquet")
+
+
+# ---------------------------------------------------------------------------
 # PrecisionFilter tests
 # ---------------------------------------------------------------------------
 
@@ -546,7 +692,7 @@ class TestPrecisionFilter:
         converted_temp = meshes_out[0].point_data["temperature"]
 
         # Values should be close (within float32 precision)
-        assert torch.allclose(converted_temp.double(), original_temp, atol=1e-6)
+        assert torch.allclose(converted_temp.double(), original_temp, atol=1e-6)  # ty: ignore[invalid-argument-type]
 
     def test_float16_conversion(self, tmp_path):
         """PrecisionFilter should support float16 conversion."""

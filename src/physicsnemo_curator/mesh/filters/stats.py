@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import math
 import pathlib
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, TypedDict
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -40,6 +40,35 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
     from physicsnemo.mesh import Mesh
+
+
+class _StatsRow(TypedDict, total=False):
+    """Typed dictionary for a single statistics row.
+
+    All numeric fields are ``float`` or ``int`` to avoid ``object``
+    arithmetic errors in the type checker.
+    """
+
+    field_key: str
+    component: int
+    n_spatial: int
+    n_components: int
+    mean: float
+    std: float
+    var: float
+    min: float
+    max: float
+    median: float
+    abs_mean: float
+    abs_max: float
+    skewness: float
+    kurtosis: float
+    welford_n: int
+    welford_mean: float
+    welford_m2: float
+    welford_m3: float
+    welford_m4: float
+    welford_abs_sum: float
 
 
 # Schema for per-file statistics Parquet output.
@@ -92,10 +121,13 @@ def _extract_leaf_tensors(td: object, prefix: str = "") -> list[tuple[str, torch
     """
     from tensordict import TensorDictBase
 
+    if not isinstance(td, TensorDictBase):
+        return []
+
     results: list[tuple[str, torch.Tensor]] = []
 
-    for key in td.keys():  # type: ignore[union-attr]  # noqa: SIM118
-        child = td[key]  # type: ignore[index]
+    for key in td.keys():  # noqa: SIM118
+        child = td[key]
         full_key = f"{prefix}{key}" if prefix else key
 
         if isinstance(child, TensorDictBase):
@@ -106,7 +138,7 @@ def _extract_leaf_tensors(td: object, prefix: str = "") -> list[tuple[str, torch
     return results
 
 
-def _compute_component_stats(field_key: str, tensor: torch.Tensor) -> list[dict[str, object]]:
+def _compute_component_stats(field_key: str, tensor: torch.Tensor) -> list[_StatsRow]:
     """Compute statistics for each component of a tensor.
 
     Parameters
@@ -119,7 +151,7 @@ def _compute_component_stats(field_key: str, tensor: torch.Tensor) -> list[dict[
 
     Returns
     -------
-    list[dict[str, object]]
+    list[_StatsRow]
         One stats dict per component (or one dict for scalars).
     """
     if tensor.numel() == 0:
@@ -138,7 +170,7 @@ def _compute_component_stats(field_key: str, tensor: torch.Tensor) -> list[dict[
         is_scalar = False
 
     n_spatial = tensor.shape[0]
-    rows: list[dict[str, object]] = []
+    rows: list[_StatsRow] = []
 
     for comp_idx in range(n_components):
         comp_data = tensor[:, comp_idx]
@@ -146,22 +178,22 @@ def _compute_component_stats(field_key: str, tensor: torch.Tensor) -> list[dict[
 
         # Basic statistics
         n = comp_data_flat.numel()
-        mean_val = comp_data_flat.mean().item()
-        var_val = comp_data_flat.var(unbiased=False).item()  # population variance
+        mean_val: float = comp_data_flat.mean().item()
+        var_val: float = comp_data_flat.var(unbiased=False).item()  # population variance
         std_val = math.sqrt(var_val)
-        min_val = comp_data_flat.min().item()
-        max_val = comp_data_flat.max().item()
-        median_val = comp_data_flat.median().item()
+        min_val: float = comp_data_flat.min().item()
+        max_val: float = comp_data_flat.max().item()
+        median_val: float = comp_data_flat.median().item()
         abs_data = comp_data_flat.abs()
-        abs_mean_val = abs_data.mean().item()
-        abs_max_val = abs_data.max().item()
+        abs_mean_val: float = abs_data.mean().item()
+        abs_max_val: float = abs_data.max().item()
 
         # Higher-order moments (skewness and kurtosis)
         # Using the formulas for population skewness and kurtosis
         centered = comp_data_flat - mean_val
-        m2 = (centered**2).sum().item()  # sum of squared deviations
-        m3 = (centered**3).sum().item()  # sum of cubed deviations
-        m4 = (centered**4).sum().item()  # sum of 4th power deviations
+        m2: float = (centered**2).sum().item()  # sum of squared deviations
+        m3: float = (centered**3).sum().item()  # sum of cubed deviations
+        m4: float = (centered**4).sum().item()  # sum of 4th power deviations
 
         # Skewness = E[(X-μ)³] / σ³
         skewness_val = (m3 / n) / (std_val**3) if std_val > 0 else 0.0
@@ -170,29 +202,28 @@ def _compute_component_stats(field_key: str, tensor: torch.Tensor) -> list[dict[
         kurtosis_val = (m4 / n) / (std_val**4) - 3.0 if std_val > 0 else 0.0
 
         rows.append(
-            {
-                "field_key": field_key,
-                "component": -1 if is_scalar else comp_idx,
-                "n_spatial": n_spatial,
-                "n_components": 1 if is_scalar else n_components,
-                "mean": mean_val,
-                "std": std_val,
-                "var": var_val,
-                "min": min_val,
-                "max": max_val,
-                "median": median_val,
-                "abs_mean": abs_mean_val,
-                "abs_max": abs_max_val,
-                "skewness": skewness_val,
-                "kurtosis": kurtosis_val,
-                # Welford state for merging
-                "welford_n": n,
-                "welford_mean": mean_val,
-                "welford_m2": m2,
-                "welford_m3": m3,
-                "welford_m4": m4,
-                "welford_abs_sum": abs_data.sum().item(),
-            }
+            _StatsRow(
+                field_key=field_key,
+                component=-1 if is_scalar else comp_idx,
+                n_spatial=n_spatial,
+                n_components=1 if is_scalar else n_components,
+                mean=mean_val,
+                std=std_val,
+                var=var_val,
+                min=min_val,
+                max=max_val,
+                median=median_val,
+                abs_mean=abs_mean_val,
+                abs_max=abs_max_val,
+                skewness=skewness_val,
+                kurtosis=kurtosis_val,
+                welford_n=n,
+                welford_mean=mean_val,
+                welford_m2=m2,
+                welford_m3=m3,
+                welford_m4=m4,
+                welford_abs_sum=abs_data.sum().item(),
+            )
         )
 
     return rows
@@ -256,7 +287,7 @@ class StatsFilter(Filter["Mesh"]):
     def __init__(self, output: str, per_component: bool = True) -> None:
         self._output_path = pathlib.Path(output)
         self._per_component = per_component
-        self._rows: list[dict[str, object]] = []
+        self._rows: list[_StatsRow] = []
 
     def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:
         """Compute statistics for each mesh and yield it unchanged.
@@ -293,14 +324,62 @@ class StatsFilter(Filter["Mesh"]):
 
         for row in self._rows:
             for col_name in columns:
-                columns[col_name].append(row.get(col_name))
+                columns[col_name].append(row.get(col_name))  # type: ignore[arg-type]
 
         table = pa.table(columns, schema=_STATS_SCHEMA)
         self._output_path.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(table, str(self._output_path))
         return str(self._output_path)
 
-    def _compute_mesh_stats(self, mesh: Mesh) -> list[dict[str, object]]:
+    @staticmethod
+    def merge(parquet_paths: list[str], output: str) -> str:
+        """Merge statistics Parquet files produced by parallel workers.
+
+        Uses the parallel Welford algorithm (Chan et al., 1979) to combine
+        per-worker statistics into exact aggregate statistics without
+        re-reading the raw tensor data.  This is a convenience wrapper
+        around :func:`merge_welford_stats` that also writes the result.
+
+        Parameters
+        ----------
+        parquet_paths : list[str]
+            Paths to per-worker statistics Parquet files.
+        output : str
+            Path for the merged output Parquet file.
+
+        Returns
+        -------
+        str
+            The path of the written merged Parquet file.
+
+        Raises
+        ------
+        ValueError
+            If *parquet_paths* is empty.
+
+        Notes
+        -----
+        Median and absolute-max cannot be recovered from Welford state
+        alone, so the merged table will contain ``NaN`` for those columns.
+
+        Examples
+        --------
+        >>> paths = ["worker_0/stats.parquet", "worker_1/stats.parquet"]
+        >>> StatsFilter.merge(paths, output="merged_stats.parquet")  # doctest: +SKIP
+        'merged_stats.parquet'
+        """
+        if not parquet_paths:
+            msg = "parquet_paths must be a non-empty list."
+            raise ValueError(msg)
+
+        merged = merge_welford_stats(parquet_paths)
+
+        out_path = pathlib.Path(output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(merged, str(out_path))
+        return str(out_path)
+
+    def _compute_mesh_stats(self, mesh: Mesh) -> list[_StatsRow]:
         """Compute statistics for all fields in a mesh.
 
         Parameters
@@ -310,10 +389,10 @@ class StatsFilter(Filter["Mesh"]):
 
         Returns
         -------
-        list[dict[str, object]]
+        list[_StatsRow]
             List of stats rows (one per field/component).
         """
-        rows: list[dict[str, object]] = []
+        rows: list[_StatsRow] = []
 
         # Process point_data fields
         if mesh.point_data is not None:
@@ -354,19 +433,19 @@ def merge_welford_stats(parquet_paths: list[str]) -> pa.Table:
     >>> pq.write_table(merged, "aggregate_stats.parquet")
     """
     # Group rows by (field_key, component)
-    groups: dict[tuple[str, int], list[dict[str, object]]] = {}
+    groups: dict[tuple[str, int], list[_StatsRow]] = {}
 
     for path in parquet_paths:
         table = pq.read_table(path)
         for i in range(table.num_rows):
-            row = {col: table[col][i].as_py() for col in table.column_names}
+            row = _StatsRow(**{col: table[col][i].as_py() for col in table.column_names})
             key = (row["field_key"], row["component"])
             if key not in groups:
                 groups[key] = []
             groups[key].append(row)
 
     # Merge each group using parallel Welford algorithm
-    merged_rows: list[dict[str, object]] = []
+    merged_rows: list[_StatsRow] = []
 
     for (field_key, component), rows in groups.items():
         merged = _merge_welford_group(rows)
@@ -379,46 +458,46 @@ def merge_welford_stats(parquet_paths: list[str]) -> pa.Table:
 
     for row in merged_rows:
         for col_name in columns:
-            columns[col_name].append(row.get(col_name))
+            columns[col_name].append(row.get(col_name))  # type: ignore[arg-type]
 
     return pa.table(columns, schema=_STATS_SCHEMA)
 
 
-def _merge_welford_group(rows: list[dict[str, object]]) -> dict[str, object]:
+def _merge_welford_group(rows: list[_StatsRow]) -> _StatsRow:
     """Merge Welford statistics for a single field/component group.
 
     Parameters
     ----------
-    rows : list[dict[str, object]]
+    rows : list[_StatsRow]
         Per-file statistics rows for the same field/component.
 
     Returns
     -------
-    dict[str, object]
+    _StatsRow
         Merged statistics.
     """
     if len(rows) == 1:
-        return dict(rows[0])
+        return _StatsRow(**rows[0])
 
     # Initialize with first row
-    n_total = rows[0]["welford_n"]
-    mean_total = rows[0]["welford_mean"]
-    m2_total = rows[0]["welford_m2"]
-    m3_total = rows[0]["welford_m3"]
-    m4_total = rows[0]["welford_m4"]
-    abs_sum_total = rows[0]["welford_abs_sum"]
-    min_total = rows[0]["min"]
-    max_total = rows[0]["max"]
-    n_spatial_total = rows[0]["n_spatial"]
-    n_components = rows[0]["n_components"]
+    n_total: float = float(rows[0]["welford_n"])
+    mean_total: float = float(rows[0]["welford_mean"])
+    m2_total: float = float(rows[0]["welford_m2"])
+    m3_total: float = float(rows[0]["welford_m3"])
+    m4_total: float = float(rows[0]["welford_m4"])
+    abs_sum_total: float = float(rows[0]["welford_abs_sum"])
+    min_total: float = float(rows[0]["min"])
+    max_total: float = float(rows[0]["max"])
+    n_spatial_total: int = int(rows[0]["n_spatial"])
+    n_components: int = int(rows[0]["n_components"])
 
     # Merge remaining rows using Chan's parallel algorithm
     for row in rows[1:]:
-        n_b = row["welford_n"]
-        mean_b = row["welford_mean"]
-        m2_b = row["welford_m2"]
-        m3_b = row["welford_m3"]
-        m4_b = row["welford_m4"]
+        n_b: float = float(row["welford_n"])
+        mean_b: float = float(row["welford_mean"])
+        m2_b: float = float(row["welford_m2"])
+        m3_b: float = float(row["welford_m3"])
+        m4_b: float = float(row["welford_m4"])
 
         n_ab = n_total + n_b
         delta = mean_b - mean_total
@@ -454,10 +533,10 @@ def _merge_welford_group(rows: list[dict[str, object]]) -> dict[str, object]:
         m2_total = m2_ab
         m3_total = m3_ab
         m4_total = m4_ab
-        abs_sum_total += row["welford_abs_sum"]
-        min_total = min(min_total, row["min"])
-        max_total = max(max_total, row["max"])
-        n_spatial_total += row["n_spatial"]
+        abs_sum_total += float(row["welford_abs_sum"])
+        min_total = min(min_total, float(row["min"]))
+        max_total = max(max_total, float(row["max"]))
+        n_spatial_total += int(row["n_spatial"])
 
     # Compute final statistics from Welford state
     var_total = m2_total / n_total if n_total > 0 else 0.0
@@ -472,23 +551,23 @@ def _merge_welford_group(rows: list[dict[str, object]]) -> dict[str, object]:
 
     abs_mean_total = abs_sum_total / n_total if n_total > 0 else 0.0
 
-    return {
-        "n_spatial": n_spatial_total,
-        "n_components": n_components,
-        "mean": mean_total,
-        "std": std_total,
-        "var": var_total,
-        "min": min_total,
-        "max": max_total,
-        "median": float("nan"),  # Cannot compute median from Welford state
-        "abs_mean": abs_mean_total,
-        "abs_max": float("nan"),  # Cannot compute abs_max from Welford state
-        "skewness": skewness_total,
-        "kurtosis": kurtosis_total,
-        "welford_n": n_total,
-        "welford_mean": mean_total,
-        "welford_m2": m2_total,
-        "welford_m3": m3_total,
-        "welford_m4": m4_total,
-        "welford_abs_sum": abs_sum_total,
-    }
+    return _StatsRow(
+        n_spatial=n_spatial_total,
+        n_components=n_components,
+        mean=mean_total,
+        std=std_total,
+        var=var_total,
+        min=min_total,
+        max=max_total,
+        median=float("nan"),  # Cannot compute median from Welford state
+        abs_mean=abs_mean_total,
+        abs_max=float("nan"),  # Cannot compute abs_max from Welford state
+        skewness=skewness_total,
+        kurtosis=kurtosis_total,
+        welford_n=int(n_total),
+        welford_mean=mean_total,
+        welford_m2=m2_total,
+        welford_m3=m3_total,
+        welford_m4=m4_total,
+        welford_abs_sum=abs_sum_total,
+    )

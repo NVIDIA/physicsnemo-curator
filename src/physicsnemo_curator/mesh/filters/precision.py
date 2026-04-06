@@ -71,10 +71,13 @@ def _convert_tensordict_precision(
     """
     from tensordict import TensorDictBase
 
+    if not isinstance(td, TensorDictBase):
+        return []
+
     converted: list[str] = []
 
-    for key in list(td.keys()):  # type: ignore[union-attr]
-        child = td[key]  # type: ignore[index]
+    for key in list(td.keys()):
+        child = td[key]
         full_key = f"{prefix}{key}" if prefix else key
 
         if isinstance(child, TensorDictBase):
@@ -82,7 +85,7 @@ def _convert_tensordict_precision(
             converted.extend(_convert_tensordict_precision(child, target_dtype, source_dtypes, prefix=f"{full_key}/"))
         elif isinstance(child, torch.Tensor) and child.dtype in source_dtypes:
             # Convert tensor in place
-            td[key] = child.to(target_dtype)  # type: ignore[index]
+            td[key] = child.to(target_dtype)
             converted.append(full_key)
 
     return converted

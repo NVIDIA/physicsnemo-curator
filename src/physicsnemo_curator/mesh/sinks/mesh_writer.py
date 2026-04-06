@@ -92,7 +92,7 @@ class MeshSink(Sink["Mesh"]):
 
         for seq, mesh in enumerate(items):
             subdir = self._output_dir / f"mesh_{index:04d}_{seq}"
-            mesh.save(str(subdir))
+            mesh.save(str(subdir))  # ty: ignore[unresolved-attribute]  # @tensorclass adds .save() dynamically
             paths.append(str(subdir))
 
         return paths

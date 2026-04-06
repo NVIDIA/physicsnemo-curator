@@ -173,8 +173,10 @@ class MomentsFilter(Filter["xr.DataArray"]):
         """
         if var_name not in self._accumulators:
             # Determine the shape of the remaining dimensions
-            remaining_dims = [d for d in da.dims if d not in self._dims]
-            remaining_coords = {d: da.coords[d] for d in remaining_dims if d in da.coords}
+            remaining_dims: list[str] = [str(d) for d in da.dims if d not in self._dims]
+            remaining_coords: dict[str, object] = {
+                str(d): da.coords[d] for d in da.dims if d not in self._dims and d in da.coords
+            }
             self._accumulators[var_name] = _MomentAccumulator(
                 remaining_dims=remaining_dims,
                 remaining_coords=remaining_coords,
@@ -193,6 +195,72 @@ class MomentsFilter(Filter["xr.DataArray"]):
     def dims(self) -> tuple[str, ...]:
         """Return the reduction dimensions."""
         return self._dims
+
+    @staticmethod
+    def merge(zarr_paths: list[str], output: str) -> str:
+        """Merge moment-statistics Zarr stores produced by parallel workers.
+
+        Each worker writes a Zarr store with one group per variable,
+        containing ``mean``, ``variance``, ``skewness``, ``min``, ``max``
+        arrays and a ``count`` attribute.  This method recovers the Welford
+        accumulator state from each store and merges them using Chan's
+        parallel algorithm.
+
+        Parameters
+        ----------
+        zarr_paths : list[str]
+            Paths to per-worker Zarr stores.
+        output : str
+            Path for the merged output Zarr store.
+
+        Returns
+        -------
+        str
+            The path of the written merged Zarr store.
+
+        Raises
+        ------
+        ValueError
+            If *zarr_paths* is empty.
+
+        Examples
+        --------
+        >>> paths = ["worker_0/stats.zarr", "worker_1/stats.zarr"]
+        >>> MomentsFilter.merge(paths, output="merged.zarr")  # doctest: +SKIP
+        'merged.zarr'
+        """
+        if not zarr_paths:
+            msg = "zarr_paths must be a non-empty list."
+            raise ValueError(msg)
+
+        # Discover all variable names across all stores.
+        var_groups: dict[str, list[xr.Dataset]] = {}
+        for zpath in zarr_paths:
+            store_path = pathlib.Path(zpath)
+            if not store_path.exists():
+                msg = f"Zarr store not found: {zpath}"
+                raise FileNotFoundError(msg)
+
+            for child in sorted(store_path.iterdir()):
+                if child.is_dir():
+                    var_name = child.name
+                    ds = xr.open_zarr(str(child))
+                    var_groups.setdefault(var_name, []).append(ds)
+
+        if not var_groups:
+            msg = "No variable groups found in any Zarr store."
+            raise ValueError(msg)
+
+        # Merge each variable group using Chan's parallel Welford algorithm.
+        out_path = pathlib.Path(output)
+        out_path.mkdir(parents=True, exist_ok=True)
+
+        for var_name, datasets in var_groups.items():
+            merged_ds = _merge_moment_datasets(datasets)
+            group_path = out_path / var_name
+            merged_ds.to_zarr(str(group_path), mode="w", zarr_format=3)
+
+        return str(out_path)
 
 
 class _MomentAccumulator:
@@ -283,8 +351,8 @@ class _MomentAccumulator:
         self._mean += delta_n
 
         # Min/max
-        np.minimum(self._min, x, out=self._min)
-        np.maximum(self._max, x, out=self._max)
+        self._min = np.minimum(self._min, x)  # ty: ignore[no-matching-overload]  # numpy ufunc stub limitation
+        self._max = np.maximum(self._max, x)  # ty: ignore[no-matching-overload]  # numpy ufunc stub limitation
 
     def finalize(self) -> xr.Dataset:
         """Compute final statistics and return as an xarray Dataset.
@@ -327,3 +395,97 @@ class _MomentAccumulator:
             attrs={"count": self._count},
         )
         return ds
+
+
+def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
+    """Merge finalized moment datasets using Chan's parallel Welford algorithm.
+
+    Each dataset must contain ``mean``, ``variance``, ``skewness``,
+    ``min``, ``max`` data variables and a ``count`` attribute.
+
+    The Welford accumulator state (count, mean, M2, M3) is recovered
+    from the finalized statistics and merged pairwise.
+
+    Parameters
+    ----------
+    datasets : list[xr.Dataset]
+        Per-worker finalized moment datasets for a single variable.
+
+    Returns
+    -------
+    xr.Dataset
+        Merged dataset with the same structure.
+    """
+    if len(datasets) == 1:
+        return datasets[0]
+
+    # Recover Welford state from first dataset.
+    ds_a = datasets[0]
+    n_a = int(ds_a.attrs["count"])
+    mean_a = ds_a["mean"].values.astype(np.float64)
+    var_a = ds_a["variance"].values.astype(np.float64)
+    m2_a = var_a * n_a
+    skew_a = ds_a["skewness"].values.astype(np.float64)
+    # Recover m3: skewness = sqrt(n) * m3 / m2^1.5
+    # => m3 = skewness * m2^1.5 / sqrt(n)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        m2_safe = np.where(m2_a > 0, m2_a, np.nan)
+        m3_a = np.where(m2_a > 0, skew_a * np.power(m2_safe, 1.5) / np.sqrt(n_a), 0.0)
+    min_a = ds_a["min"].values.astype(np.float64)
+    max_a = ds_a["max"].values.astype(np.float64)
+
+    # Merge remaining datasets one at a time.
+    for ds_b in datasets[1:]:
+        n_b = int(ds_b.attrs["count"])
+        mean_b = ds_b["mean"].values.astype(np.float64)
+        var_b = ds_b["variance"].values.astype(np.float64)
+        m2_b = var_b * n_b
+        skew_b = ds_b["skewness"].values.astype(np.float64)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            m2_b_safe = np.where(m2_b > 0, m2_b, np.nan)
+            m3_b = np.where(m2_b > 0, skew_b * np.power(m2_b_safe, 1.5) / np.sqrt(n_b), 0.0)
+        min_b = ds_b["min"].values.astype(np.float64)
+        max_b = ds_b["max"].values.astype(np.float64)
+
+        n_ab = n_a + n_b
+        delta = mean_b - mean_a
+        delta2 = delta * delta
+
+        # Chan's parallel formulas.
+        mean_ab = (n_a * mean_a + n_b * mean_b) / n_ab
+        m2_ab = m2_a + m2_b + delta2 * n_a * n_b / n_ab
+        m3_ab = (
+            m3_a
+            + m3_b
+            + delta * delta2 * n_a * n_b * (n_a - n_b) / (n_ab * n_ab)
+            + 3 * delta * (n_a * m2_b - n_b * m2_a) / n_ab
+        )
+
+        n_a = n_ab
+        mean_a = mean_ab
+        m2_a = m2_ab
+        m3_a = m3_ab
+        min_a = np.minimum(min_a, min_b)
+        max_a = np.maximum(max_a, max_b)
+
+    # Finalize merged statistics.
+    variance = m2_a / n_a if n_a > 0 else np.zeros_like(mean_a)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        m2_safe = np.where(m2_a > 0, m2_a, np.nan)
+        skewness = (np.sqrt(n_a) * m3_a) / np.power(m2_safe, 1.5)
+        skewness = np.where(np.isfinite(skewness), skewness, 0.0)
+
+    # Reconstruct the Dataset with the same structure as the inputs.
+    ref = datasets[0]
+    dims: list[str] = [str(d) for d in ref["mean"].dims]
+    coords = dict(ref.coords.items())
+
+    data_vars = {
+        "mean": (dims, mean_a),
+        "variance": (dims, variance),
+        "skewness": (dims, skewness),
+        "min": (dims, min_a),
+        "max": (dims, max_a),
+    }
+
+    return xr.Dataset(data_vars=data_vars, coords=coords, attrs={"count": n_a})

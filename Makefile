@@ -75,7 +75,7 @@ lint-check:
 
 ## Run ty type checker
 typecheck:
-	uv run ty check
+	uv run ty check --exclude 'examples-old/**' --exclude 'benchmarks/**'
 
 # ---------------------------------------------------------------------------
 # Docstring coverage
