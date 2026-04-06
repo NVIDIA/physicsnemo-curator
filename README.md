@@ -13,9 +13,9 @@
 
 **PhysicsNeMo Curator** is an accelerated ETL toolkit for building
 AI-ready datasets across multiple scientific and engineering domains,
-including CAE, weather/climate, molecular dynamics, and more. It provides
-a composable Python API built on a high-performance native extension (PyO3)
-for reading, filtering, and writing simulation data at scale.
+including CAE, weather/climate, molecular dynamics, and more. Curator is
+designed to be a flexible and customizable package that provides core
+pipeline components for users to create their own data processing pipelines.
 
 [**Docs**](https://nvidia.github.io/physicsnemo-curator/)
 | [**Getting Started**](#getting-started)
