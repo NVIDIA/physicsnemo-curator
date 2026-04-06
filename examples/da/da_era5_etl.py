@@ -48,7 +48,7 @@ from datetime import datetime
 from physicsnemo_curator.da.filters.moments import MomentsFilter
 from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.da.sources.era5 import ERA5Source
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
@@ -132,6 +132,17 @@ for i, paths in enumerate(results):
     print(f"  Snapshot {i} ({times[i]}): {paths}")
 
 # %%
+# Gather Statistics
+# ------------------
+#
+# Merge per-index shard files produced by the MomentsFilter into a
+# single Zarr store with global temporal statistics.
+
+merged = gather_pipeline(pipeline)
+for path in merged:
+    print(f"Merged moments: {path}")
+
+# %%
 # Inspect Outputs
 # ----------------
 #
@@ -147,7 +158,7 @@ for i, paths in enumerate(results):
 #     │   │   └── data.zarr
 #     │   └── v10m/                   # V-wind at 10 m
 #     │       └── data.zarr
-#     └── moments.zarr/               # Temporal statistics
+#     └── moments.zarr/               # Temporal statistics (merged)
 #         ├── t2m/
 #         │   ├── mean                # Temporal mean field
 #         │   ├── variance            # Temporal variance
@@ -167,12 +178,3 @@ for i, paths in enumerate(results):
 #    variables not found in the first backend's lexicon are automatically
 #    routed to the next available backend.  Use the
 #    ``variable_routing`` property to inspect the resulting mapping.
-#
-# .. note::
-#
-#    **Parallel stateful filters.** When using parallel backends, the
-#    :class:`~physicsnemo_curator.da.filters.moments.MomentsFilter`
-#    accumulates per-worker state.  Use
-#    :meth:`~physicsnemo_curator.da.filters.moments.MomentsFilter.merge`
-#    to combine per-worker Zarr outputs into global statistics after the
-#    pipeline completes.

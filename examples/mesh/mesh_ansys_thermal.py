@@ -50,7 +50,7 @@ from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.mesh.filters.stats import StatsFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.mesh.sources.ansys_rst import AnsysRSTSource
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
@@ -127,6 +127,16 @@ for idx, paths in enumerate(results):
     print(f"Simulation {idx}: {len(paths)} output(s)")
     for p in paths:
         print(f"  {p}")
+
+# %%
+# Gather Statistics
+# -----------------
+#
+# Merge per-index shard files written by stateful filters into final outputs.
+
+merged = gather_pipeline(pipeline)
+for path in merged:
+    print(f"Merged statistics: {path}")
 
 # %%
 # Summary

@@ -118,8 +118,12 @@ class PrefectBackend(RunBackend):
         # Create the task dynamically
         @task(name="process_pipeline_index", **task_kwargs)
         def process_index(idx: int) -> list[str]:
-            """Process a single pipeline index."""
-            return pipeline[idx]
+            """Process a single pipeline index and flush stateful filters."""
+            from physicsnemo_curator.run.base import _flush_filters
+
+            result = pipeline[idx]
+            _flush_filters(pipeline, idx)
+            return result
 
         # Extract flow options
         flow_name = opts.get("flow_name", "run_pipeline")

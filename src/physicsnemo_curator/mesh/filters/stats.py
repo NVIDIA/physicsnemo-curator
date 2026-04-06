@@ -329,7 +329,9 @@ class StatsFilter(Filter["Mesh"]):
         table = pa.table(columns, schema=_STATS_SCHEMA)
         self._output_path.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(table, str(self._output_path))
-        return str(self._output_path)
+        path = str(self._output_path)
+        self._rows.clear()
+        return path
 
     @staticmethod
     def merge(parquet_paths: list[str], output: str) -> str:

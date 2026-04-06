@@ -142,7 +142,9 @@ class MomentsFilter(Filter["xr.DataArray"]):
             group_path = self._output_path / var_name
             stats.to_zarr(str(group_path), mode="w", zarr_format=3)
 
-        return str(self._output_path)
+        path = str(self._output_path)
+        self._accumulators.clear()
+        return path
 
     def _update(self, da: xr.DataArray) -> None:
         """Update accumulators with data from a single DataArray.

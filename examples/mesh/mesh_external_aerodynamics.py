@@ -49,7 +49,7 @@ from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.mesh.filters.stats import StatsFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Surface (Boundary) Mesh Pipeline
@@ -154,6 +154,19 @@ for i, paths in enumerate(volume_results):
     print(f"  Run {i}: {paths}")
 
 # %%
+# Gather Statistics
+# ------------------
+#
+# Each worker writes per-index shard files for stateful filters.
+# :func:`~physicsnemo_curator.run.gather_pipeline` merges them into
+# single output files and removes the temporary shards.
+
+for pipe in (surface_pipeline, volume_pipeline):
+    merged = gather_pipeline(pipe)
+    for path in merged:
+        print(f"Merged: {path}")
+
+# %%
 # Inspect Outputs
 # ----------------
 #
@@ -163,27 +176,17 @@ for i, paths in enumerate(volume_results):
 #
 #     outputs/aero/
 #     ├── surface_info.jsonl         # Mesh metadata (JSON-lines)
-#     ├── surface_stats.parquet      # Per-field statistics with Welford state
+#     ├── surface_stats.parquet      # Per-field statistics (merged)
 #     ├── surface_meshes/
 #     │   ├── mesh_0000_0/           # Run 0 surface in tensordict format
 #     │   ├── mesh_0001_0/           # Run 1 surface
 #     │   └── mesh_0002_0/           # Run 2 surface
 #     ├── volume_info.jsonl          # Volume mesh metadata
-#     ├── volume_stats.parquet       # Volume field statistics
+#     ├── volume_stats.parquet       # Volume field statistics (merged)
 #     └── volume_meshes/
 #         ├── mesh_0000_0/           # Run 0 volume
 #         ├── mesh_0001_0/           # Run 1 volume
 #         └── mesh_0002_0/           # Run 2 volume
-#
-# .. note::
-#
-#    **Parallel stateful filters.** When using parallel backends, stateful
-#    filters like :class:`~physicsnemo_curator.mesh.filters.stats.StatsFilter`
-#    accumulate per-worker state.  The Parquet and JSON-lines files are written
-#    inside each worker.  For production use, consider running statistics
-#    sequentially or merging the Welford accumulators from each worker's
-#    Parquet output after the pipeline finishes.
-#    See :doc:`/user-guide/parallel` for details.
 #
 # .. note::
 #

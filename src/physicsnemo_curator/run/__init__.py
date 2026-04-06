@@ -53,10 +53,10 @@ You can register custom backends using :func:`register_backend`::
 
 .. warning::
 
-   Stateful filters (e.g. those with ``flush()`` methods) accumulate
-   per-worker state when using parallel backends. Their side-effects are
-   **not** merged back into the parent process. Call ``filter.flush()``
-   only when running sequentially, or design a post-hoc merge strategy.
+   Stateful filters (e.g. those with ``flush()`` methods) automatically
+   write per-index shard files when using parallel backends.  Call
+   :func:`gather_pipeline` after :func:`run_pipeline` to merge all
+   shards into a single output file.
 """
 
 from __future__ import annotations
@@ -318,6 +318,59 @@ def run_pipeline(
     return runner.run(pipeline, config)  # ty: ignore[invalid-argument-type]  # ProfiledPipeline duck-types Pipeline
 
 
+def gather_pipeline(pipeline: PipelineLike) -> list[str]:
+    """Merge per-index shard files produced by stateful filters.
+
+    When :func:`run_pipeline` runs with a parallel backend, each worker
+    flushes stateful filters to shard files named
+    ``{stem}_shard_{index:06d}{suffix}``.  This function discovers those
+    shards, calls the filter's :meth:`merge` method to combine them into
+    a single output file, and removes the shard files.
+
+    Call this **after** :func:`run_pipeline` completes.
+
+    Parameters
+    ----------
+    pipeline : Pipeline | ProfiledPipeline
+        The same pipeline that was passed to :func:`run_pipeline`.
+
+    Returns
+    -------
+    list[str]
+        Paths to the merged output files (one per stateful filter).
+
+    Examples
+    --------
+    >>> results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
+    >>> merged = gather_pipeline(pipeline)
+    >>> print(merged)
+    ['outputs/mean_stats.parquet']
+    """
+    import pathlib
+
+    merged_paths: list[str] = []
+
+    for f in pipeline.filters:
+        if not (hasattr(f, "flush") and hasattr(f, "_output_path") and hasattr(f, "merge")):
+            continue
+
+        output_path = pathlib.Path(str(f._output_path))  # noqa: SLF001
+        shard_pattern = f"{output_path.stem}_shard_*{output_path.suffix}"
+        shard_files = sorted(str(p) for p in output_path.parent.glob(shard_pattern))
+
+        if not shard_files:
+            continue
+
+        merged = f.merge(shard_files, str(output_path))  # ty: ignore[call-non-callable]
+        merged_paths.append(merged)
+
+        # Clean up shard files
+        for shard in shard_files:
+            pathlib.Path(shard).unlink(missing_ok=True)
+
+    return merged_paths
+
+
 __all__ = [
     "DaskBackend",
     "LokyBackend",
@@ -327,6 +380,7 @@ __all__ = [
     "RunConfig",
     "SequentialBackend",
     "ThreadPoolBackend",
+    "gather_pipeline",
     "get_backend",
     "list_backends",
     "register_backend",

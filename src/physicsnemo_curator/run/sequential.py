@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from physicsnemo_curator.run.base import RunBackend, RunConfig, make_progress_bar
+from physicsnemo_curator.run.base import RunBackend, RunConfig, WorkerProgressDisplay, _flush_filters
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -62,16 +62,21 @@ class SequentialBackend(RunBackend):
             Sink outputs, one list per index.
         """
         indices = config.indices if config.indices is not None else list(range(len(pipeline)))
-        pbar = make_progress_bar(len(indices), enabled=config.progress)
+
+        display = WorkerProgressDisplay(
+            total=len(indices),
+            n_workers=1,
+            enabled=config.progress,
+        )
 
         results: list[list[str]] = []
         try:
             for idx in indices:
+                display.worker_start(0, idx)
                 results.append(pipeline[idx])
-                if pbar is not None:
-                    pbar.update(1)
+                _flush_filters(pipeline, idx)
+                display.worker_done(0)
         finally:
-            if pbar is not None:
-                pbar.close()
+            display.close()
 
         return results

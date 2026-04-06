@@ -22,10 +22,10 @@ Suitable for CPU-bound workloads that benefit from true parallelism.
 
 from __future__ import annotations
 
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from physicsnemo_curator.run.base import RunBackend, RunConfig, make_progress_bar, process_single_index_packed
+from physicsnemo_curator.run.base import RunBackend, RunConfig, WorkerProgressDisplay, process_single_index_packed
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -81,7 +81,12 @@ class ProcessPoolBackend(RunBackend):
         """
         indices = config.indices if config.indices is not None else list(range(len(pipeline)))
         n_jobs = config.resolved_n_jobs
-        pbar = make_progress_bar(len(indices), enabled=config.progress)
+
+        display = WorkerProgressDisplay(
+            total=len(indices),
+            n_workers=n_jobs,
+            enabled=config.progress,
+        )
 
         # Extract ProcessPoolExecutor-specific options
         executor_kwargs = {
@@ -92,16 +97,29 @@ class ProcessPoolBackend(RunBackend):
         if "max_workers" not in executor_kwargs:
             executor_kwargs["max_workers"] = n_jobs
 
-        results: list[list[str]] = []
+        result_map: dict[int, list[str]] = {}
         try:
             with ProcessPoolExecutor(**executor_kwargs) as executor:
-                # Use map with packed arguments for better pickling
-                for result in executor.map(process_single_index_packed, ((pipeline, i) for i in indices)):
-                    results.append(result)
-                    if pbar is not None:
-                        pbar.update(1)
-        finally:
-            if pbar is not None:
-                pbar.close()
+                # Submit all futures.  Assign display slots round-robin
+                # so the first n_jobs items each get a unique slot.
+                future_to_idx: dict[Future[list[str]], int] = {}
+                future_to_slot: dict[Future[list[str]], int] = {}
 
-        return results
+                for pos, idx in enumerate(indices):
+                    fut: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, idx))
+                    future_to_idx[fut] = idx
+                    slot = pos % n_jobs
+                    future_to_slot[fut] = slot
+                    # Show the initial batch on the display
+                    if pos < n_jobs:
+                        display.worker_start(slot, idx)
+
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    slot = future_to_slot[future]
+                    result_map[idx] = future.result()
+                    display.worker_done(slot)
+        finally:
+            display.close()
+
+        return [result_map[idx] for idx in indices]

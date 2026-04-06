@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from physicsnemo_curator.run.base import RunBackend, RunConfig
+from physicsnemo_curator.run.base import RunBackend, RunConfig, process_single_index
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -97,7 +97,7 @@ class LokyBackend(RunBackend):
         n_jobs = config.resolved_n_jobs
 
         # Extract joblib-specific options
-        parallel_kwargs = {k: v for k, v in config.backend_options.items()}
+        parallel_kwargs = dict(config.backend_options)
         if "verbose" not in parallel_kwargs:
             parallel_kwargs["verbose"] = 10 if config.progress else 0
 
@@ -105,6 +105,6 @@ class LokyBackend(RunBackend):
             n_jobs=n_jobs,
             backend="loky",
             **parallel_kwargs,
-        )(delayed(pipeline.__getitem__)(i) for i in indices)
+        )(delayed(process_single_index)(pipeline, i) for i in indices)
 
         return results

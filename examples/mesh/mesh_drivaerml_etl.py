@@ -40,7 +40,7 @@ We process the first 3 runs to keep the example fast.
 from physicsnemo_curator.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
@@ -105,22 +105,26 @@ for i, paths in enumerate(results):
     print(f"  Run {i}: {paths}")
 
 # %%
+# Gather Statistics
+# -----------------
+#
+# When running in parallel, each worker writes per-index shard files for
+# stateful filters.  :func:`~physicsnemo_curator.run.gather_pipeline`
+# discovers those shards, merges them into a single output file, and
+# cleans up the temporary shard files.
+
+merged = gather_pipeline(pipeline)
+for path in merged:
+    print(f"Merged statistics: {path}")
+
+# %%
 # The ``outputs/`` directory now contains:
 #
 # .. code-block:: text
 #
 #     outputs/
-#     ├── mean_stats.parquet      # Per-field spatial means
+#     ├── mean_stats.parquet      # Per-field spatial means (merged)
 #     └── meshes/
 #         ├── mesh_0000_0/        # Run 0 in tensordict format
 #         ├── mesh_0001_0/        # Run 1
 #         └── mesh_0002_0/        # Run 2
-#
-# .. note::
-#
-#    When using parallel backends, stateful filters like
-#    :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter`
-#    accumulate per-worker state.  The Parquet file is written inside
-#    each worker — for production use, consider running the filter
-#    sequentially or implementing a post-hoc merge strategy.
-#    See :doc:`/user-guide/parallel` for details.

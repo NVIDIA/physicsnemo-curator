@@ -22,10 +22,11 @@ Suitable for I/O-bound workloads where the GIL is not a bottleneck.
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from physicsnemo_curator.run.base import RunBackend, RunConfig, make_progress_bar, process_single_index
+from physicsnemo_curator.run.base import RunBackend, RunConfig, WorkerProgressDisplay, process_single_index
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -71,7 +72,6 @@ class ThreadPoolBackend(RunBackend):
         """
         indices = config.indices if config.indices is not None else list(range(len(pipeline)))
         n_jobs = config.resolved_n_jobs
-        pbar = make_progress_bar(len(indices), enabled=config.progress)
 
         # Extract ThreadPoolExecutor-specific options
         executor_kwargs = {
@@ -82,17 +82,44 @@ class ThreadPoolBackend(RunBackend):
         if "max_workers" not in executor_kwargs:
             executor_kwargs["max_workers"] = n_jobs
 
-        results: list[list[str]] = []
+        display = WorkerProgressDisplay(
+            total=len(indices),
+            n_workers=n_jobs,
+            enabled=config.progress,
+        )
+
+        # Map worker threads to display slots
+        _slot_lock = threading.Lock()
+        _thread_slots: dict[int, int] = {}
+        _next_slot = [0]
+
+        def _get_slot() -> int:
+            tid = threading.get_ident()
+            with _slot_lock:
+                if tid not in _thread_slots:
+                    _thread_slots[tid] = _next_slot[0]
+                    _next_slot[0] += 1
+                return _thread_slots[tid]
+
+        def _process_tracked(idx: int) -> list[str]:
+            slot = _get_slot()
+            display.worker_start(slot, idx)
+            result = process_single_index(pipeline, idx)
+            display.worker_done(slot)
+            return result
+
+        # Use as_completed so the main bar updates as soon as each
+        # future finishes rather than waiting for ordered completion.
+        result_map: dict[int, list[str]] = {}
         try:
             with ThreadPoolExecutor(**executor_kwargs) as executor:
-                futures = [executor.submit(process_single_index, pipeline, idx) for idx in indices]
-                for future in futures:
-                    result = future.result()
-                    results.append(result)
-                    if pbar is not None:
-                        pbar.update(1)
-        finally:
-            if pbar is not None:
-                pbar.close()
+                future_to_idx = {executor.submit(_process_tracked, idx): idx for idx in indices}
 
-        return results
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    result_map[idx] = future.result()
+        finally:
+            display.close()
+
+        # Return results in original index order
+        return [result_map[idx] for idx in indices]
