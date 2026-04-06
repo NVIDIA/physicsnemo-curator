@@ -18,6 +18,7 @@ for reading, filtering, and writing simulation data at scale.
 
 [**Docs**](https://nvidia.github.io/physicsnemo-curator/)
 | [**Getting Started**](#getting-started)
+| [**Domains**](https://nvidia.github.io/physicsnemo-curator/domains/index.html)
 | [**Examples**](https://nvidia.github.io/physicsnemo-curator/auto_examples/index.html)
 | [**Contributing**](#contributing-to-physicsnemo-curator)
 
