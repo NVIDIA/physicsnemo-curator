@@ -1,143 +1,253 @@
-# PhysicsNeMo-Curator
-<!-- markdownlint-disable -->
+# PhysicsNeMo Curator
 
-[![Project Status: Active.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![GitHub](https://img.shields.io/github/license/NVIDIA/physicsnemo)](https://github.com/NVIDIA/physicsnemo/blob/master/LICENSE.txt)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-<!-- markdownlint-enable -->
-[**PhysicsNeMo Curator**](#what-is-physicsnemo-curator)
-| [**Getting started**](#getting-started)
-| [**Documentation**](https://docs.nvidia.com/deeplearning/physicsnemo/physicsnemo-core/index.html)
-| [**Contributing Guidelines**](#contributing-to-physicsnemo-curator)
-| [**Communication**](#communication)
+<!-- markdownlint-disable MD013 MD033 -->
 
-## What is PhysicsNeMo Curator?
+[![Project Status: Active](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+[![License](https://img.shields.io/github/license/NVIDIA/physicsnemo-curator)](https://github.com/NVIDIA/physicsnemo-curator/blob/main/LICENSE.txt)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![ty](https://img.shields.io/badge/type--checked-ty-blue?logo=python&logoColor=white)](https://github.com/astral-sh/ty)
+[![Built with Rust](https://img.shields.io/badge/built%20with-Rust-dea584?logo=rust)](https://www.rust-lang.org/)
 
-PhysicsNeMo Curator is a sub-module of PhysicsNeMo framework, a pythonic library
-designed to streamline and accelerate the crucial process of data curation at
-scale for engineering and scientific datasets for training and inference.
-It accelerates data curation by leveraging GPUs.
+<!-- markdownlint-enable MD013 MD033 -->
 
-This includes customizable interfaces and pipelines for extracting, transforming
-and loading data in supported formats and schema.
-Please refer to the [External Aerodynamics ETL example](examples/external_aerodynamics/README.md)
-that illustrates the concept.
+**PhysicsNeMo Curator** is a Rust-accelerated ETL toolkit for curating
+engineering and scientific datasets for deep learning. It provides a
+composable Python API built on a high-performance native extension (PyO3)
+for reading, filtering, and writing simulation data at scale.
 
-This package is intended to be used as part of the PhysicsNeMo [framework](https://github.com/NVIDIA/physicsnemo/blob/main/README.md).
+[**Getting Started**](#getting-started)
+| [**Architecture**](#architecture)
+| [**Examples**](#examples)
+| [**Contributing**](#contributing-to-physicsnemo-curator)
+| [**License**](#license)
 
-## Installation and Usage
+---
 
-The recommended way of using `PhysicsNeMo-Curator` is to leverage the `PhysicsNeMo` docker image.
-This can be pulled from the
-[NVIDIA Container Registry](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/physicsnemo/containers/physicsnemo).
+## Key Features
 
-Current limitations:
+- **Fluent pipeline API** — chain `Source → Filter → Sink` with a single
+  expression, then execute in parallel
+- **Rust-accelerated core** — native extension for I/O-bound and
+  compute-heavy operations via PyO3
+- **Multiple domains** — first-class support for unstructured meshes
+  (`physicsnemo.mesh.Mesh`) and gridded data arrays (`xarray.DataArray`)
+- **Pluggable execution** — sequential, thread pool, process pool, Loky,
+  Dask, or Prefect backends
+- **Registry & CLI** — all sources, filters, and sinks are discoverable
+  via a global registry and optional interactive CLI
 
-- Currently only `linux/amd64` platform is supported
-- Currently we don't provide a PyPi wheel, and support installing from source
+## Architecture
 
-### PhysicsNeMo Container (Recommended)
+```text
+┌─────────────────────────────────────────────────────┐
+│                   Python API Layer                   │
+│   Source[T] ──▶ Filter[T] ──▶ Sink[T] ──▶ Pipeline  │
+│                   run_pipeline(n_jobs, backend)      │
+├─────────────────────────────────────────────────────┤
+│              Rust Extension (_lib.abi3.so)           │
+│           VTK I/O · Mesh ops · Parallel readers     │
+└─────────────────────────────────────────────────────┘
+```
 
-The instructions to get started with `PhysicsNeMo-Curator` within the `PhysicsNeMo` docker container are shown below.
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| Python API | `src/physicsnemo_curator/` | Public interface — sources, filters, sinks, pipeline runner |
+| Rust core | `src/rust/` | Native extension built with PyO3 + maturin |
+| Tests | `test/` | Python test suite (pytest) |
+| Examples | `examples/` | Sphinx Gallery scripts (runnable + notebook export) |
+| Docs | `docs/` | Sphinx documentation |
+
+## Pipeline Components
+
+### Mesh Domain
+
+Sources, filters, and sinks operating on `physicsnemo.mesh.Mesh` objects.
+
+| Component | Type | Description |
+|-----------|------|-------------|
+| `DrivAerMLSource` | Source | DrivAer notchback variants (500 runs, HuggingFace) |
+| `AhmedMLSource` | Source | Ahmed body variants (500 runs, HuggingFace) |
+| `WindsorMLSource` | Source | Windsor body variants (355 runs, HuggingFace) |
+| `WindTunnelSource` | Source | WindTunnel-20k automobile simulations |
+| `NavierStokesCylinderSource` | Source | 2D cylinder flow (Parquet-based) |
+| `VTKSource` | Source | Generic VTK reader (.vtk/.vtp/.vtu/.vts/.vtm) |
+| `D3PlotSource` | Source | LS-DYNA crash simulation d3plot files |
+| `AnsysRSTSource` | Source | Ansys .rst result files via DPF |
+| `MeanFilter` | Filter | Per-field spatial means (Parquet output) |
+| `StatsFilter` | Filter | Comprehensive statistics with Welford accumulators |
+| `MeshInfoFilter` | Filter | Mesh metadata logging (JSON-lines output) |
+| `PrecisionFilter` | Filter | In-place floating-point conversion |
+| `WallNodeFilter` | Filter | Wall-node removal for crash meshes |
+| `MeshSink` | Sink | Writes meshes in PhysicsNeMo tensordict format |
+
+### DataArray Domain
+
+Sources, filters, and sinks operating on `xarray.DataArray` objects.
+
+| Component | Type | Description |
+|-----------|------|-------------|
+| `ERA5Source` | Source | ERA5 reanalysis via earth2studio (ARCO, WB2, NCAR, CDS) |
+| `MomentsFilter` | Filter | Running temporal statistics (Welford online algorithm) |
+| `ZarrSink` | Sink | Writes to Zarr store (per-variable groups, time-append) |
+| `NetCDF4Sink` | Sink | Writes to NetCDF4 with optional year-based splitting |
+
+## Getting Started
+
+### Requirements
+
+- **Python** >= 3.11
+- **OS**: Linux x86_64
+- **Rust** toolchain (for building the native extension from source)
+
+### Installation
+
+#### Option 1: PhysicsNeMo Docker container (recommended)
 
 ```bash
 docker pull nvcr.io/nvidia/physicsnemo/physicsnemo:25.08
 
-# Install from source
-git clone git@github.com:NVIDIA/physicsnemo-curator.git && cd physicsnemo-curator
-
-pip install --upgrade pip
+git clone git@github.com:NVIDIA/physicsnemo-curator.git
+cd physicsnemo-curator
 pip install -e ".[dev]"
+```
 
-# Install pre-commit hooks
+#### Option 2: From source with uv
+
+```bash
+git clone git@github.com:NVIDIA/physicsnemo-curator.git
+cd physicsnemo-curator
+
+# Install all dev dependencies and build the Rust extension
+make install
+make develop
+
+# (Optional) Install pre-commit hooks
 pre-commit install
 ```
 
-## Getting Started
+### Quick Start
 
-### New to PhysicsNeMo-Curator?
+```python
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.mesh.filters.stats import StatsFilter
+from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.run import run_pipeline
 
-If you're new to the framework, start with our comprehensive [**Tutorial**](./examples/tutorials/etl_hdf5_to_zarr/hdf5_to_zarr.ipynb).
-It walks you through building a complete ETL pipeline from scratch. You'll learn how to:
+# Build a pipeline: Source → Filters → Sink
+pipeline = (
+    DrivAerMLSource(mesh_type="boundary")
+    .filter(StatsFilter(output="stats.parquet"))
+    .filter(PrecisionFilter(target_dtype="float32"))
+    .write(MeshSink(output_dir="output/meshes/"))
+)
 
-- Define data schemas
-- Implement schema validation, data sources, transformations, and sinks
-- Convert HDF5 data to ML-optimized Zarr format
-- Configure and run parallel processing pipelines
+# Execute in parallel (4 workers, first 10 runs)
+results = run_pipeline(
+    pipeline,
+    n_jobs=4,
+    backend="process_pool",
+    indices=range(10),
+    progress=True,
+)
+```
 
-### Working with Your CFD Data
+### Optional Dependencies
 
-Have CFD simulation data from a solver like Fluent?
-PhysicsNeMo-Curator can process your data through the following approaches:
+Install domain-specific extras as needed:
 
-#### Option 1: Convert to Supported Formats (Recommended)
+```bash
+# LS-DYNA crash simulation support
+pip install physicsnemo-curator[lsdyna]
 
-**Currently Supported Formats:**
+# Ansys RST file support
+pip install physicsnemo-curator[ansys]
 
-- **VTK formats**: VTU (volume mesh data), VTP (surface mesh data)
-- **STL**: Geometry files
+# Interactive CLI
+pip install physicsnemo-curator[cli]
 
-**Next Steps:**
+# Parallel backends
+pip install physicsnemo-curator[loky]    # Loky backend
+pip install physicsnemo-curator[dask]    # Dask backend
+pip install physicsnemo-curator[prefect] # Prefect backend
+```
 
-1. Organize your converted data according to one of the supported dataset formats:
-   - [External Aerodynamics Data Processing](./examples/external_aerodynamics/External_Aero_Data_Processing_Reference.md#input-data-structure)
-   - [Crash Data Processing](./examples/structural_mechanics/crash/Crash_Data_Processing_Reference.md)
-2. Use the built-in [External Aerodynamics ETL pipeline](examples/external_aerodynamics/README.md) or [Crash ETL pipeline](./examples/structural_mechanics/crash/README.md)
-to convert your data to an AI model training ready format.
-This built-in pipeline produces a dataset that can be used to train both models in PhysicsNeMo!
-3. Train your model on your own data by following these guides:
-   - [DoMINO External Aerodynamics example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/domino)
-   - [Transolver External Aerodynamics example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/cfd/external_aerodynamics/transolver)
-   - [Structural Mechanics Crash example in PhysicsNeMo](https://github.com/NVIDIA/physicsnemo/tree/main/examples/structural_mechanics/crash)
+## Examples
 
-#### Option 2: Extend the Framework for Custom Formats
+Runnable Sphinx Gallery scripts in `examples/`. Each can be executed
+directly or exported as a Jupyter notebook.
 
-If your data is in a format not directly supported (VTU/VTP/STL), you can extend the framework.
-The [Tutorial](./examples/tutorials/etl_hdf5_to_zarr/hdf5_to_zarr.ipynb)
-demonstrates creating a complete pipeline that reads in HDF5 data and converts it to Zarr data.
+| Example | Domain | Description |
+|---------|--------|-------------|
+| [DrivAerML ETL](examples/mesh/mesh_drivaerml_etl.py) | Mesh | Boundary mesh curation with spatial means |
+| [External Aerodynamics](examples/mesh/mesh_external_aerodynamics.py) | Mesh | Multi-pipeline surface + volume ETL |
+| [Crash Simulation](examples/mesh/mesh_crash_simulation.py) | Mesh | LS-DYNA d3plot with wall-node filtering |
+| [Ansys Thermal](examples/mesh/mesh_ansys_thermal.py) | Mesh | Ansys .rst thermal analysis pipeline |
+| [ERA5 Reanalysis](examples/da/da_era5_etl.py) | DataArray | ERA5 climate data with temporal statistics |
 
-#### Getting Help
+## Development
 
-- **Domain-Specific Examples**:
-  - [External aerodynamics pipeline](./examples/external_aerodynamics/README.md)
-  provides an example ETL pipeline for training DoMINO/Transolver models for automotive aerodynamics applications.
-  For more questions about the formats, please refer to [Data Processing Reference](./examples/external_aerodynamics/External_Aero_Data_Processing_Reference.md)
-  - [Structural Mechanics / Crash pipeline](./examples/structural_mechanics/crash/README.md)
-  provides an example ETL pipeline for training models for structural mechanics/crash applications.
-- **Architecture Questions**: See the [Tutorial](./examples/tutorials/etl_hdf5_to_zarr/hdf5_to_zarr.ipynb)
-for framework concepts, and to understand how to extend the pipeline
-- **Anything else**: Please open a GitHub issue and we'll engage with you to answer the questions!
+### Toolchain
 
-## Contributing to PhysicsNeMo-Curator
+| Tool | Purpose | Command |
+|------|---------|---------|
+| [uv](https://github.com/astral-sh/uv) | Package & env management | `uv sync --group dev` |
+| [maturin](https://github.com/PyO3/maturin) | Rust/Python build bridge | `uv run maturin develop` |
+| [ruff](https://github.com/astral-sh/ruff) | Linting + formatting | `make format`, `make lint` |
+| [ty](https://github.com/astral-sh/ty) | Type checking | `make typecheck` |
+| [pytest](https://docs.pytest.org/) | Testing + coverage | `make test` |
+| [interrogate](https://interrogate.readthedocs.io/) | Docstring coverage (99%) | `make interrogate` |
+| [cargo](https://doc.rust-lang.org/cargo/) | Rust build + test | `make test-rust` |
+| [clippy](https://github.com/rust-lang/rust-clippy) | Rust linting | `make lint` |
 
-PhysicsNeMo-Curator and PhysicsNeMo are open source collaborations and their
-success is rooted in community contribution to further the field of Physics-ML.
-Thank you for contributing to the project so others can build on top of your
-contribution.
+### Common Commands
 
-For guidance on contributing to PhysicsNeMo-Curator, please refer to the
-[contributing guidelines](CONTRIBUTING.md).
+```bash
+make check          # Format + lint + typecheck + interrogate + cargo deny
+make test           # Python tests with coverage
+make test-rust      # Rust tests with nextest
+make bench          # Python + Rust benchmarks
+make docs           # Build Sphinx documentation
+```
 
-## Cite PhysicsNeMo-Curator
+### Code Conventions
 
-If PhysicsNeMo-Curator helped your research and you would like to cite it,
-please refer to the [guidelines](https://github.com/NVIDIA/physicsnemo/blob/main/CITATION.cff).
+- **Python**: ruff defaults, line length 120, NumPy-style docstrings
+- **Rust**: rustfmt defaults, all clippy warnings are errors (`-D warnings`)
+- **Docstrings**: 99% coverage enforced by interrogate
+- **Type checking**: all Python code must pass `ty check`
+- **License**: Apache-2.0 with SPDX headers on all source files
+- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/)
+  format (`feat`, `fix`, `refactor`, `test`, `docs`, etc.)
+
+## Contributing to PhysicsNeMo Curator
+
+PhysicsNeMo Curator is an open source project and its success is rooted in
+community contributions. Thank you for contributing so others can build on
+your work.
+
+For guidance, please refer to the [contributing guidelines](CONTRIBUTING.md).
+
+## Cite PhysicsNeMo
+
+If PhysicsNeMo Curator helped your research, please refer to the
+[citation guidelines](https://github.com/NVIDIA/physicsnemo/blob/main/CITATION.cff).
 
 ## Communication
 
-- Github Discussions: Discuss new data formats, transformations, Physics-ML
-research, etc.
-- GitHub Issues: Bug reports, feature requests, install issues, etc.
-- PhysicsNeMo Forum: The [PhysicsNeMo Forum](https://forums.developer.nvidia.com/t/welcome-to-the-physicsnemo-ml-model-framework-forum/178556)
-hosts an audience of new to moderate-level users and developers for
-general chat, online discussions, collaboration, etc.
+- **GitHub Discussions** — new data formats, transformations, Physics-ML research
+- **GitHub Issues** — bug reports, feature requests, installation issues
+- **[PhysicsNeMo Forum](https://forums.developer.nvidia.com/t/welcome-to-the-physicsnemo-ml-model-framework-forum/178556)** —
+  general chat, online discussions, collaboration
 
 ## Feedback
 
-Want to suggest some improvements to PhysicsNeMo-Curator? Use our
+Suggestions for improvements? Use our
 [feedback form](https://docs.google.com/forms/d/e/1FAIpQLSfX4zZ0Lp7MMxzi3xqvzX4IQDdWbkNh5H_a_clzIhclE2oSBQ/viewform?usp=sf_link).
 
 ## License
 
-PhysicsNeMo-Curator is provided under the Apache License 2.0, please see
-[LICENSE.txt](./LICENSE.txt) for full license text.
+PhysicsNeMo Curator is provided under the Apache License 2.0. See
+[LICENSE.txt](./LICENSE.txt) for the full license text.
