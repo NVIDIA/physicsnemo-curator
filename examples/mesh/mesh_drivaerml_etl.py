@@ -71,42 +71,27 @@ print(f"Total runs available: {len(source)}")
 #   per-field spatial means and accumulates them into a Parquet summary.
 # - :class:`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` writes
 #   each mesh in PhysicsNeMo's native tensordict memory-mapped format.
-#
-# We keep a reference to the filter so we can call :meth:`flush` after
-# the pipeline finishes.
 
-mean_filter = MeanFilter(output="outputs/mean_stats.parquet")
-
-pipeline = source.filter(mean_filter).write(MeshSink(output_dir="outputs/meshes/"))
+pipeline = source.filter(MeanFilter(output="outputs/mean_stats.parquet")).write(MeshSink(output_dir="outputs/meshes/"))
 
 # %%
-# Run the Pipeline
-# ----------------
+# Run in Parallel
+# ---------------
 #
-# :func:`~physicsnemo_curator.run.run_pipeline` processes the first 3
-# runs sequentially.  Sequential execution ensures the stateful
-# :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter` accumulates
-# statistics across all items in a single process.
+# :func:`~physicsnemo_curator.run.run_pipeline` dispatches work to a
+# ``process_pool`` backend with 4 workers.  We pass ``indices=range(3)``
+# to process only the first 3 runs.
+#
+# Each worker gets an independent copy of the pipeline, so meshes are
+# read, filtered, and written concurrently.
 
 results = run_pipeline(
     pipeline,
-    n_jobs=1,
-    backend="sequential",
+    n_jobs=4,
+    backend="process_pool",
     indices=range(3),
     progress=True,
 )
-
-# %%
-# Gather Statistics
-# -----------------
-#
-# Stateful filters like :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter`
-# accumulate results in memory during the pipeline run.  Call
-# :meth:`~physicsnemo_curator.mesh.filters.mean.MeanFilter.flush` to write
-# the accumulated per-field spatial means to a Parquet file.
-
-parquet_path = mean_filter.flush()
-print(f"Statistics written to: {parquet_path}")
 
 # %%
 # Inspect Results
@@ -125,7 +110,7 @@ for i, paths in enumerate(results):
 # .. code-block:: text
 #
 #     outputs/
-#     ├── mean_stats.parquet      # Per-field spatial means (from flush)
+#     ├── mean_stats.parquet      # Per-field spatial means
 #     └── meshes/
 #         ├── mesh_0000_0/        # Run 0 in tensordict format
 #         ├── mesh_0001_0/        # Run 1
@@ -133,10 +118,9 @@ for i, paths in enumerate(results):
 #
 # .. note::
 #
-#    Stateful filters like
+#    When using parallel backends, stateful filters like
 #    :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter`
-#    accumulate results in memory.  You must call :meth:`flush` after the
-#    pipeline finishes to write the Parquet file.  When using parallel
-#    backends (``n_jobs > 1``), each worker gets an independent copy of
-#    the filter, so use :meth:`MeanFilter.merge` to combine per-worker
-#    outputs afterwards.
+#    accumulate per-worker state.  The Parquet file is written inside
+#    each worker — for production use, consider running the filter
+#    sequentially or implementing a post-hoc merge strategy.
+#    See :doc:`/user-guide/parallel` for details.
