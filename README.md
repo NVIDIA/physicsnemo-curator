@@ -132,29 +132,6 @@ directly or exported as a Jupyter notebook.
 
 ## Development
 
-### Toolchain
-
-| Tool | Purpose | Command |
-|------|---------|---------|
-| [uv](https://github.com/astral-sh/uv) | Package & env management | `uv sync --group dev` |
-| [maturin](https://github.com/PyO3/maturin) | Rust/Python build bridge | `uv run maturin develop` |
-| [ruff](https://github.com/astral-sh/ruff) | Linting + formatting | `make format`, `make lint` |
-| [ty](https://github.com/astral-sh/ty) | Type checking | `make typecheck` |
-| [pytest](https://docs.pytest.org/) | Testing + coverage | `make test` |
-| [interrogate](https://interrogate.readthedocs.io/) | Docstring coverage (99%) | `make interrogate` |
-| [cargo](https://doc.rust-lang.org/cargo/) | Rust build + test | `make test-rust` |
-| [clippy](https://github.com/rust-lang/rust-clippy) | Rust linting | `make lint` |
-
-### Common Commands
-
-```bash
-make check          # Format + lint + typecheck + interrogate + cargo deny
-make test           # Python tests with coverage
-make test-rust      # Rust tests with nextest
-make bench          # Python + Rust benchmarks
-make docs           # Build Sphinx documentation
-```
-
 ### Code Conventions
 
 - **Python**: ruff defaults, line length 120, NumPy-style docstrings
