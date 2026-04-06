@@ -16,7 +16,8 @@ engineering and scientific datasets for deep learning. It provides a
 composable Python API built on a high-performance native extension (PyO3)
 for reading, filtering, and writing simulation data at scale.
 
-[**Getting Started**](#getting-started)
+[**Docs**](https://nvidia.github.io/physicsnemo-curator/)
+| [**Getting Started**](#getting-started)
 | [**Examples**](#examples)
 | [**Contributing**](#contributing-to-physicsnemo-curator)
 | [**License**](#license)
