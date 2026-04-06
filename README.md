@@ -100,11 +100,14 @@ results = run_pipeline(
 Install domain-specific extras as needed:
 
 ```bash
+# Mesh domain (CAE, CFD)
+pip install physicsnemo-curator[mesh]
+
+# DataArray domain (weather/climate)
+pip install physicsnemo-curator[da]
+
 # LS-DYNA crash simulation support
 pip install physicsnemo-curator[lsdyna]
-
-# Ansys RST file support
-pip install physicsnemo-curator[ansys]
 
 # Interactive CLI
 pip install physicsnemo-curator[cli]

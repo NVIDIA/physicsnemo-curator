@@ -41,20 +41,12 @@ loky = [
 lsdyna = [
     "lasso-python>=2.0",
 ]
-ansys = [
-    "ansys-dpf-core>=0.12",
-]
 dask = [
     "dask>=2024.1",
 ]
 prefect = [
     "prefect>=3.0",
 ]
-
-[project.scripts]
-curator = "physicsnemo_curator.cli:main"
-
-[dependency-groups]
 mesh = [
     "nvidia-physicsnemo",
     "pyvista",
@@ -66,6 +58,7 @@ mesh = [
     "tensordict",
     "jaxtyping",
     "huggingface_hub",
+    "ansys-dpf-core>=0.12",
 ]
 da = [
     "xarray>=2024.1",
@@ -74,6 +67,11 @@ da = [
     "gcsfs>=2024.1",
 ]
 mdt = []
+
+[project.scripts]
+curator = "physicsnemo_curator.cli:main"
+
+[dependency-groups]
 dev = [
     "ruff>=0.15",
     "ty>=0.0.26",
@@ -101,9 +99,9 @@ docs = [
 # uv
 # ---------------------------------------------------------------------------
 [tool.uv]
-# The mesh/da/mdt dependency groups have heavy or private dependencies
+# The mesh/da/mdt optional extras have heavy or private dependencies
 # (physicsnemo, torch, earth2studio, etc.) not on PyPI. Install them explicitly:
-#   uv sync --group mesh
+#   pip install -e ".[mesh]"
 default-groups = ["dev"]
 
 # physicsnemo is a private NVIDIA package not on PyPI. Provide metadata

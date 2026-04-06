@@ -3504,13 +3504,16 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-ansys = [
-    { name = "ansys-dpf-core" },
-]
 cli = [
     { name = "click" },
     { name = "questionary" },
     { name = "rich" },
+]
+da = [
+    { name = "earth2studio" },
+    { name = "gcsfs" },
+    { name = "xarray" },
+    { name = "zarr" },
 ]
 dask = [
     { name = "dask" },
@@ -3521,17 +3524,24 @@ loky = [
 lsdyna = [
     { name = "lasso-python" },
 ]
+mesh = [
+    { name = "ansys-dpf-core" },
+    { name = "huggingface-hub" },
+    { name = "jaxtyping" },
+    { name = "nvidia-physicsnemo" },
+    { name = "pyarrow" },
+    { name = "pyvista" },
+    { name = "s3fs" },
+    { name = "tensordict" },
+    { name = "torch" },
+    { name = "tqdm" },
+    { name = "warp-lang" },
+]
 prefect = [
     { name = "prefect" },
 ]
 
 [package.dev-dependencies]
-da = [
-    { name = "earth2studio" },
-    { name = "gcsfs" },
-    { name = "xarray" },
-    { name = "zarr" },
-]
 dev = [
     { name = "asv" },
     { name = "interrogate" },
@@ -3556,40 +3566,36 @@ docs = [
     { name = "sphinx-design" },
     { name = "sphinx-gallery" },
 ]
-mesh = [
-    { name = "huggingface-hub" },
-    { name = "jaxtyping" },
-    { name = "nvidia-physicsnemo" },
-    { name = "pyarrow" },
-    { name = "pyvista" },
-    { name = "s3fs" },
-    { name = "tensordict" },
-    { name = "torch" },
-    { name = "tqdm" },
-    { name = "warp-lang" },
-]
 
 [package.metadata]
 requires-dist = [
-    { name = "ansys-dpf-core", marker = "extra == 'ansys'", specifier = ">=0.12" },
+    { name = "ansys-dpf-core", marker = "extra == 'mesh'", specifier = ">=0.12" },
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.0" },
     { name = "dask", marker = "extra == 'dask'", specifier = ">=2024.1" },
+    { name = "earth2studio", marker = "extra == 'da'", specifier = ">=0.10" },
     { name = "fsspec", specifier = ">=2023.1.0" },
+    { name = "gcsfs", marker = "extra == 'da'", specifier = ">=2024.1" },
+    { name = "huggingface-hub", marker = "extra == 'mesh'" },
+    { name = "jaxtyping", marker = "extra == 'mesh'" },
     { name = "joblib", marker = "extra == 'loky'", specifier = ">=1.3" },
     { name = "lasso-python", marker = "extra == 'lsdyna'", specifier = ">=2.0" },
+    { name = "nvidia-physicsnemo", marker = "extra == 'mesh'", git = "https://github.com/NVIDIA/physicsnemo" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.0" },
+    { name = "pyarrow", marker = "extra == 'mesh'" },
+    { name = "pyvista", marker = "extra == 'mesh'" },
     { name = "questionary", marker = "extra == 'cli'", specifier = ">=2.0" },
     { name = "rich", marker = "extra == 'cli'", specifier = ">=13.0" },
+    { name = "s3fs", marker = "extra == 'mesh'" },
+    { name = "tensordict", marker = "extra == 'mesh'" },
+    { name = "torch", marker = "extra == 'mesh'" },
+    { name = "tqdm", marker = "extra == 'mesh'" },
+    { name = "warp-lang", marker = "extra == 'mesh'" },
+    { name = "xarray", marker = "extra == 'da'", specifier = ">=2024.1" },
+    { name = "zarr", marker = "extra == 'da'", specifier = ">=3.0" },
 ]
-provides-extras = ["cli", "loky", "lsdyna", "ansys", "dask", "prefect"]
+provides-extras = ["cli", "loky", "lsdyna", "dask", "prefect", "mesh", "da", "mdt"]
 
 [package.metadata.requires-dev]
-da = [
-    { name = "earth2studio", specifier = ">=0.10" },
-    { name = "gcsfs", specifier = ">=2024.1" },
-    { name = "xarray", specifier = ">=2024.1" },
-    { name = "zarr", specifier = ">=3.0" },
-]
 dev = [
     { name = "asv", specifier = ">=0.6" },
     { name = "interrogate", specifier = ">=1.7" },
@@ -3611,19 +3617,6 @@ docs = [
     { name = "sphinx-copybutton", specifier = ">=0.5" },
     { name = "sphinx-design", specifier = ">=0.6" },
     { name = "sphinx-gallery", specifier = ">=0.19" },
-]
-mdt = []
-mesh = [
-    { name = "huggingface-hub" },
-    { name = "jaxtyping" },
-    { name = "nvidia-physicsnemo", git = "https://github.com/NVIDIA/physicsnemo" },
-    { name = "pyarrow" },
-    { name = "pyvista" },
-    { name = "s3fs" },
-    { name = "tensordict" },
-    { name = "torch" },
-    { name = "tqdm" },
-    { name = "warp-lang" },
 ]
 
 [[package]]
