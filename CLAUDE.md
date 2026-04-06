@@ -125,3 +125,6 @@ The `commit` tool enforces this automatically — always use it instead of raw `
 - **add-filter**: Guide for adding a new filter (discovery questions, implementation patterns, generator semantics, testing, registration).
 - **add-sink**: Guide for adding a new sink (discovery, implementation,
   output naming, append/split, testing, registration).
+- **curator-reviewer**: PR review workflow with 8 passes (API conformance,
+  correctness, licensing, quality gates, test coverage, performance, code
+  quality, style). Produces P0/P1/P2/NIT report, optionally posts to PR.
