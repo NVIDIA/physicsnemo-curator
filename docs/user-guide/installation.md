@@ -27,7 +27,7 @@ you need.  Each submodule has its own group:
 |-------|----------|---------|
 | **mesh** | physicsnemo, pyvista, pyarrow, torch | `pip install .[mesh]` or `uv sync --group mesh` |
 | **da** | xarray, earth2studio, zarr, gcsfs | `uv sync --group da` |
-| **mdt** | *(planned)* | — |
+| **atm** | nvalchemi, ase, ase-db-backends, torch | `uv sync --group atm` |
 | **cli** | click, questionary | `pip install .[cli]` |
 | **dev** | ruff, ty, pytest, maturin, interrogate, pre-commit | `uv sync --group dev` |
 | **docs** | sphinx, nvidia-sphinx-theme, myst-parser, etc. | `uv sync --group docs` |

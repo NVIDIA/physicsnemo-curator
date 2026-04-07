@@ -13,12 +13,12 @@ that communicate through a single data structure.
 |--------|-----------|------------------|
 | **Mesh** | `physicsnemo.mesh.Mesh` (tensorclass) | `mesh` |
 | **DataArray** | `xarray.DataArray` | `da` |
-| **Alchemy** | `nvalchemi.data.AtomicData` | `alch` |
+| **Atomic** | `nvalchemi.data.AtomicData` | `atm` |
 
 ```{toctree}
 :maxdepth: 1
 
 mesh
 da
-alch
+atm
 ```

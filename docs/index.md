@@ -15,7 +15,7 @@ single data structure, and pipelines are executed lazily on a per-item basis.
 - **Generator semantics** — sources and filters can yield zero, one, or many items
 - **FileStore abstraction** — decouple file discovery from reading; local dirs, S3, HuggingFace Hub, or custom backends
 - **Built-in dataset sources** — DrivAerML, AhmedML, WindsorML, WindTunnel-20k from HuggingFace Hub
-- **Pluggable submodules** — `mesh`, `da`, `mdt` with independent dependency groups
+- **Pluggable submodules** — `mesh`, `da`, `atm` with independent dependency groups
 - **Interactive CLI** — guided pipeline builder powered by Click + Questionary
 - **Component registry** — automatic discovery of sources, filters, sinks, and stores
 

@@ -24,7 +24,7 @@ from typing import Any
 
 @dataclass
 class SubmoduleEntry:
-    """Registry entry for a single submodule (e.g. ``mesh``, ``xr``, ``mdt``).
+    """Registry entry for a single submodule (e.g. ``mesh``, ``da``, ``atm``).
 
     Parameters
     ----------

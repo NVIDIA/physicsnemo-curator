@@ -33,7 +33,7 @@ from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.da.sources.era5 import ERA5Source
 
 # Register submodule and components with the global registry.
-registry.register_submodule("da", "DataArray processing (xarray.DataArray)", "xarray")
+registry.register_submodule("da", "DataArray data curation (xarray.DataArray)", "xarray")
 registry.register_source("da", ERA5Source)
 registry.register_filter("da", MomentsFilter)
 registry.register_sink("da", ZarrSink)

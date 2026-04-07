@@ -44,7 +44,7 @@ from physicsnemo_curator.mesh.sources.windsorml import WindsorMLSource
 from physicsnemo_curator.mesh.sources.windtunnel import WindTunnelSource
 
 # Register submodule and components with the global registry.
-registry.register_submodule("mesh", "Mesh processing (physicsnemo.mesh.Mesh)", "physicsnemo.mesh")
+registry.register_submodule("mesh", "Mesh data curation (physicsnemo.mesh.Mesh)", "physicsnemo.mesh")
 registry.register_store("mesh", "Local directory", LocalFileStore)
 registry.register_store("mesh", "Remote (fsspec)", FsspecFileStore)
 registry.register_store("mesh", "Run-indexed (remote)", RunIndexedFileStore)

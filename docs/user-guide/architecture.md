@@ -57,11 +57,11 @@ concrete PhysicsNeMo Curator classes.
 
 | Pattern concept | Curator equivalent | Role |
 |-----------------|--------------------|------|
-| **Data source** | {class}`~physicsnemo_curator.core.base.Source` | Produces a stream of typed items from external storage |
-| **Filter** | {class}`~physicsnemo_curator.core.base.Filter` | Transforms, expands, contracts, or observes the stream |
-| **Pipe** | Python generators (`Generator[T]`) | Lazy, pull-driven connectors between stages |
-| **Data sink** | {class}`~physicsnemo_curator.core.base.Sink` | Consumes the stream and persists output |
-| **Pipeline** | {class}`~physicsnemo_curator.core.base.Pipeline` | Composite that chains a source, zero or more filters, and a sink into a single executable unit |
+| **Data source** | {class}`~physicsnemo_curator.core.base.Source` | Produces typed items from storage |
+| **Filter** | {class}`~physicsnemo_curator.core.base.Filter` | Transforms or observes the stream |
+| **Pipe** | Python generators (`Generator[T]`) | Lazy connectors between stages |
+| **Data sink** | {class}`~physicsnemo_curator.core.base.Sink` | Consumes and persists output |
+| **Pipeline** | {class}`~physicsnemo_curator.core.base.Pipeline` | Chains source, filters, sink |
 
 ### Why Pipes and Filters?
 
@@ -89,10 +89,10 @@ patterns (Gamma et al., 1994) reinforce the framework:
 
 | Pattern | Where used | Purpose |
 |---------|-----------|---------|
-| **Strategy** | {class}`~physicsnemo_curator.run.base.RunBackend` and its six implementations | Decouple pipeline definition from execution policy |
-| **Decorator / Proxy** | {class}`~physicsnemo_curator.core.profiling.ProfiledPipeline` | Wrap an existing pipeline with instrumentation without modifying it |
-| **Plugin / Microkernel** | {class}`~physicsnemo_curator.core.registry.Registry` with domain submodules (`mesh`, `da`) | Keep the core domain-agnostic; submodules register components at import time |
-| **Protocol / Dependency Injection** | {class}`~physicsnemo_curator.core.store.FileStore` | Decouple file discovery from file reading so sources work with local, remote, or custom storage |
+| **Strategy** | `RunBackend` and its six variants | Decouple definition from execution |
+| **Decorator** | `ProfiledPipeline` | Add instrumentation transparently |
+| **Plugin** | `Registry` + domain submodules | Domain-agnostic core; register at import |
+| **Protocol** | `FileStore` | Decouple discovery from reading |
 
 ## Core Components
 
@@ -240,8 +240,8 @@ group:
 | Submodule | Data Type | Dependency Group | Status |
 |-----------|-----------|-----------------|--------|
 | `mesh` | `physicsnemo.mesh.Mesh` | `mesh` | Implemented |
-| `xr` | `xarray.Dataset` | `xr` | Planned |
-| `mdt` | `tuple[torch.Tensor, ...]` | `mdt` | Planned |
+| `da` | `xarray.DataArray` | `da` | Implemented |
+| `atm` | `nvalchemi.data.AtomicData` | `atm` | Implemented |
 
 Submodules register their components with the global
 {class}`~physicsnemo_curator.core.registry.Registry` at import time, enabling the

@@ -59,9 +59,9 @@ console = Console(theme=CURATOR_THEME)
 # Map submodule names to their Python module paths so we can import them
 # on demand (triggering component registration).
 _SUBMODULE_IMPORTS: dict[str, str] = {
-    "mesh": "curator.mesh",
-    "da": "curator.da",
-    "mdt": "curator.mdt",
+    "mesh": "physicsnemo_curator.mesh",
+    "da": "physicsnemo_curator.da",
+    "atm": "physicsnemo_curator.atm",
 }
 
 
@@ -118,11 +118,11 @@ def _ensure_submodules_registered() -> None:
             importlib.import_module(module_path)
         except ImportError:
             # Register a placeholder so the CLI can show it as unavailable.
-            dep_map = {"mesh": "physicsnemo.mesh", "da": "xarray", "mdt": "torch"}
+            dep_map = {"mesh": "physicsnemo.mesh", "da": "xarray", "atm": "nvalchemi.data"}
             desc_map = {
-                "mesh": "Mesh processing (physicsnemo.mesh.Mesh)",
-                "da": "DataArray processing (xarray.DataArray)",
-                "mdt": "Molecular dynamics tensor tuples",
+                "mesh": "Mesh data curation (physicsnemo.mesh.Mesh)",
+                "da": "DataArray data curation (xarray.DataArray)",
+                "atm": "Atomic data curation (nvalchemi.data.AtomicData)",
             }
             registry.register_submodule(
                 name,

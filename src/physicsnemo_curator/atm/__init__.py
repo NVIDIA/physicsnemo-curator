@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Atomic/molecular (alch) submodule for PhysicsNeMo Curator.
+"""Atomic (atm) submodule for PhysicsNeMo Curator.
 
 Provides pipeline components for reading, transforming, and writing
-:class:`~nvalchemi.data.AtomicData` objects.  Requires the ``alch``
+:class:`~nvalchemi.data.AtomicData` objects.  Requires the ``atm``
 dependency group (nvalchemi, ase, ase-db-backends, torch).
 
 This module registers its components with the global
@@ -26,16 +26,16 @@ This module registers its components with the global
 
 from __future__ import annotations
 
-from physicsnemo_curator.alch.filters.stats import AtomicStatsFilter, merge_welford_stats
-from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
-from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter, merge_welford_stats
+from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
+from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 from physicsnemo_curator.core.registry import registry
 
 # Register submodule and components with the global registry.
-registry.register_submodule("alch", "Atomic/molecular data curation (nvalchemi.data.AtomicData)", "nvalchemi.data")
-registry.register_source("alch", ASELMDBSource)
-registry.register_filter("alch", AtomicStatsFilter)
-registry.register_sink("alch", AtomicDataZarrSink)
+registry.register_submodule("atm", "Atomic data curation (nvalchemi.data.AtomicData)", "nvalchemi.data")
+registry.register_source("atm", ASELMDBSource)
+registry.register_filter("atm", AtomicStatsFilter)
+registry.register_sink("atm", AtomicDataZarrSink)
 
 __all__ = [
     "ASELMDBSource",

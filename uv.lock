@@ -3576,7 +3576,7 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-alch = [
+atm = [
     { name = "ase" },
     { name = "ase-db-backends" },
     { name = "nvalchemi-toolkit" },
@@ -3648,8 +3648,8 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "ansys-dpf-core", marker = "extra == 'mesh'", specifier = ">=0.12" },
-    { name = "ase", marker = "extra == 'alch'", specifier = ">=3.26.0" },
-    { name = "ase-db-backends", marker = "extra == 'alch'", specifier = ">=0.10.0" },
+    { name = "ase", marker = "extra == 'atm'", specifier = ">=3.26.0" },
+    { name = "ase-db-backends", marker = "extra == 'atm'", specifier = ">=0.10.0" },
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.0" },
     { name = "dask", marker = "extra == 'dask'", specifier = ">=2024.1" },
     { name = "earth2studio", marker = "extra == 'da'", specifier = ">=0.10" },
@@ -3659,7 +3659,7 @@ requires-dist = [
     { name = "jaxtyping", marker = "extra == 'mesh'" },
     { name = "joblib", marker = "extra == 'loky'", specifier = ">=1.3" },
     { name = "lasso-python", marker = "extra == 'lsdyna'", specifier = ">=2.0" },
-    { name = "nvalchemi-toolkit", marker = "extra == 'alch'", git = "https://github.com/NVIDIA/nvalchemi-toolkit" },
+    { name = "nvalchemi-toolkit", marker = "extra == 'atm'", git = "https://github.com/NVIDIA/nvalchemi-toolkit" },
     { name = "nvidia-physicsnemo", marker = "extra == 'mesh'", git = "https://github.com/NVIDIA/physicsnemo" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.0" },
     { name = "pyarrow", marker = "extra == 'mesh'" },
@@ -3668,14 +3668,14 @@ requires-dist = [
     { name = "rich", marker = "extra == 'cli'", specifier = ">=13.0" },
     { name = "s3fs", marker = "extra == 'mesh'" },
     { name = "tensordict", marker = "extra == 'mesh'" },
-    { name = "torch", marker = "extra == 'alch'" },
+    { name = "torch", marker = "extra == 'atm'" },
     { name = "torch", marker = "extra == 'mesh'" },
     { name = "tqdm", marker = "extra == 'mesh'" },
     { name = "warp-lang", marker = "extra == 'mesh'" },
     { name = "xarray", marker = "extra == 'da'", specifier = ">=2024.1" },
     { name = "zarr", marker = "extra == 'da'", specifier = ">=3.0" },
 ]
-provides-extras = ["cli", "loky", "lsdyna", "dask", "prefect", "mesh", "da", "mdt", "alch"]
+provides-extras = ["cli", "loky", "lsdyna", "dask", "prefect", "mesh", "da", "atm"]
 
 [package.metadata.requires-dev]
 dev = [

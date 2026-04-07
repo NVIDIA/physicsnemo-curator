@@ -14,4 +14,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Filters for atomic/molecular data pipelines."""
+"""Data sinks for the atm (atomic) submodule."""

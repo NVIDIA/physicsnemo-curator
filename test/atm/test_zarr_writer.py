@@ -50,12 +50,12 @@ def _make_mock_atomic_data() -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.requires("alch")
+@pytest.mark.requires("atm")
 class TestAtomicDataZarrSinkUnit:
     """Metadata and parameter tests."""
 
     def test_params_list(self) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         params = AtomicDataZarrSink.params()
         assert len(params) > 0
@@ -64,7 +64,7 @@ class TestAtomicDataZarrSinkUnit:
         assert "batch_size" in names
 
     def test_name_and_description(self) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         assert isinstance(AtomicDataZarrSink.name, str)
         assert AtomicDataZarrSink.name == "AtomicData Zarr"
@@ -72,19 +72,19 @@ class TestAtomicDataZarrSinkUnit:
         assert len(AtomicDataZarrSink.description) > 0
 
     def test_output_path_property(self, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         sink = AtomicDataZarrSink(output_path=str(tmp_path / "out.zarr"))
         assert sink.output_path == tmp_path / "out.zarr"
 
     def test_batch_size_property(self, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         sink = AtomicDataZarrSink(output_path=str(tmp_path / "out.zarr"), batch_size=500)
         assert sink.batch_size == 500
 
     def test_default_batch_size(self, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         sink = AtomicDataZarrSink(output_path=str(tmp_path / "out.zarr"))
         assert sink.batch_size == 1000
@@ -95,13 +95,13 @@ class TestAtomicDataZarrSinkUnit:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.requires("alch")
+@pytest.mark.requires("atm")
 class TestAtomicDataZarrSinkWrite:
     """Tests for write/append semantics with mocked AtomicDataZarrWriter."""
 
-    @patch("physicsnemo_curator.alch.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
     def test_writes_single_item(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         mock_writer = MagicMock()
         mock_writer_cls.return_value = mock_writer
@@ -115,9 +115,9 @@ class TestAtomicDataZarrSinkWrite:
         # First flush should call write (not append) since store doesn't exist.
         mock_writer.write.assert_called_once()
 
-    @patch("physicsnemo_curator.alch.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
     def test_writes_multiple_items(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         mock_writer = MagicMock()
         mock_writer_cls.return_value = mock_writer
@@ -129,9 +129,9 @@ class TestAtomicDataZarrSinkWrite:
         assert len(paths) == 1
         mock_writer.write.assert_called_once()
 
-    @patch("physicsnemo_curator.alch.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
     def test_batching(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         mock_writer = MagicMock()
         mock_writer_cls.return_value = mock_writer
@@ -145,9 +145,9 @@ class TestAtomicDataZarrSinkWrite:
         mock_writer.write.assert_called_once()
         assert mock_writer.append.call_count == 2
 
-    @patch("physicsnemo_curator.alch.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
     def test_append_on_existing_store(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         # Create the output dir to simulate existing store.
         store_path = tmp_path / "existing.zarr"
@@ -164,9 +164,9 @@ class TestAtomicDataZarrSinkWrite:
         mock_writer.append.assert_called_once()
         mock_writer.write.assert_not_called()
 
-    @patch("physicsnemo_curator.alch.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
     def test_second_index_appends(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         mock_writer = MagicMock()
         mock_writer_cls.return_value = mock_writer
@@ -181,9 +181,9 @@ class TestAtomicDataZarrSinkWrite:
         sink(iter([_make_mock_atomic_data()]), index=1)
         mock_writer.append.assert_called_once()
 
-    @patch("physicsnemo_curator.alch.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
     def test_empty_iterator(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         mock_writer = MagicMock()
         mock_writer_cls.return_value = mock_writer
@@ -195,9 +195,9 @@ class TestAtomicDataZarrSinkWrite:
         mock_writer.write.assert_not_called()
         mock_writer.append.assert_not_called()
 
-    @patch("physicsnemo_curator.alch.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
     def test_creates_parent_directory(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
         mock_writer = MagicMock()
         mock_writer_cls.return_value = mock_writer
@@ -214,14 +214,14 @@ class TestAtomicDataZarrSinkWrite:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.requires("alch")
+@pytest.mark.requires("atm")
 class TestAtomicDataZarrSinkRegistry:
     """Test that the sink is registered."""
 
     def test_sink_registered(self) -> None:
-        import physicsnemo_curator.alch  # noqa: F401
+        import physicsnemo_curator.atm  # noqa: F401
         from physicsnemo_curator.core.registry import registry
 
-        sinks = registry.list_sinks("alch")
+        sinks = registry.list_sinks("atm")
         sink_names = {s.name for s in sinks}
         assert "AtomicData Zarr" in sink_names

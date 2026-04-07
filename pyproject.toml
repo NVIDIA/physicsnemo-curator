@@ -66,8 +66,7 @@ da = [
     "zarr>=3.0",
     "gcsfs>=2024.1",
 ]
-mdt = []
-alch = [
+atm = [
     "nvalchemi-toolkit",
     "ase>=3.26.0",
     "ase-db-backends>=0.10.0",
@@ -105,7 +104,7 @@ docs = [
 # uv
 # ---------------------------------------------------------------------------
 [tool.uv]
-# The mesh/da/mdt optional extras have heavy or private dependencies
+# The mesh/da/atm optional extras have heavy or private dependencies
 # (physicsnemo, torch, earth2studio, etc.) not on PyPI. Install them explicitly:
 #   pip install -e ".[mesh]"
 default-groups = ["dev"]
@@ -192,11 +191,10 @@ markers = [
     "integration: tests that touch the filesystem, network, or multiple components",
     "e2e: end-to-end pipeline tests (source → filters → sink)",
     "device: parametrised across compute devices (cpu, cuda)",
-    "requires(group): declares the dependency group needed (mesh, da, mdt, cli, loky, dask, prefect)",
+    "requires(group): declares the dependency group needed (mesh, da, atm, cli, loky, dask, prefect)",
     "mesh: tests requiring the mesh dependency group (auto-added by requires)",
     "da: tests requiring the da dependency group (auto-added by requires)",
-    "mdt: tests requiring the mdt dependency group (auto-added by requires)",
-    "alch: tests requiring the alch dependency group (auto-added by requires)",
+    "atm: tests requiring the atm dependency group (auto-added by requires)",
     "cli: tests requiring the cli dependency group (auto-added by requires)",
     "loky: tests requiring the loky extra (joblib)",
     "dask: tests requiring the dask extra",

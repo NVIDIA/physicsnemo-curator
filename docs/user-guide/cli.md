@@ -39,9 +39,9 @@ dependencies installed:
 
 Step 1/6: Select Submodule
 ? Select a submodule:
-  ▸ mesh — Mesh processing (physicsnemo.mesh.Mesh)
-    da — DataArray processing (xarray.DataArray) (not installed)
-    mdt — Molecular dynamics tensor tuples (not installed)
+  ▸ mesh — Mesh data curation (physicsnemo.mesh.Mesh)
+    da — DataArray data curation (xarray.DataArray) (not installed)
+    atm — Atomic data curation (nvalchemi.data.AtomicData) (not installed)
 ```
 
 ### 2. Select Data Store

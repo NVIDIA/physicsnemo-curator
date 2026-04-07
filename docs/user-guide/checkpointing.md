@@ -150,7 +150,7 @@ database contains two tables:
 
 ```python
 from physicsnemo_curator import CheckpointedPipeline, run_pipeline
-from physicsnemo_curator.alch import ASELMDBSource, AtomicDataZarrSink
+from physicsnemo_curator.atm import ASELMDBSource, AtomicDataZarrSink
 
 # Build pipeline
 pipeline = (

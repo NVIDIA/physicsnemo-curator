@@ -44,12 +44,12 @@ and climate datasets.  Requires the `da` dependency group
 ## AtomicData Sources
 
 Sources that yield {py:class}`~nvalchemi.data.AtomicData` objects from
-atomic/molecular simulation datasets.  Requires the `alch` dependency
-group (`uv sync --group alch`).
+atomic/molecular simulation datasets.  Requires the `atm` dependency
+group (`uv sync --group atm`).
 
 ```{list-table}
 :widths: 30 70
 
-* - {py:class}`~physicsnemo_curator.alch.sources.aselmdb.ASELMDBSource`
+* - {py:class}`~physicsnemo_curator.atm.sources.aselmdb.ASELMDBSource`
   - ASE LMDB atomic data source (OMol25, OPoly26)
 ```

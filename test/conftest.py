@@ -67,8 +67,7 @@ if TYPE_CHECKING:
 _GROUP_SENTINELS: dict[str, list[str]] = {
     "mesh": ["pyvista", "torch", "pyarrow", "physicsnemo.mesh"],
     "da": ["xarray", "earth2studio"],
-    "mdt": ["torch"],
-    "alch": ["nvalchemi.data", "ase", "torch"],
+    "atm": ["nvalchemi.data", "ase", "torch"],
     "cli": ["click", "questionary"],
     "loky": ["joblib"],
     "dask": ["dask"],
@@ -82,7 +81,7 @@ _GROUP_SENTINELS: dict[str, list[str]] = {
 _DIR_TO_GROUP: dict[str, str] = {
     "mesh": "mesh",
     "da": "da",
-    "alch": "alch",
+    "atm": "atm",
 }
 
 

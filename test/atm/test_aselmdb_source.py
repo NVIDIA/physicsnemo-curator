@@ -87,12 +87,12 @@ def _make_mock_db(n_rows: int = 5) -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.requires("alch")
+@pytest.mark.requires("atm")
 class TestASELMDBSourceUnit:
     """Metadata and parameter tests (no data access)."""
 
     def test_params_list(self) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         params = ASELMDBSource.params()
         assert len(params) > 0
@@ -101,7 +101,7 @@ class TestASELMDBSourceUnit:
         assert "metadata_path" in names
 
     def test_name_and_description(self) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         assert isinstance(ASELMDBSource.name, str)
         assert ASELMDBSource.name == "ASE LMDB"
@@ -114,7 +114,7 @@ class TestASELMDBSourceUnit:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.requires("alch")
+@pytest.mark.requires("atm")
 class TestASELMDBSourceLocal:
     """Tests against local mock data with mocked ASE database."""
 
@@ -126,13 +126,13 @@ class TestASELMDBSourceLocal:
         _write_mock_metadata(self.mock_root)
 
     def test_len(self) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         assert len(source) == 3
 
     def test_no_aselmdb_files_raises(self, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
@@ -140,21 +140,21 @@ class TestASELMDBSourceLocal:
             ASELMDBSource(data_dir=str(empty_dir))
 
     def test_files_sorted_lexicographically(self) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         names = [p.name for p in source.db_files]
         assert names == sorted(names)
 
     def test_metadata_loaded(self) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         assert "natoms" in source.metadata
         assert "data_ids" in source.metadata
 
     def test_metadata_not_required(self, tmp_path: pathlib.Path) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         no_meta = tmp_path / "no_meta"
         no_meta.mkdir()
@@ -163,11 +163,11 @@ class TestASELMDBSourceLocal:
         assert len(source) == 2
         assert source.metadata == {}
 
-    @patch("physicsnemo_curator.alch.sources.aselmdb.ase.db.connect")
+    @patch("physicsnemo_curator.atm.sources.aselmdb.ase.db.connect")
     def test_getitem_yields_atomic_data(self, mock_connect: MagicMock) -> None:
         from nvalchemi.data import AtomicData
 
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         mock_connect.return_value = _make_mock_db(n_rows=3)
 
@@ -177,9 +177,9 @@ class TestASELMDBSourceLocal:
         for item in items:
             assert isinstance(item, AtomicData)
 
-    @patch("physicsnemo_curator.alch.sources.aselmdb.ase.db.connect")
+    @patch("physicsnemo_curator.atm.sources.aselmdb.ase.db.connect")
     def test_negative_index(self, mock_connect: MagicMock) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         mock_connect.return_value = _make_mock_db(n_rows=2)
 
@@ -189,21 +189,21 @@ class TestASELMDBSourceLocal:
         assert len(items_neg) == 2
 
     def test_index_out_of_bounds(self) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         with pytest.raises(IndexError):
             next(source[len(source)])
 
     def test_index_out_of_bounds_negative(self) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         with pytest.raises(IndexError):
             next(source[-(len(source) + 1)])
 
     def test_data_dir_property(self) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         assert source.data_dir == self.mock_root
@@ -214,15 +214,15 @@ class TestASELMDBSourceLocal:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.requires("alch")
+@pytest.mark.requires("atm")
 class TestASELMDBSourceRegistry:
     """Test that the source is registered."""
 
     def test_source_registered(self) -> None:
-        import physicsnemo_curator.alch  # noqa: F401
+        import physicsnemo_curator.atm  # noqa: F401
         from physicsnemo_curator.core.registry import registry
 
-        sources = registry.list_sources("alch")
+        sources = registry.list_sources("atm")
         source_names = {s.name for s in sources}
         assert "ASE LMDB" in source_names
 
@@ -232,7 +232,7 @@ class TestASELMDBSourceRegistry:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.requires("alch")
+@pytest.mark.requires("atm")
 @pytest.mark.e2e
 @pytest.mark.slow
 class TestASELMDBSourceE2E:
@@ -240,7 +240,7 @@ class TestASELMDBSourceE2E:
 
     @pytest.fixture(autouse=True)
     def _setup(self) -> None:
-        from physicsnemo_curator.alch.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         self.source = ASELMDBSource(data_dir="val/")
 

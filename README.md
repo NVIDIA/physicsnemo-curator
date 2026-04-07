@@ -35,7 +35,8 @@ pipeline components for users to create their own data processing pipelines.
 - **Rust-accelerated core** — native extension for I/O-bound and
   compute-heavy operations via PyO3
 - **Multiple domains** — first-class support for unstructured meshes
-  (`physicsnemo.mesh.Mesh`) and gridded data arrays (`xarray.DataArray`)
+  (`physicsnemo.mesh.Mesh`), gridded data arrays (`xarray.DataArray`),
+  and atomic/molecular data (`nvalchemi.data.AtomicData`)
 - **Pluggable execution** — sequential, thread pool, process pool, Loky,
   Dask, or Prefect backends
 - **Registry & CLI** — all sources, filters, and sinks are discoverable

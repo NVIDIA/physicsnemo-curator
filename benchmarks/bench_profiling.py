@@ -16,6 +16,7 @@
 
 """Benchmarks for profiling overhead (ProfiledPipeline vs raw Pipeline)."""
 
+import os
 from collections.abc import Generator
 
 from curator.core.base import Filter, Param, Sink, Source
@@ -170,7 +171,8 @@ class TimeMetricsCollection:
         import tempfile
 
         metrics = self.profiled.collect_metrics()
-        out = tempfile.mktemp(suffix=".json")
+        fd, out = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
         metrics.to_json(out)
 
     def teardown(self, n_indices):
