@@ -30,8 +30,20 @@ complexes, and electrolytes (systems up to 350 atoms).
 Each source index corresponds to one ``.aselmdb`` file.  The generator
 returned by :meth:`__getitem__` iterates over every row in that database
 file, converting each ASE :class:`~ase.Atoms` entry to an
-:class:`~nvalchemi.data.AtomicData` instance via
-:meth:`AtomicData.from_atoms`.
+:class:`~nvalchemi.data.AtomicData` instance.
+
+Two read backends are supported:
+
+- **python** (default): Uses the ASE database API to read rows and
+  :meth:`AtomicData.from_atoms` for conversion.  Guaranteed compatibility
+  with all ASE row features (constraints, calculator results, etc.).
+- **rust**: Uses a native Rust reader
+  (:func:`physicsnemo_curator._lib.lmdb.read_lmdb`) for I/O, zlib
+  decompression, and JSON parsing, then constructs
+  :class:`~nvalchemi.data.AtomicData` directly from the raw row dicts.
+  Avoids the :class:`ase.Atoms` intermediate and can be significantly
+  faster for large datasets.  Falls back to **python** if the Rust
+  extension is not available.
 
 References
 ----------
@@ -51,13 +63,17 @@ Examples
 >>> len(source)  # number of .aselmdb files  # doctest: +SKIP
 80
 >>> atomic_data = next(source[0])  # doctest: +SKIP
+
+Use the Rust backend for faster reads:
+
+>>> source = ASELMDBSource(data_dir="./val/", backend="rust")  # doctest: +SKIP
 """
 
 from __future__ import annotations
 
 import logging
 import pathlib
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 import numpy as np
 
@@ -66,9 +82,249 @@ from physicsnemo_curator.core.base import Param, Source
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    import torch
     from nvalchemi.data import AtomicData
 
 logger = logging.getLogger(__name__)
+
+# Keys that the Rust reader returns but are not AtomicData fields.
+_METADATA_KEYS = frozenset(
+    {
+        "id",
+        "unique_id",
+        "ctime",
+        "mtime",
+        "user",
+        "calculator",
+        "calculator_parameters",
+        "key_value_pairs",
+        "data",
+    }
+)
+
+# Voigt notation (xx, yy, zz, yz, xz, xy) indices for 3×3 stress/virial.
+_VOIGT_MAP: list[tuple[int, int]] = [
+    (0, 0),
+    (1, 1),
+    (2, 2),
+    (1, 2),
+    (0, 2),
+    (0, 1),
+]
+
+
+def _voigt_to_matrix(voigt: np.ndarray) -> np.ndarray:
+    """Convert a 6-element Voigt-notation vector to a 3×3 symmetric matrix.
+
+    Parameters
+    ----------
+    voigt : np.ndarray
+        Flat array of length 6.
+
+    Returns
+    -------
+    np.ndarray
+        Symmetric 3×3 matrix.
+    """
+    mat = np.zeros((3, 3), dtype=voigt.dtype)
+    for idx, (i, j) in enumerate(_VOIGT_MAP):
+        mat[i, j] = voigt[idx]
+        mat[j, i] = voigt[idx]
+    return mat
+
+
+def _to_f64(arr: np.ndarray) -> np.ndarray[tuple[int, ...], np.dtype[np.float64]]:
+    """Cast *arr* to float64, sharing memory when already that dtype.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Input array.
+
+    Returns
+    -------
+    np.ndarray
+        Array with ``dtype=np.float64``.
+    """
+    return np.asarray(arr, dtype=np.float64)
+
+
+def _to_i64(arr: np.ndarray) -> np.ndarray[tuple[int, ...], np.dtype[np.int64]]:
+    """Cast *arr* to int64, sharing memory when already that dtype.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Input array.
+
+    Returns
+    -------
+    np.ndarray
+        Array with ``dtype=np.int64``.
+    """
+    return np.asarray(arr, dtype=np.int64)
+
+
+# Fields from the raw LMDB row that are consumed by _atomic_data_from_row
+# and should NOT be forwarded to the ``info`` dict.
+_CONSUMED_KEYS = _METADATA_KEYS | frozenset(
+    {
+        "numbers",
+        "positions",
+        "pbc",
+        "cell",
+        "energy",
+        "forces",
+        "stress",
+        "virials",
+        "dipole",
+        "charges",
+        "charge",
+        "masses",
+        "constraints",
+        "initial_charges",
+        "initial_magmoms",
+        "momenta",
+        "tags",
+    }
+)
+
+
+def _atomic_data_from_row(
+    row: dict[str, object],
+    dtype: torch.dtype | None = None,
+) -> AtomicData:
+    """Build an :class:`~nvalchemi.data.AtomicData` from a raw Rust row dict.
+
+    This mirrors the field extraction logic of
+    :meth:`AtomicData.from_atoms` but works directly on the JSON-decoded
+    dictionary returned by the Rust LMDB reader, skipping the
+    :class:`ase.Atoms` intermediate entirely.
+
+    Parameters
+    ----------
+    row : dict[str, object]
+        Row dict as returned by :func:`physicsnemo_curator._lib.lmdb.read_lmdb`.
+    dtype : torch.dtype or None, optional
+        Torch dtype for floating-point tensors.  Defaults to
+        ``torch.float32``.
+
+    Returns
+    -------
+    AtomicData
+        Constructed atomic data object.
+    """
+    import torch
+    from nvalchemi.data import AtomicData
+
+    if dtype is None:
+        dtype = torch.float32
+
+    # -- required fields ------------------------------------------------------
+    numbers = row["numbers"]
+    if not isinstance(numbers, np.ndarray):
+        msg = f"Expected 'numbers' to be ndarray, got {type(numbers)}"
+        raise TypeError(msg)
+    atomic_numbers = torch.from_numpy(_to_i64(numbers))
+
+    positions_raw = row["positions"]
+    if not isinstance(positions_raw, np.ndarray):
+        msg = f"Expected 'positions' to be ndarray, got {type(positions_raw)}"
+        raise TypeError(msg)
+    positions_t = torch.from_numpy(_to_f64(positions_raw)).to(dtype)
+
+    # -- optional structure fields --------------------------------------------
+    pbc_t: torch.Tensor | None = None
+    cell_t: torch.Tensor | None = None
+    energies_t: torch.Tensor | None = None
+    forces_t: torch.Tensor | None = None
+    stresses_t: torch.Tensor | None = None
+    virials_t: torch.Tensor | None = None
+    dipoles_t: torch.Tensor | None = None
+    node_charges_t: torch.Tensor | None = None
+    graph_charges_t: torch.Tensor | None = None
+    atomic_masses_t: torch.Tensor | None = None
+
+    pbc_arr = row.get("pbc")
+    if isinstance(pbc_arr, np.ndarray) and bool(np.any(pbc_arr)):
+        pbc_t = torch.from_numpy(pbc_arr).unsqueeze(0)
+
+        cell_arr = row.get("cell")
+        if isinstance(cell_arr, np.ndarray):
+            cell_t = torch.from_numpy(_to_f64(cell_arr)).to(dtype).unsqueeze(0)
+
+    # -- calculator / energy fields -------------------------------------------
+    energy = row.get("energy")
+    if energy is not None:
+        if isinstance(energy, (int, float)):
+            energies_t = torch.tensor([[energy]], dtype=dtype)
+        elif isinstance(energy, np.ndarray):
+            energies_t = torch.from_numpy(_to_f64(energy)).to(dtype).reshape(1, 1)
+
+    forces_raw = row.get("forces")
+    if isinstance(forces_raw, np.ndarray):
+        forces_t = torch.from_numpy(_to_f64(forces_raw)).to(dtype)
+
+    stress = row.get("stress")
+    if isinstance(stress, np.ndarray):
+        if stress.shape == (6,):
+            stress = _voigt_to_matrix(stress)
+        elif stress.shape == (9,):
+            stress = np.asarray(stress).reshape(3, 3)
+        stresses_t = torch.from_numpy(_to_f64(stress)).to(dtype).reshape(1, 3, 3)
+
+    virials_raw = row.get("virials")
+    if isinstance(virials_raw, np.ndarray):
+        if virials_raw.shape == (6,):
+            virials_raw = _voigt_to_matrix(virials_raw)
+        elif virials_raw.shape == (9,):
+            virials_raw = np.asarray(virials_raw).reshape(3, 3)
+        virials_t = torch.from_numpy(_to_f64(virials_raw)).to(dtype).reshape(1, 3, 3)
+
+    dipole = row.get("dipole")
+    if isinstance(dipole, np.ndarray):
+        dipoles_t = torch.from_numpy(_to_f64(dipole)).to(dtype).reshape(1, 3)
+
+    charges = row.get("charges")
+    if isinstance(charges, np.ndarray):
+        node_charges_t = torch.from_numpy(_to_f64(charges)).to(dtype)
+        if node_charges_t.ndim == 1:
+            node_charges_t = node_charges_t.unsqueeze(-1)
+
+    charge = row.get("charge")
+    if charge is not None and isinstance(charge, (int, float)):
+        graph_charges_t = torch.tensor([[float(charge)]], dtype=dtype)
+
+    # -- masses (from row if available, else periodictable lookup) -------------
+    masses = row.get("masses")
+    if isinstance(masses, np.ndarray):
+        atomic_masses_t = torch.from_numpy(_to_f64(masses)).to(dtype)
+
+    # -- extra info fields (tensor-convertible values only) -------------------
+    info_dict: dict[str, torch.Tensor] = {}
+    for key, val in row.items():
+        if key in _CONSUMED_KEYS:
+            continue
+        if isinstance(val, np.ndarray):
+            info_dict[key] = torch.from_numpy(_to_f64(val)).to(dtype)
+        elif isinstance(val, (int, float)):
+            info_dict[key] = torch.tensor(val, dtype=dtype)
+
+    return AtomicData(
+        atomic_numbers=atomic_numbers,
+        positions=positions_t,
+        pbc=pbc_t,
+        cell=cell_t,
+        energies=energies_t,
+        forces=forces_t,
+        stresses=stresses_t,
+        virials=virials_t,
+        dipoles=dipoles_t,
+        node_charges=node_charges_t,
+        graph_charges=graph_charges_t,
+        atomic_masses=atomic_masses_t,
+        info=info_dict if info_dict else {},
+    )
 
 
 class ASELMDBSource(Source["AtomicData"]):
@@ -96,6 +352,10 @@ class ASELMDBSource(Source["AtomicData"]):
     metadata_path : str
         Optional path to a ``metadata.npz`` file.  Empty string (default)
         means auto-detect ``<data_dir>/metadata.npz``.
+    backend : str
+        Read backend: ``"python"`` (default) uses the ASE database API,
+        ``"rust"`` uses the native Rust reader for faster I/O.  Falls
+        back to ``"python"`` if the Rust extension is unavailable.
 
     Note
     ----
@@ -137,14 +397,31 @@ class ASELMDBSource(Source["AtomicData"]):
                 type=str,
                 default="",
             ),
+            Param(
+                name="backend",
+                description="Read backend: 'python' (ASE) or 'rust' (native reader)",
+                type=str,
+                default="python",
+                choices=["python", "rust"],
+            ),
         ]
 
     def __init__(
         self,
         data_dir: str,
         metadata_path: str = "",
+        backend: Literal["python", "rust"] = "python",
     ) -> None:
         self._data_dir = pathlib.Path(data_dir)
+        self._backend: Literal["python", "rust"] = backend
+
+        # Validate backend choice and fall back gracefully.
+        if backend == "rust":
+            try:
+                from physicsnemo_curator._lib.lmdb import read_lmdb as _  # noqa: F401
+            except (ImportError, ModuleNotFoundError):
+                logger.warning("Rust LMDB backend unavailable; falling back to 'python'.")
+                self._backend = "python"
 
         # Discover .aselmdb files eagerly (sorted for deterministic ordering).
         self._db_files: list[pathlib.Path] = sorted(self._data_dir.glob("*.aselmdb"))
@@ -152,7 +429,12 @@ class ASELMDBSource(Source["AtomicData"]):
             msg = f"No .aselmdb files found in {self._data_dir}"
             raise ValueError(msg)
 
-        logger.info("Discovered %d .aselmdb files in %s", len(self._db_files), self._data_dir)
+        logger.info(
+            "Discovered %d .aselmdb files in %s (backend=%s)",
+            len(self._db_files),
+            self._data_dir,
+            self._backend,
+        )
 
         # Load optional metadata.
         self._metadata: dict[str, np.ndarray] = {}
@@ -192,11 +474,31 @@ class ASELMDBSource(Source["AtomicData"]):
             msg = f"Index {index} out of range for source with {len(self)} items."
             raise IndexError(msg)
 
+        db_path = self._db_files[index]
+        logger.debug("Opening database: %s (backend=%s)", db_path, self._backend)
+
+        if self._backend == "rust":
+            yield from self._read_rust(db_path)
+        else:
+            yield from self._read_python(db_path)
+
+    # -- Backend implementations ----------------------------------------------
+
+    def _read_python(self, db_path: pathlib.Path) -> Generator[AtomicData]:
+        """Read rows using the Python ASE database API.
+
+        Parameters
+        ----------
+        db_path : pathlib.Path
+            Path to the ``.aselmdb`` file.
+
+        Yields
+        ------
+        AtomicData
+            One atomic data object per database row.
+        """
         import ase.db
         from nvalchemi.data import AtomicData
-
-        db_path = self._db_files[index]
-        logger.debug("Opening database: %s", db_path)
 
         db = ase.db.connect(str(db_path), type="aselmdb", readonly=True)
         try:
@@ -204,12 +506,39 @@ class ASELMDBSource(Source["AtomicData"]):
                 atoms = row.toatoms()
                 yield AtomicData.from_atoms(atoms)
         finally:
-            # Ensure the database connection is closed even if iteration
-            # is interrupted.
             if hasattr(db, "close"):
                 db.close()
 
+    def _read_rust(self, db_path: pathlib.Path) -> Generator[AtomicData]:
+        """Read rows using the native Rust LMDB reader.
+
+        Reads the entire database into memory using the Rust extension,
+        then converts each raw row dict to an
+        :class:`~nvalchemi.data.AtomicData` directly—bypassing the
+        :class:`ase.Atoms` intermediate.
+
+        Parameters
+        ----------
+        db_path : pathlib.Path
+            Path to the ``.aselmdb`` file.
+
+        Yields
+        ------
+        AtomicData
+            One atomic data object per database row.
+        """
+        from physicsnemo_curator._lib.lmdb import read_lmdb
+
+        rows = read_lmdb(str(db_path))
+        for row in rows:
+            yield _atomic_data_from_row(row)
+
     # -- Properties -----------------------------------------------------------
+
+    @property
+    def backend(self) -> str:
+        """Return the active read backend name."""
+        return self._backend
 
     @property
     def data_dir(self) -> pathlib.Path:

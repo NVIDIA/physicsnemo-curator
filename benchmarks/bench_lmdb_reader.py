@@ -17,9 +17,10 @@
 """ASV benchmarks comparing Rust LMDB reader vs Python ASE reader.
 
 These benchmarks measure:
-- Single database read performance (Rust vs ASE)
-- Parallel multi-database read performance
-- Scaling behaviour with database size (number of rows)
+- Low-level single database read (Rust raw reader vs ASE deserialization)
+- Parallel multi-database low-level reads
+- End-to-end ASELMDBSource pipeline (backend="python" vs backend="rust")
+- Memory footprint
 """
 
 from __future__ import annotations
@@ -30,12 +31,21 @@ from pathlib import Path
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
-def _create_aselmdb(db_path: Path, n_rows: int) -> None:
+def _create_aselmdb(db_path: Path, n_rows: int, *, with_calc: bool = False) -> None:
     """Create an .aselmdb file with *n_rows* water-like molecules.
 
     Each row contains a 3-atom system (H₂O) with positions, a cubic
     unit cell, periodic boundary conditions, and a ``row_index``
     key-value pair so rows can be identified downstream.
+
+    Parameters
+    ----------
+    db_path : Path
+        Output file path.
+    n_rows : int
+        Number of rows to insert.
+    with_calc : bool
+        Attach energy and forces via SinglePointCalculator.
     """
     import numpy as np
     from ase import Atoms
@@ -46,11 +56,17 @@ def _create_aselmdb(db_path: Path, n_rows: int) -> None:
     for i in range(n_rows):
         positions = rng.random((3, 3)) * 10.0
         atoms = Atoms("H2O", positions=positions, cell=[10.0, 10.0, 10.0], pbc=True)
+        if with_calc:
+            from ase.calculators.singlepoint import SinglePointCalculator
+
+            forces = rng.random((3, 3)) - 0.5
+            calc = SinglePointCalculator(atoms, energy=-100.0 * i, forces=forces)
+            atoms.calc = calc
         db.write(atoms, key_value_pairs={"row_index": i})
     db.close()
 
 
-# ── single-file benchmarks ──────────────────────────────────────────────────
+# ── low-level single-file benchmarks ────────────────────────────────────────
 
 
 class TimeLmdbReaderSingle:
@@ -87,7 +103,7 @@ class TimeLmdbReaderSingle:
         _ = read_lmdb(self.db_file)
 
 
-# ── parallel multi-file benchmarks ──────────────────────────────────────────
+# ── low-level parallel multi-file benchmarks ────────────────────────────────
 
 
 class TimeLmdbReaderParallel:
@@ -133,6 +149,86 @@ class TimeLmdbReaderParallel:
 
         for f in self.db_files:
             _ = read_lmdb(f)
+
+
+# ── end-to-end ASELMDBSource backend benchmarks ─────────────────────────────
+
+
+class TimeASELMDBSourceBackend:
+    """Benchmark ASELMDBSource end-to-end: python vs rust backend.
+
+    This measures the full pipeline from database file to AtomicData
+    objects, including all conversion overhead.
+    """
+
+    params = [10, 100, 500]
+    param_names = ["n_rows"]
+
+    def setup(self, n_rows: int) -> None:
+        """Create a directory with a single .aselmdb database."""
+        self._tmpdir = tempfile.mkdtemp()
+        db_path = Path(self._tmpdir) / "data0000.aselmdb"
+        _create_aselmdb(db_path, n_rows, with_calc=True)
+
+    def teardown(self, n_rows: int) -> None:
+        """Clean up test files."""
+        import shutil
+
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def time_python_backend(self, n_rows: int) -> None:
+        """Benchmark ASELMDBSource with the Python (ASE) backend."""
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+
+        source = ASELMDBSource(data_dir=self._tmpdir, backend="python")
+        for _ in source[0]:
+            pass
+
+    def time_rust_backend(self, n_rows: int) -> None:
+        """Benchmark ASELMDBSource with the Rust backend."""
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+
+        source = ASELMDBSource(data_dir=self._tmpdir, backend="rust")
+        for _ in source[0]:
+            pass
+
+
+class TimeASELMDBSourceMultiFile:
+    """Benchmark ASELMDBSource with multiple files, both backends."""
+
+    params = [1, 4, 8]
+    param_names = ["n_files"]
+
+    def setup(self, n_files: int) -> None:
+        """Create a directory with multiple .aselmdb databases (50 rows each)."""
+        self._tmpdir = tempfile.mkdtemp()
+        for i in range(n_files):
+            db_path = Path(self._tmpdir) / f"data{i:04d}.aselmdb"
+            _create_aselmdb(db_path, n_rows=50, with_calc=True)
+
+    def teardown(self, n_files: int) -> None:
+        """Clean up test files."""
+        import shutil
+
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def time_python_backend(self, n_files: int) -> None:
+        """Benchmark ASELMDBSource with Python backend across all files."""
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+
+        source = ASELMDBSource(data_dir=self._tmpdir, backend="python")
+        for i in range(len(source)):
+            for _ in source[i]:
+                pass
+
+    def time_rust_backend(self, n_files: int) -> None:
+        """Benchmark ASELMDBSource with Rust backend across all files."""
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+
+        source = ASELMDBSource(data_dir=self._tmpdir, backend="rust")
+        for i in range(len(source)):
+            for _ in source[i]:
+                pass
 
 
 # ── memory benchmarks ───────────────────────────────────────────────────────
