@@ -45,3 +45,15 @@ Execution backends for parallel and distributed pipeline processing.
 
 /autoapi/physicsnemo_curator/run/index
 ```
+
+## Domains
+
+Domain-specific sources, filters, and sinks.
+
+```{toctree}
+:maxdepth: 2
+
+/autoapi/physicsnemo_curator/mesh/index
+/autoapi/physicsnemo_curator/atm/index
+/autoapi/physicsnemo_curator/da/index
+```
