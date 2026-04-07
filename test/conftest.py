@@ -51,8 +51,12 @@ The ``device`` fixture yields ``"cpu"`` and, when CUDA is available,
 from __future__ import annotations
 
 import importlib
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    import pathlib
 
 # ---------------------------------------------------------------------------
 # Dependency-group → sentinel imports
@@ -69,6 +73,16 @@ _GROUP_SENTINELS: dict[str, list[str]] = {
     "loky": ["joblib"],
     "dask": ["dask"],
     "prefect": ["prefect"],
+}
+
+# Maps test subdirectory names to the dependency group they require.
+# Used by ``pytest_ignore_collect`` to prevent importing test modules
+# when their optional dependencies are missing (top-level imports like
+# ``import numpy`` would cause collection errors otherwise).
+_DIR_TO_GROUP: dict[str, str] = {
+    "mesh": "mesh",
+    "da": "da",
+    "alch": "alch",
 }
 
 
@@ -99,6 +113,38 @@ def _group_available(group: str) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 # Collection hooks
 # ---------------------------------------------------------------------------
+def pytest_ignore_collect(collection_path: pathlib.Path, config: pytest.Config) -> bool | None:
+    """Prevent importing test modules whose optional dependencies are missing.
+
+    Test files in domain subdirectories (e.g. ``test/mesh/``) import
+    packages like numpy and pyvista at module level.  If those packages
+    are not installed, the import fails during collection *before* the
+    ``requires`` marker can skip them.  This hook prevents collection of
+    entire subdirectories when their sentinel packages are unavailable.
+
+    Parameters
+    ----------
+    collection_path : pathlib.Path
+        Path being considered for collection.
+    config : pytest.Config
+        The pytest config object.
+
+    Returns
+    -------
+    bool or None
+        ``True`` to ignore the path, ``None`` to let pytest decide.
+    """
+    # Only check directories that map to a dependency group.
+    for dir_name, group in _DIR_TO_GROUP.items():
+        # Match both the directory itself and files inside it.
+        parts = collection_path.parts
+        if dir_name in parts:
+            ok, _reason = _group_available(group)
+            if not ok:
+                return True
+    return None
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Post-collection hook: auto-tag unit tests and skip unavailable groups.
 

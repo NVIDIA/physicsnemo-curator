@@ -101,6 +101,7 @@ Claude tools in `.claude/tools/`:
 | `asv` | Run ASV historical benchmarks |
 | `open-pr` | **Open a PR** from fork to NVIDIA/physicsnemo-curator using the repo PR template |
 | `greptile-review` | Fetch Greptile AI review comments from a PR, sorted by priority, ready to address |
+| `gh-run` | Fetch a GitHub Actions workflow run: lists recent runs or shows job details with failure logs |
 
 ## Commit Message Convention
 

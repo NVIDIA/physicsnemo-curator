@@ -54,7 +54,7 @@ jobs:
         run: pip install maturin>=1.0
 
       - name: Build wheel
-        run: maturin build --release --manifest-path src/rust/Cargo.toml --out dist
+        run: maturin build --release --out dist
 
       - name: Install wheel
         shell: bash
