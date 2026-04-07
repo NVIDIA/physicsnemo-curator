@@ -237,7 +237,7 @@ class TestFsspecFileStore:
                 f.write(b"data")
 
         store = FsspecFileStore("memory:///sortdir")
-        names = [pathlib.PurePosixPath(store[i]).name for i in range(len(store))]
+        names = [pathlib.PurePath(store[i]).name for i in range(len(store))]
         assert names == ["a.dat", "b.dat", "c.dat"]
 
     def test_no_matching_files_raises(self):
@@ -276,7 +276,7 @@ class TestFsspecFileStore:
         store = FsspecFileStore("memory:///negdir")
         # -1 should give the last file
         path = store[-1]
-        assert pathlib.PurePosixPath(path).name == "b.dat"
+        assert pathlib.PurePath(path).name == "b.dat"
 
     def test_repr(self):
         """Repr should contain class name and file count."""
