@@ -256,6 +256,64 @@ class TestMeshSink:
         assert output_dir.exists()
         assert len(paths) == 1
 
+    def test_custom_naming_template(self, tmp_path):
+        """Custom naming_template controls the output directory name."""
+        _create_vtk_file(tmp_path / "vtk", "test.vtu")
+        source = VTKSource.from_path(str(tmp_path / "vtk"))
+
+        output_dir = tmp_path / "output"
+        sink = MeshSink(
+            output_dir=str(output_dir),
+            naming_template="boundary_{index}.vtp.pmsh",
+        )
+        paths = sink(source[0], index=0)
+
+        assert len(paths) == 1
+        assert paths[0].endswith("boundary_0.vtp.pmsh")
+        assert pathlib.Path(paths[0]).exists()
+
+    def test_naming_template_with_seq(self, tmp_path):
+        """Sequence placeholder increments across meshes from one source."""
+        vtk_dir = tmp_path / "vtk"
+        _create_vtk_file(vtk_dir, "a.vtu")
+        _create_vtk_file(vtk_dir, "b.vtu")
+        source = VTKSource.from_path(str(vtk_dir))
+
+        output_dir = tmp_path / "output"
+        sink = MeshSink(
+            output_dir=str(output_dir),
+            naming_template="run_{index:03d}_step_{seq}.pmsh",
+        )
+
+        # source[0] yields 1 mesh, source[1] yields 1 mesh
+        paths0 = sink(source[0], index=0)
+        paths1 = sink(source[1], index=1)
+
+        assert paths0[0].endswith("run_000_step_0.pmsh")
+        assert paths1[0].endswith("run_001_step_0.pmsh")
+
+    def test_naming_template_none_uses_default(self, tmp_path):
+        """naming_template=None preserves the original mesh_XXXX_Y pattern."""
+        _create_vtk_file(tmp_path / "vtk", "test.vtu")
+        source = VTKSource.from_path(str(tmp_path / "vtk"))
+
+        output_dir = tmp_path / "output"
+        sink = MeshSink(output_dir=str(output_dir), naming_template=None)
+        paths = sink(source[0], index=0)
+
+        assert len(paths) == 1
+        assert "mesh_0000_0" in paths[0]
+
+    def test_naming_template_invalid_placeholder(self):
+        """Invalid placeholders raise ValueError at construction time."""
+        with pytest.raises(ValueError, match="Invalid naming_template"):
+            MeshSink(output_dir="/tmp/out", naming_template="mesh_{bad_key}")
+
+    def test_naming_template_in_params(self):
+        """naming_template appears in the params list."""
+        param_names = [p.name for p in MeshSink.params()]
+        assert "naming_template" in param_names
+
 
 # ---------------------------------------------------------------------------
 # End-to-end pipeline test

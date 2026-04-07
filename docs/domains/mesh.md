@@ -201,11 +201,17 @@ memory-mapped format ({meth}`Mesh.save`).
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `output_dir` | `str` | *required* | Directory for output files |
+| `naming_template` | `str \| None` | `None` | Format string for output names (see below) |
 
-**Output naming:** Each mesh is saved to
+**Output naming:** By default each mesh is saved to
 `{output_dir}/mesh_{index:04d}_{seq}` where `index` is the source item
 index and `seq` is the sequence number within that item (for sources that
 yield multiple meshes).
+
+A custom `naming_template` can be provided using Python format-string
+syntax with `{index}` and `{seq}` placeholders.  Standard format specs
+are supported (e.g. `{index:04d}`).  The template is used literally —
+include any file extension you need.
 
 Saved meshes can be loaded back with:
 
@@ -214,16 +220,22 @@ from physicsnemo.mesh import Mesh
 mesh = Mesh.load("./output/mesh_0000_0")
 ```
 
-**Example:**
+**Examples:**
 
 ```python
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 
+# Default naming
 sink = MeshSink(output_dir="./output/")
-
-# Use in a pipeline
 pipeline = source.filter(filt).write(sink)
 paths = pipeline[0]  # ['./output/mesh_0000_0']
+
+# Custom naming for MeshReader compatibility
+sink = MeshSink(
+    output_dir="./output/",
+    naming_template="boundary_{index}.vtp.pmsh",
+)
+paths = pipeline[0]  # ['./output/boundary_0.vtp.pmsh']
 ```
 
 ## Full Pipeline Example

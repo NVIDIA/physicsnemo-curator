@@ -22,6 +22,7 @@ tensordict memory-mapped format via :meth:`Mesh.save`.
 
 from __future__ import annotations
 
+import logging
 import pathlib
 from typing import TYPE_CHECKING, ClassVar
 
@@ -32,25 +33,48 @@ if TYPE_CHECKING:
 
     from physicsnemo.mesh import Mesh
 
+logger = logging.getLogger(__name__)
+
 
 class MeshSink(Sink["Mesh"]):
     """Write :class:`~physicsnemo.mesh.Mesh` objects to disk.
 
-    Each mesh is saved to a subdirectory of *output_dir* named
-    ``mesh_{index:04d}_{seq}`` using the physicsnemo native format
-    (:meth:`Mesh.save`).
+    Each mesh is saved to a subdirectory of *output_dir* using the physicsnemo
+    native format (:meth:`Mesh.save`).  By default the subdirectory is named
+    ``mesh_{index:04d}_{seq}``, but a custom *naming_template* can be provided
+    to control output names — for example, to produce filenames that match the
+    patterns expected by ``MeshReader`` in PhysicsNeMo.
 
     Parameters
     ----------
     output_dir : str
         Directory where mesh outputs will be written.
+    naming_template : str or None
+        Python format string used to generate subdirectory names.  The
+        placeholders ``{index}`` (source index) and ``{seq}`` (sequence
+        number within the source, starting at 0) are available.  Standard
+        format-spec syntax is supported (e.g. ``{index:04d}``).  When
+        ``None`` (the default) the built-in pattern
+        ``mesh_{index:04d}_{seq}`` is used.
 
     Examples
     --------
-    >>> sink = MeshSink(output_dir="./output/")
-    >>> paths = sink(mesh_generator, index=0)
-    >>> paths
+    Default naming:
+
+    >>> sink = MeshSink(output_dir="./output/")  # doctest: +SKIP
+    >>> paths = sink(mesh_generator, index=0)  # doctest: +SKIP
+    >>> paths  # doctest: +SKIP
     ['./output/mesh_0000_0']
+
+    Custom naming for compatibility with ``MeshReader``:
+
+    >>> sink = MeshSink(  # doctest: +SKIP
+    ...     output_dir="./output/",
+    ...     naming_template="boundary_{index}.vtp.pmsh",
+    ... )
+    >>> paths = sink(mesh_generator, index=0)  # doctest: +SKIP
+    >>> paths  # doctest: +SKIP
+    ['./output/boundary_0.vtp.pmsh']
     """
 
     name: ClassVar[str] = "PhysicsNeMo Mesh Writer"
@@ -63,14 +87,54 @@ class MeshSink(Sink["Mesh"]):
         Returns
         -------
         list[Param]
-            The ``output_dir`` parameter (required).
+            The ``output_dir`` and optional ``naming_template`` parameters.
         """
         return [
             Param(name="output_dir", description="Output directory for mesh files", type=str),
+            Param(
+                name="naming_template",
+                description=(
+                    "Format string for output names. Placeholders: {index}, {seq}. Default: mesh_{index:04d}_{seq}"
+                ),
+                type=str,
+                default=None,
+            ),
         ]
 
-    def __init__(self, output_dir: str) -> None:
+    def __init__(
+        self,
+        output_dir: str,
+        naming_template: str | None = None,
+    ) -> None:
+        """Initialise the mesh sink.
+
+        Parameters
+        ----------
+        output_dir : str
+            Directory where mesh outputs will be written.
+        naming_template : str or None
+            Python format string for subdirectory names.  See the class
+            docstring for details.
+
+        Raises
+        ------
+        ValueError
+            If *naming_template* contains invalid placeholders.
+        """
         self._output_dir = pathlib.Path(output_dir)
+        self._naming_template = naming_template
+
+        # Validate the template eagerly so users get a clear error at
+        # construction time rather than deep inside a pipeline run.
+        if naming_template is not None:
+            try:
+                naming_template.format(index=0, seq=0)
+            except (KeyError, IndexError, ValueError) as exc:
+                msg = (
+                    f"Invalid naming_template {naming_template!r}: {exc}. "
+                    "Only {index} and {seq} placeholders are supported."
+                )
+                raise ValueError(msg) from exc
 
     def __call__(self, items: Iterator[Mesh], index: int) -> list[str]:
         """Consume meshes from the stream and save each to disk.
@@ -91,8 +155,13 @@ class MeshSink(Sink["Mesh"]):
         paths: list[str] = []
 
         for seq, mesh in enumerate(items):
-            subdir = self._output_dir / f"mesh_{index:04d}_{seq}"
-            mesh.save(str(subdir))  # ty: ignore[unresolved-attribute]  # @tensorclass adds .save() dynamically
+            if self._naming_template is not None:
+                name = self._naming_template.format(index=index, seq=seq)
+            else:
+                name = f"mesh_{index:04d}_{seq}"
+            subdir = self._output_dir / name
+            mesh.save(str(subdir))  # @tensorclass adds .save() dynamically
+            logger.debug("Saved mesh to %s", subdir)
             paths.append(str(subdir))
 
         return paths
