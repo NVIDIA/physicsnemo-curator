@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-name: Lint & Format
+name: Lint
 
 on:
   push:
@@ -17,117 +17,173 @@ concurrency:
 permissions:
   contents: read
 
+# ---------------------------------------------------------------------------
+# Jobs are grouped into four categories matching pre-commit responsibilities:
+#   1. format   — code formatting (ruff format, cargo fmt, whitespace, markdown)
+#   2. lint     — code quality (ruff check, clippy, cargo deny, lockfile)
+#   3. typecheck — type checking and docstring coverage (ty, interrogate)
+#   4. license  — SPDX license header verification
+# ---------------------------------------------------------------------------
+
 jobs:
+  # ── Format ───────────────────────────────────────────────────────────────
   python-format:
-    name: Python format
+    name: "Format / Python (ruff)"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies
-        run: uv sync --group dev
-
-      - name: Check formatting (ruff)
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --group dev
+      - name: Check formatting (ruff format)
         run: uv run ruff format --check .
 
-  python-lint:
-    name: Python lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies
-        run: uv sync --group dev
-
-      - name: Lint (ruff)
-        run: uv run ruff check .
-
-  python-typecheck:
-    name: Python typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies
-        run: uv sync --group dev
-
-      - name: Type check (ty)
-        run: uv run ty check
-
-  python-docstrings:
-    name: Python docstrings
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies
-        run: uv sync --group dev
-
-      - name: Docstring coverage (interrogate)
-        run: uv run interrogate src/physicsnemo_curator
-
   rust-format:
-    name: Rust format
+    name: "Format / Rust (cargo fmt)"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Install Rust toolchain
         run: |
           rustup update stable
           rustup default stable
           rustup component add rustfmt
-
       - name: Check formatting (cargo fmt)
         run: cargo fmt --manifest-path src/rust/Cargo.toml -- --check
 
-  rust-lint:
-    name: Rust lint
+  markdown-lint:
+    name: "Format / Markdown (markdownlint)"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g markdownlint-cli
+      - name: Lint Markdown
+        run: markdownlint --config .markdownlint.json '**/*.md' --ignore node_modules --ignore examples-old
 
+  file-checks:
+    name: "Format / File hygiene"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check trailing whitespace
+        run: |
+          if git grep -lP '\s+$' -- '*.py' '*.rs' '*.md' '*.yml' '*.yaml' '*.toml'; then
+            echo "::error::Trailing whitespace found in the files listed above"
+            exit 1
+          fi
+      - name: Check files end with newline
+        run: |
+          bad_files=()
+          while IFS= read -r f; do
+            if [ -s "$f" ] && [ "$(tail -c1 "$f" | wc -l)" -eq 0 ]; then
+              bad_files+=("$f")
+            fi
+          done < <(git ls-files -- '*.py' '*.rs' '*.md' '*.yml' '*.yaml' '*.toml')
+          if [ ${#bad_files[@]} -gt 0 ]; then
+            printf '::error::Missing newline at end of file: %s\n' "${bad_files[@]}"
+            exit 1
+          fi
+      - name: Validate YAML
+        run: |
+          python3 -c "
+          import yaml, pathlib, sys
+          errors = []
+          for f in pathlib.Path('.').rglob('*.yml'):
+              try: yaml.safe_load(f.read_text())
+              except yaml.YAMLError as e: errors.append((f, e))
+          for f in pathlib.Path('.').rglob('*.yaml'):
+              try: yaml.safe_load(f.read_text())
+              except yaml.YAMLError as e: errors.append((f, e))
+          for f, e in errors: print(f'::error file={f}::{e}')
+          sys.exit(1 if errors else 0)
+          "
+      - name: Validate TOML
+        run: |
+          python3 -c "
+          import tomllib, pathlib, sys
+          errors = []
+          for f in pathlib.Path('.').rglob('*.toml'):
+              try: tomllib.loads(f.read_text())
+              except Exception as e: errors.append((f, e))
+          for f, e in errors: print(f'::error file={f}::{e}')
+          sys.exit(1 if errors else 0)
+          "
+
+  # ── Lint ─────────────────────────────────────────────────────────────────
+  python-lint:
+    name: "Lint / Python (ruff)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --group dev
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+  rust-lint:
+    name: "Lint / Rust (clippy)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Install Rust toolchain
         run: |
           rustup update stable
           rustup default stable
           rustup component add clippy
-
       - name: Lint (clippy)
         run: cargo clippy --manifest-path src/rust/Cargo.toml -- -D warnings
 
   rust-deny:
-    name: Rust dependency audit
+    name: "Lint / Rust deps (cargo deny)"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Install Rust toolchain
         run: |
           rustup update stable
           rustup default stable
-
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
-
       - name: Audit dependencies (cargo deny)
         run: cargo deny --manifest-path src/rust/Cargo.toml check
+
+  lockfile:
+    name: "Lint / Lockfile (uv lock)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Verify lockfile is up to date
+        run: uv lock --check
+
+  # ── Type checking ───────────────────────────────────────────────────────
+  python-typecheck:
+    name: "Typecheck / Python (ty)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --group dev
+      - name: Type check (ty)
+        run: uv run ty check
+
+  python-docstrings:
+    name: "Typecheck / Docstrings (interrogate)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --group dev
+      - name: Docstring coverage (interrogate >= 99%)
+        run: uv run interrogate src/physicsnemo_curator
+
+  # ── License ─────────────────────────────────────────────────────────────
+  license-headers:
+    name: "License / SPDX headers"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check SPDX license headers
+        run: python tests/ci_tests/header_check.py
