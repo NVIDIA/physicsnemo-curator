@@ -34,6 +34,27 @@
 
          {% endif %}
       {% endblock %}
+      {% block submodule_classes %}
+         {# Collect classes defined in child submodules and show a summary table. #}
+         {# This populates package index pages like mesh/filters/, mesh/sources/, etc. #}
+         {% set ns = namespace(all_classes=[]) %}
+         {% for sub in (obj.subpackages + obj.submodules)|selectattr("display")|list %}
+            {% for child in sub.children|selectattr("display")|selectattr("type", "equalto", "class")|list %}
+               {% set ns.all_classes = ns.all_classes + [child] %}
+            {% endfor %}
+         {% endfor %}
+         {% if ns.all_classes %}
+Classes
+-------
+
+.. autoapisummary::
+
+            {% for klass in ns.all_classes %}
+   {{ klass.id }}
+            {% endfor %}
+
+         {% endif %}
+      {% endblock %}
       {% block content %}
          {% set visible_children = obj.children|selectattr("display")|list %}
          {% if visible_children %}
