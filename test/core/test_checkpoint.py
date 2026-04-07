@@ -152,7 +152,7 @@ def _make_pipeline(tmp_path: pathlib.Path, count: int = 5) -> Pipeline[int]:
     """Create a simple test pipeline."""
     return Pipeline(
         source=_CountSource(count=count),
-        filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+        filters=[_DoubleFilter()],
         sink=_PathSink(output_dir=str(tmp_path / "output")),
     )
 

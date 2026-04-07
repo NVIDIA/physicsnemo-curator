@@ -18,6 +18,8 @@
 
 import os
 
+from sphinx_gallery.sorting import ExplicitOrder
+
 project = "physicsnemo-curator"
 copyright = "2025 - 2026, NVIDIA CORPORATION & AFFILIATES"  # noqa: A001
 author = "NVIDIA"
@@ -49,6 +51,15 @@ sphinx_gallery_conf = {
     "filename_pattern": r"/.+\.py$",
     "run_stale_examples": os.environ.get("RUN_STALE_EXAMPLES", "False").lower() in ("1", "true"),
     "plot_gallery": os.environ.get("PLOT_GALLERY", "0"),
+    "subsection_order": ExplicitOrder(
+        [
+            "../examples/getting_started",
+            "../examples/cae",
+            "../examples/earth2",
+            "../examples/alch",
+            "../examples/extending",
+        ]
+    ),
 }
 
 # ---------------------------------------------------------------------------
