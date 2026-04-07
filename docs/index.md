@@ -72,14 +72,6 @@ pipeline.filters[0].flush()
 user-guide/index
 ```
 
-## API
-
-```{toctree}
-:maxdepth: 3
-
-api/index
-```
-
 ## Domains
 
 ```{toctree}
@@ -94,4 +86,12 @@ domains/index
 :maxdepth: 2
 
 auto_examples/index
+```
+
+## API
+
+```{toctree}
+:maxdepth: 3
+
+api/index
 ```
