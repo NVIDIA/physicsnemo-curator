@@ -72,20 +72,20 @@ pipeline.filters[0].flush()
 user-guide/index
 ```
 
-Domains
-
-```{toctree}
-:maxdepth: 2
-
-domains/index
-```
-
 ## API
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 3
 
-API <autoapi/index>
+api/index
+```
+
+## Domains
+
+```{toctree}
+:maxdepth: 3
+
+domains/index
 ```
 
 ## Examples

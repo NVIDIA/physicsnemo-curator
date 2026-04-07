@@ -56,7 +56,7 @@ sphinx_gallery_conf = {
             "../examples/getting_started",
             "../examples/cae",
             "../examples/earth2",
-            "../examples/alch",
+            "../examples/atm",
             "../examples/extending",
         ]
     ),
@@ -76,6 +76,7 @@ autoapi_options = [
 ]
 autoapi_python_class_content = "both"
 autoapi_member_order = "groupwise"
+autoapi_add_toctree_entry = False  # We manage API toctrees manually in api/index.md
 
 # ---------------------------------------------------------------------------
 # Napoleon (NumPy-style docstrings)

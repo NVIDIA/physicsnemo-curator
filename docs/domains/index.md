@@ -15,10 +15,29 @@ that communicate through a single data structure.
 | **DataArray** | `xarray.DataArray` | `da` |
 | **Atomic** | `nvalchemi.data.AtomicData` | `atm` |
 
+## Mesh
+
 ```{toctree}
-:maxdepth: 1
+:maxdepth: 2
 
 mesh
+/autoapi/physicsnemo_curator/mesh/index
+```
+
+## DataArray
+
+```{toctree}
+:maxdepth: 2
+
 da
+/autoapi/physicsnemo_curator/da/index
+```
+
+## Atomic
+
+```{toctree}
+:maxdepth: 2
+
 atm
+/autoapi/physicsnemo_curator/atm/index
 ```
