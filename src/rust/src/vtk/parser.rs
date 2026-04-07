@@ -19,6 +19,7 @@ pub enum VTKParseError {
     Xml(#[from] quick_xml::Error),
     /// Invalid VTK format.
     #[error("Invalid VTK format: {0}")]
+    #[allow(dead_code)]
     InvalidFormat(String),
     /// UTF-8 encoding error.
     #[error("UTF-8 error: {0}")]
@@ -243,7 +244,6 @@ fn store_data_array(
         mesh.point_data.insert(
             info.name.clone(),
             DataArray {
-                name: info.name.clone(),
                 num_components: info.num_components,
                 data,
             },
@@ -253,7 +253,6 @@ fn store_data_array(
         mesh.cell_data.insert(
             info.name.clone(),
             DataArray {
-                name: info.name.clone(),
                 num_components: info.num_components,
                 data,
             },

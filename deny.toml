@@ -10,8 +10,7 @@ all-features = true
 targets = []
 
 [advisories]
-unmaintained = "warn"
-unsound = "deny"
+unmaintained = "workspace"
 yanked = "deny"
 
 [licenses]

@@ -9,8 +9,6 @@ use std::collections::HashMap;
 /// A named data array (point_data or cell_data field).
 #[derive(Debug, Clone)]
 pub struct DataArray {
-    /// Array name (e.g., "Pressure", "Velocity").
-    pub name: String,
     /// Number of components per tuple (1 for scalar, 3 for vector, etc.).
     pub num_components: usize,
     /// Flattened data values (length = num_tuples * num_components).
