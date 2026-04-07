@@ -149,15 +149,17 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
     import pathlib
 
     for f in pipeline.filters:
-        if hasattr(f, "flush") and hasattr(f, "_output_path"):
-            original = f._output_path  # noqa: SLF001
-            p = pathlib.Path(str(original))
-            shard_path = p.parent / f"{p.stem}_shard_{index:06d}{p.suffix}"
-            f._output_path = shard_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
-            try:
-                f.flush()  # ty: ignore[call-non-callable]
-            finally:
-                f._output_path = original  # noqa: SLF001  # ty: ignore[invalid-assignment]
+        if not (hasattr(f, "flush") and hasattr(f, "_output_path")):
+            continue
+
+        original = f._output_path  # noqa: SLF001
+        p = pathlib.Path(str(original))
+        shard_path = p.parent / f"{p.stem}_shard_{index:06d}{p.suffix}"
+        f._output_path = shard_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
+        try:
+            f.flush()  # ty: ignore[call-non-callable]
+        finally:
+            f._output_path = original  # noqa: SLF001  # ty: ignore[invalid-assignment]
 
 
 def process_single_index(pipeline: Pipeline[Any], index: int) -> list[str]:

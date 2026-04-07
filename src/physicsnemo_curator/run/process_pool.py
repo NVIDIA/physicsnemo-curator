@@ -25,7 +25,12 @@ from __future__ import annotations
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from physicsnemo_curator.run.base import RunBackend, RunConfig, WorkerProgressDisplay, process_single_index_packed
+from physicsnemo_curator.run.base import (
+    RunBackend,
+    RunConfig,
+    WorkerProgressDisplay,
+    process_single_index_packed,
+)
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -100,17 +105,14 @@ class ProcessPoolBackend(RunBackend):
         result_map: dict[int, list[str]] = {}
         try:
             with ProcessPoolExecutor(**executor_kwargs) as executor:
-                # Submit all futures.  Assign display slots round-robin
-                # so the first n_jobs items each get a unique slot.
                 future_to_idx: dict[Future[list[str]], int] = {}
                 future_to_slot: dict[Future[list[str]], int] = {}
 
                 for pos, idx in enumerate(indices):
-                    fut: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, idx))
-                    future_to_idx[fut] = idx
+                    fut_single: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, idx))
+                    future_to_idx[fut_single] = idx
                     slot = pos % n_jobs
-                    future_to_slot[fut] = slot
-                    # Show the initial batch on the display
+                    future_to_slot[fut_single] = slot
                     if pos < n_jobs:
                         display.worker_start(slot, idx)
 

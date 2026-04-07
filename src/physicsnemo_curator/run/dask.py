@@ -24,7 +24,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from physicsnemo_curator.run.base import RunBackend, RunConfig, process_single_index_packed
+from physicsnemo_curator.run.base import (
+    RunBackend,
+    RunConfig,
+    process_single_index_packed,
+)
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline

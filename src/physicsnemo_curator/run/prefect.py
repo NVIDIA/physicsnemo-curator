@@ -145,13 +145,8 @@ class PrefectBackend(RunBackend):
         @flow(**flow_kwargs)
         def pipeline_flow() -> list[list[str]]:
             """Execute all pipeline indices."""
-            # Submit all tasks
             futures = [process_index.submit(idx) for idx in indices]
-
-            # Wait for all to complete
             wait(futures)
-
-            # Collect results in order
             return [f.result() for f in futures]
 
         return pipeline_flow()

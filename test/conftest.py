@@ -64,6 +64,7 @@ _GROUP_SENTINELS: dict[str, list[str]] = {
     "mesh": ["pyvista", "torch", "pyarrow", "physicsnemo.mesh"],
     "da": ["xarray", "earth2studio"],
     "mdt": ["torch"],
+    "alch": ["nvalchemi.data", "ase", "torch"],
     "cli": ["click", "questionary"],
     "loky": ["joblib"],
     "dask": ["dask"],

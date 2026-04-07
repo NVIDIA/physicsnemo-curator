@@ -67,6 +67,12 @@ da = [
     "gcsfs>=2024.1",
 ]
 mdt = []
+alch = [
+    "nvalchemi-toolkit",
+    "ase>=3.26.0",
+    "ase-db-backends>=0.10.0",
+    "torch",
+]
 
 [project.scripts]
 curator = "physicsnemo_curator.cli:main"
@@ -111,8 +117,15 @@ name = "nvidia-physicsnemo"
 version = "0.1.0"
 requires-dist = []
 
+# nvalchemi-toolkit is a private NVIDIA package not on PyPI.
+[[tool.uv.dependency-metadata]]
+name = "nvalchemi-toolkit"
+version = "0.1.0"
+requires-dist = []
+
 [tool.uv.sources]
 nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo" }
+nvalchemi-toolkit = { git = "https://github.com/NVIDIA/nvalchemi-toolkit" }
 
 # ---------------------------------------------------------------------------
 # ty (type checking)
@@ -183,6 +196,7 @@ markers = [
     "mesh: tests requiring the mesh dependency group (auto-added by requires)",
     "da: tests requiring the da dependency group (auto-added by requires)",
     "mdt: tests requiring the mdt dependency group (auto-added by requires)",
+    "alch: tests requiring the alch dependency group (auto-added by requires)",
     "cli: tests requiring the cli dependency group (auto-added by requires)",
     "loky: tests requiring the loky extra (joblib)",
     "dask: tests requiring the dask extra",

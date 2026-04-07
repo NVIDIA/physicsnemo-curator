@@ -26,7 +26,12 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from physicsnemo_curator.run.base import RunBackend, RunConfig, WorkerProgressDisplay, process_single_index
+from physicsnemo_curator.run.base import (
+    RunBackend,
+    RunConfig,
+    WorkerProgressDisplay,
+    process_single_index,
+)
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline

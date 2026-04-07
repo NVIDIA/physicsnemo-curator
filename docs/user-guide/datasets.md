@@ -40,3 +40,16 @@ and climate datasets.  Requires the `da` dependency group
 * - {py:class}`~physicsnemo_curator.da.sources.era5.ERA5Source`
   - ERA5 reanalysis dataset source
 ```
+
+## AtomicData Sources
+
+Sources that yield {py:class}`~nvalchemi.data.AtomicData` objects from
+atomic/molecular simulation datasets.  Requires the `alch` dependency
+group (`uv sync --group alch`).
+
+```{list-table}
+:widths: 30 70
+
+* - {py:class}`~physicsnemo_curator.alch.sources.aselmdb.ASELMDBSource`
+  - ASE LMDB atomic data source (OMol25, OPoly26)
+```
