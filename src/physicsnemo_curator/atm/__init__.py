@@ -26,6 +26,7 @@ This module registers its components with the global
 
 from __future__ import annotations
 
+from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter, merge_welford_stats
 from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
@@ -34,12 +35,14 @@ from physicsnemo_curator.core.registry import registry
 # Register submodule and components with the global registry.
 registry.register_submodule("atm", "Atomic data curation (nvalchemi.data.AtomicData)", "nvalchemi.data")
 registry.register_source("atm", ASELMDBSource)
+registry.register_filter("atm", AtomicInfoFilter)
 registry.register_filter("atm", AtomicStatsFilter)
 registry.register_sink("atm", AtomicDataZarrSink)
 
 __all__ = [
     "ASELMDBSource",
     "AtomicDataZarrSink",
+    "AtomicInfoFilter",
     "AtomicStatsFilter",
     "merge_welford_stats",
 ]
