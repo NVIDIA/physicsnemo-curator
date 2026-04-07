@@ -7,6 +7,16 @@
 //! Handles opening the LMDB environment, iterating over data rows
 //! (skipping reserved keys), and decompressing/parsing each value
 //! from zlib-compressed JSON into [`serde_json::Value`].
+//!
+//! ## Performance
+//!
+//! - **Intra-file parallelism**: After a fast sequential cursor scan to
+//!   collect raw compressed bytes, the expensive decompress + JSON parse
+//!   step runs in parallel across rows via Rayon.
+//! - **Inter-file parallelism**: Multiple `.aselmdb` files are read
+//!   concurrently with `read_lmdb_files_parallel`.
+//! - **Buffer estimation**: Decompression pre-allocates output buffers
+//!   at 4× the compressed size to reduce reallocations.
 
 use flate2::read::ZlibDecoder;
 use rayon::prelude::*;
@@ -16,6 +26,10 @@ use thiserror::Error;
 
 /// Reserved LMDB keys that are not data rows.
 const RESERVED_KEYS: &[&str] = &["nextid", "deleted_ids", "metadata"];
+
+/// Heuristic multiplier for estimating decompressed size from compressed size.
+/// JSON text typically compresses to ~25% of its original size with zlib.
+const DECOMPRESS_SIZE_MULTIPLIER: usize = 4;
 
 /// Errors that can occur during LMDB reading.
 #[derive(Error, Debug)]
@@ -34,6 +48,14 @@ pub enum LmdbReadError {
     Utf8(#[from] std::str::Utf8Error),
 }
 
+// Allow converting (id, LmdbReadError) from Rayon back to LmdbReadError.
+// The id context is only used for parallel error propagation.
+impl From<(i64, LmdbReadError)> for LmdbReadError {
+    fn from(pair: (i64, LmdbReadError)) -> Self {
+        pair.1
+    }
+}
+
 /// A single row from an ASE LMDB database.
 ///
 /// Contains the integer row ID and the parsed JSON value (a dict
@@ -46,10 +68,22 @@ pub struct LmdbRow {
     pub data: serde_json::Value,
 }
 
+/// Raw key-value pair extracted from the LMDB cursor before decompression.
+struct RawEntry {
+    /// The integer row ID.
+    id: i64,
+    /// The compressed bytes (zlib-compressed JSON).
+    compressed: Vec<u8>,
+}
+
 /// Decompress a zlib-compressed byte slice and parse as JSON.
+///
+/// Pre-allocates the output buffer based on `compressed_len` to reduce
+/// reallocations during decompression.
 fn decompress_and_parse(compressed: &[u8]) -> Result<serde_json::Value, LmdbReadError> {
+    let estimated_size = compressed.len() * DECOMPRESS_SIZE_MULTIPLIER;
     let mut decoder = ZlibDecoder::new(compressed);
-    let mut json_bytes = Vec::new();
+    let mut json_bytes = Vec::with_capacity(estimated_size);
     decoder.read_to_end(&mut json_bytes)?;
     let value: serde_json::Value = serde_json::from_slice(&json_bytes)?;
     Ok(value)
@@ -57,9 +91,9 @@ fn decompress_and_parse(compressed: &[u8]) -> Result<serde_json::Value, LmdbRead
 
 /// Read all data rows from a single `.aselmdb` file.
 ///
-/// Opens the LMDB environment in read-only mode, iterates over all
-/// key-value pairs, skips reserved keys (`nextid`, `deleted_ids`,
-/// `metadata`), and returns the parsed rows sorted by ID.
+/// Opens the LMDB environment in read-only mode, performs a fast
+/// sequential cursor scan to collect raw compressed bytes, then
+/// decompresses and parses rows **in parallel** via Rayon.
 ///
 /// # Arguments
 ///
@@ -76,53 +110,74 @@ fn decompress_and_parse(compressed: &[u8]) -> Result<serde_json::Value, LmdbRead
 pub fn read_lmdb_rows<P: AsRef<Path>>(path: P) -> Result<Vec<LmdbRow>, LmdbReadError> {
     let path = path.as_ref();
 
-    // Open LMDB in read-only mode with no-sub-dir (single file, not directory).
-    let env = unsafe {
-        heed::EnvOpenOptions::new()
-            .flags(heed::EnvFlags::NO_SUB_DIR | heed::EnvFlags::READ_ONLY)
-            .open(path)?
-    };
-
-    let rtxn = env.read_txn()?;
-    let db: heed::Database<heed::types::Bytes, heed::types::Bytes> = env
-        .open_database(&rtxn, None)?
-        .expect("default database must exist");
-
-    let mut rows = Vec::new();
-
-    for result in db.iter(&rtxn)? {
-        let (key_bytes, val_bytes) = result?;
-
-        // Keys are ASCII-encoded strings.
-        let key_str = std::str::from_utf8(key_bytes)?;
-
-        // Skip reserved (non-data) keys.
-        if RESERVED_KEYS.contains(&key_str) {
-            continue;
-        }
-
-        // Data keys are integer IDs encoded as ASCII strings.
-        let id: i64 = match key_str.parse() {
-            Ok(id) => id,
-            Err(_) => continue, // Skip any unknown non-integer keys.
+    // --- Phase 1: Fast sequential LMDB cursor scan ---
+    // The LMDB cursor is inherently single-threaded (memory-mapped I/O).
+    // We collect the raw compressed bytes as quickly as possible, then
+    // release the read transaction before doing any heavy processing.
+    let raw_entries = {
+        let env = unsafe {
+            heed::EnvOpenOptions::new()
+                .flags(heed::EnvFlags::NO_SUB_DIR | heed::EnvFlags::READ_ONLY)
+                .open(path)?
         };
 
-        let data = decompress_and_parse(val_bytes)?;
-        rows.push(LmdbRow { id, data });
-    }
+        let rtxn = env.read_txn()?;
+        let db: heed::Database<heed::types::Bytes, heed::types::Bytes> = env
+            .open_database(&rtxn, None)?
+            .expect("default database must exist");
 
-    rtxn.commit()?;
+        let mut entries = Vec::new();
+
+        for result in db.iter(&rtxn)? {
+            let (key_bytes, val_bytes) = result?;
+
+            let key_str = std::str::from_utf8(key_bytes)?;
+
+            // Skip reserved (non-data) keys.
+            if RESERVED_KEYS.contains(&key_str) {
+                continue;
+            }
+
+            // Data keys are integer IDs encoded as ASCII strings.
+            let id: i64 = match key_str.parse() {
+                Ok(id) => id,
+                Err(_) => continue,
+            };
+
+            // Copy compressed bytes out of the memory-mapped region so we
+            // can release the read transaction before parallel decompression.
+            entries.push(RawEntry {
+                id,
+                compressed: val_bytes.to_vec(),
+            });
+        }
+
+        rtxn.commit()?;
+        entries
+    };
+
+    // --- Phase 2: Parallel decompress + JSON parse ---
+    // Each row is decompressed and parsed independently on a Rayon thread.
+    let mut rows: Vec<LmdbRow> = raw_entries
+        .into_par_iter()
+        .map(|entry| {
+            let data = decompress_and_parse(&entry.compressed).map_err(|e| (entry.id, e))?;
+            Ok(LmdbRow { id: entry.id, data })
+        })
+        .collect::<Result<Vec<_>, (i64, LmdbReadError)>>()?;
 
     // Sort by ID for deterministic ordering.
-    rows.sort_by_key(|r| r.id);
+    rows.sort_unstable_by_key(|r| r.id);
 
     Ok(rows)
 }
 
 /// Read rows from multiple `.aselmdb` files in parallel using Rayon.
 ///
-/// Each file is read independently on a Rayon thread. Results are
-/// returned in the same order as the input paths.
+/// Each file is read independently on a Rayon thread.  Within each
+/// file, rows are also decompressed in parallel (nested Rayon
+/// parallelism).  Results are returned in the same order as the
+/// input paths.
 ///
 /// # Arguments
 ///
@@ -299,5 +354,33 @@ mod tests {
     fn test_file_not_found() {
         let result = read_lmdb_rows("/nonexistent/path/file.aselmdb");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_intra_file_parallelism_many_rows() {
+        // Verify correctness with enough rows that Rayon actually
+        // spawns parallel work items (typically > 4).
+        let dir = tempfile::tempdir().unwrap();
+        let rows_data: Vec<(i64, String)> = (1..=32)
+            .map(|i| {
+                (
+                    i,
+                    format!(
+                        r#"{{"numbers": [{}], "positions": {{"__ndarray__": [[1, 3], "float64", [{}.0, 0.0, 0.0]]}}}}"#,
+                        i, i
+                    ),
+                )
+            })
+            .collect();
+        let rows_refs: Vec<(i64, &str)> =
+            rows_data.iter().map(|(id, s)| (*id, s.as_str())).collect();
+        let path = create_test_aselmdb(dir.path(), "many.aselmdb", &rows_refs);
+
+        let rows = read_lmdb_rows(&path).unwrap();
+        assert_eq!(rows.len(), 32);
+        // Verify sorted and correct IDs.
+        for (i, row) in rows.iter().enumerate() {
+            assert_eq!(row.id, (i as i64) + 1);
+        }
     }
 }

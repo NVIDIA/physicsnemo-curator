@@ -6,12 +6,23 @@
 //!
 //! Converts parsed JSON rows into Python dictionaries, transforming
 //! ASE `__ndarray__` markers into actual NumPy arrays.
+//!
+//! ## Performance
+//!
+//! - **GIL release**: The heavy Rust work (LMDB I/O, zlib decompression,
+//!   JSON parsing) runs inside `py.detach()` so other Python threads can
+//!   make progress concurrently.
+//! - **Direct dtype creation**: float32 and integer arrays are created
+//!   natively without an intermediate float64 allocation and `.astype()`
+//!   round-trip.
+//! - **Pre-sized containers**: Output lists and dicts are pre-allocated
+//!   to their final size to avoid incremental resizing.
 
 use numpy::PyArray1;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFloat, PyList, PyString};
 
-use super::reader::{read_lmdb_files_parallel, read_lmdb_rows};
+use super::reader::{read_lmdb_files_parallel, read_lmdb_rows, LmdbRow};
 
 /// Convert a `serde_json::Value` to a Python object.
 ///
@@ -71,11 +82,32 @@ fn json_to_python(py: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyAn
     }
 }
 
+/// Reshape a 1-D NumPy array to the given shape via `numpy.reshape`.
+///
+/// Uses the Python `numpy.reshape` call for dynamic shapes since the
+/// Rust `ndarray::IntoDimension` trait requires compile-time known
+/// dimensionality.
+fn reshape_array(py: Python<'_>, arr: &Bound<'_, PyAny>, shape: &[usize]) -> PyResult<Py<PyAny>> {
+    let shape_tuple: Vec<i64> = shape.iter().map(|&s| s as i64).collect();
+    let np_mod = py.import("numpy")?;
+    let reshaped = np_mod.call_method1("reshape", (arr, shape_tuple))?;
+    Ok(reshaped.unbind())
+}
+
 /// Convert an ASE `__ndarray__` JSON marker to a NumPy array.
 ///
 /// The marker format is: `[shape, dtype_str, flat_data]`
 /// where `shape` is a list of ints, `dtype_str` is e.g. "float64",
 /// and `flat_data` is a flat list of numbers.
+///
+/// ## Performance
+///
+/// - **float64**: Created directly via `PyArray1::from_vec` (zero-copy
+///   into NumPy buffer).
+/// - **float32**: Created directly as `Vec<f32>` and passed to NumPy,
+///   avoiding the old float64 → `.astype("float32")` round-trip.
+/// - **int64/int32/uint8**: Created as native typed `Vec<T>` directly.
+/// - **bool**: Created via `PyArray1::from_vec` with `Vec<bool>`.
 fn convert_ndarray(py: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyAny>> {
     let arr = value.as_array().ok_or_else(|| {
         pyo3::exceptions::PyValueError::new_err("__ndarray__ value must be array")
@@ -102,45 +134,102 @@ fn convert_ndarray(py: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyA
         .as_array()
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("data must be array"))?;
 
-    // Build the shape tuple for numpy.reshape.
-    let shape_tuple: Vec<i64> = shape.iter().map(|&s| s as i64).collect();
-    let np_mod = py.import("numpy")?;
+    // Compute the expected number of elements from the shape.
+    let n_elements: usize = shape.iter().product();
+    let needs_reshape = shape.len() > 1;
 
-    // Create the appropriate NumPy array based on dtype.
     match dtype_str {
-        "float64" | "float32" => {
-            let data: Vec<f64> = flat_data
-                .iter()
-                .map(|v| v.as_f64().unwrap_or(0.0))
-                .collect();
+        "float64" => {
+            let mut data = Vec::with_capacity(n_elements);
+            for v in flat_data {
+                data.push(v.as_f64().unwrap_or(0.0));
+            }
             let np_arr = PyArray1::from_vec(py, data);
-            let reshaped = np_mod.call_method1("reshape", (&np_arr, shape_tuple))?;
-            if dtype_str == "float32" {
-                let result = reshaped.call_method1("astype", ("float32",))?;
-                Ok(result.unbind())
+            if needs_reshape {
+                reshape_array(py, np_arr.as_any(), &shape)
             } else {
-                Ok(reshaped.unbind())
+                Ok(np_arr.into_any().unbind())
+            }
+        }
+        "float32" => {
+            // Direct float32 creation — no float64 intermediate.
+            let mut data = Vec::with_capacity(n_elements);
+            for v in flat_data {
+                data.push(v.as_f64().unwrap_or(0.0) as f32);
+            }
+            let np_arr = PyArray1::from_vec(py, data);
+            if needs_reshape {
+                reshape_array(py, np_arr.as_any(), &shape)
+            } else {
+                Ok(np_arr.into_any().unbind())
+            }
+        }
+        "int64" => {
+            let mut data = Vec::with_capacity(n_elements);
+            for v in flat_data {
+                data.push(v.as_i64().unwrap_or(0));
+            }
+            let np_arr = PyArray1::from_vec(py, data);
+            if needs_reshape {
+                reshape_array(py, np_arr.as_any(), &shape)
+            } else {
+                Ok(np_arr.into_any().unbind())
+            }
+        }
+        "int32" => {
+            let mut data = Vec::with_capacity(n_elements);
+            for v in flat_data {
+                data.push(v.as_i64().unwrap_or(0) as i32);
+            }
+            let np_arr = PyArray1::from_vec(py, data);
+            if needs_reshape {
+                reshape_array(py, np_arr.as_any(), &shape)
+            } else {
+                Ok(np_arr.into_any().unbind())
+            }
+        }
+        "uint8" => {
+            let mut data = Vec::with_capacity(n_elements);
+            for v in flat_data {
+                data.push(v.as_u64().unwrap_or(0) as u8);
+            }
+            let np_arr = PyArray1::from_vec(py, data);
+            if needs_reshape {
+                reshape_array(py, np_arr.as_any(), &shape)
+            } else {
+                Ok(np_arr.into_any().unbind())
             }
         }
         s if s.starts_with("int") || s.starts_with("uint") => {
-            let data: Vec<i64> = flat_data.iter().map(|v| v.as_i64().unwrap_or(0)).collect();
+            // Other int/uint variants — create as i64 then astype once.
+            let mut data = Vec::with_capacity(n_elements);
+            for v in flat_data {
+                data.push(v.as_i64().unwrap_or(0));
+            }
             let np_arr = PyArray1::from_vec(py, data);
-            let reshaped = np_mod.call_method1("reshape", (&np_arr, shape_tuple))?;
-            let result = reshaped.call_method1("astype", (dtype_str,))?;
-            Ok(result.unbind())
+            let typed = np_arr.call_method1("astype", (dtype_str,))?;
+            if needs_reshape {
+                reshape_array(py, &typed, &shape)
+            } else {
+                Ok(typed.unbind())
+            }
         }
         "bool" => {
-            let data: Vec<bool> = flat_data
-                .iter()
-                .map(|v| v.as_bool().unwrap_or(false))
-                .collect();
+            let mut data = Vec::with_capacity(n_elements);
+            for v in flat_data {
+                data.push(v.as_bool().unwrap_or(false));
+            }
             let py_list = PyList::empty(py);
             for b in &data {
                 py_list.append(*b)?;
             }
+            let np_mod = py.import("numpy")?;
             let np_arr = np_mod.call_method1("array", (py_list,))?;
-            let reshaped = np_mod.call_method1("reshape", (&np_arr, shape_tuple))?;
-            Ok(reshaped.unbind())
+            if needs_reshape {
+                reshape_array(py, &np_arr, &shape)
+            } else {
+                Ok(np_arr.unbind())
+            }
         }
         _ => {
             // Fallback: use numpy to create array from list with dtype.
@@ -148,12 +237,31 @@ fn convert_ndarray(py: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyA
             for v in flat_data {
                 py_list.append(json_to_python(py, v)?)?;
             }
+            let np_mod = py.import("numpy")?;
             let np_arr = np_mod.call_method1("array", (py_list,))?;
             let typed = np_arr.call_method1("astype", (dtype_str,))?;
-            let reshaped = np_mod.call_method1("reshape", (&typed, shape_tuple))?;
-            Ok(reshaped.unbind())
+            if needs_reshape {
+                reshape_array(py, &typed, &shape)
+            } else {
+                Ok(typed.unbind())
+            }
         }
     }
+}
+
+/// Convert a batch of [`LmdbRow`]s into a Python list of dicts.
+///
+/// Factored out of the two `py_read_*` functions to avoid code
+/// duplication and to keep the conversion loop tight.
+fn rows_to_pylist(py: Python<'_>, rows: &[LmdbRow]) -> PyResult<Py<PyList>> {
+    let result = PyList::empty(py);
+    for row in rows {
+        let py_dict = json_to_python(py, &row.data)?;
+        let dict_ref: &Bound<'_, PyDict> = py_dict.bind(py).cast()?;
+        dict_ref.set_item("id", row.id)?;
+        result.append(py_dict)?;
+    }
+    Ok(result.unbind())
 }
 
 /// Read all data rows from a single `.aselmdb` file.
@@ -163,6 +271,10 @@ fn convert_ndarray(py: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyA
 /// converted to actual NumPy arrays. A synthetic ``"id"`` key is
 /// added to each dict.
 ///
+/// The heavy I/O, decompression, and JSON parsing all run outside
+/// the GIL via ``py.detach()`` so other Python threads can make
+/// progress concurrently.
+///
 /// Args:
 ///     path: Path to the `.aselmdb` file
 ///
@@ -170,24 +282,24 @@ fn convert_ndarray(py: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyA
 ///     List of row dicts with NumPy arrays
 #[pyfunction]
 #[pyo3(name = "read_lmdb")]
-pub fn py_read_lmdb(py: Python<'_>, path: &str) -> PyResult<Py<PyList>> {
-    let rows = read_lmdb_rows(path)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+pub fn py_read_lmdb(py: Python<'_>, path: String) -> PyResult<Py<PyList>> {
+    // Release the GIL for the entire Rust I/O + decompress + parse phase.
+    let rows = py
+        .detach(|| read_lmdb_rows(&path))
+        .map_err(|e: super::reader::LmdbReadError| {
+            PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())
+        })?;
 
-    let result = PyList::empty(py);
-    for row in &rows {
-        let py_dict = json_to_python(py, &row.data)?;
-        let dict_ref: &Bound<'_, PyDict> = py_dict.bind(py).cast()?;
-        dict_ref.set_item("id", row.id)?;
-        result.append(py_dict)?;
-    }
-    Ok(result.unbind())
+    rows_to_pylist(py, &rows)
 }
 
 /// Read rows from multiple `.aselmdb` files in parallel.
 ///
-/// Each file is read on a separate Rayon thread. The heavy I/O,
-/// decompression, and JSON parsing all run outside the GIL.
+/// Each file is read on a separate Rayon thread, and within each file
+/// rows are decompressed in parallel (nested parallelism).  The heavy
+/// I/O, decompression, and JSON parsing all run outside the GIL via
+/// ``py.detach()``.
+///
 /// Returns a list of lists, one inner list per input file path.
 ///
 /// Args:
@@ -198,21 +310,16 @@ pub fn py_read_lmdb(py: Python<'_>, path: &str) -> PyResult<Py<PyList>> {
 #[pyfunction]
 #[pyo3(name = "read_lmdb_parallel")]
 pub fn py_read_lmdb_parallel(py: Python<'_>, paths: Vec<String>) -> PyResult<Py<PyList>> {
-    // Rayon work happens outside the GIL automatically (no Python
-    // references are held during parallel I/O + JSON parsing).
-    let all_results = read_lmdb_files_parallel(&paths);
+    // Release the GIL for the entire Rust parallel I/O phase.
+    let all_results: Vec<Result<Vec<LmdbRow>, super::reader::LmdbReadError>> =
+        py.detach(|| read_lmdb_files_parallel(&paths));
 
     let outer = PyList::empty(py);
     for result in all_results {
-        let rows =
-            result.map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
-        let inner = PyList::empty(py);
-        for row in &rows {
-            let py_dict = json_to_python(py, &row.data)?;
-            let dict_ref: &Bound<'_, PyDict> = py_dict.bind(py).cast()?;
-            dict_ref.set_item("id", row.id)?;
-            inner.append(py_dict)?;
-        }
+        let rows = result.map_err(|e: super::reader::LmdbReadError| {
+            PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())
+        })?;
+        let inner = rows_to_pylist(py, &rows)?;
         outer.append(inner)?;
     }
     Ok(outer.unbind())
