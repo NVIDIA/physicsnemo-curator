@@ -123,7 +123,7 @@ class TimeProfilingOverhead:
             return 0.0
         return ((profiled_ns - raw_ns) / raw_ns) * 100
 
-    track_overhead_percent.unit = "percent"  # type: ignore[attr-defined]
+    unit = "percent"
 
 
 class MemProfilingOverhead:

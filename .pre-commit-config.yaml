@@ -68,7 +68,7 @@ repos:
     - id: ty
       name: ty (type checking)
       language: system
-      entry: uv run ty check --exclude "examples-old/" --exclude "benchmarks/"
+      entry: uv run ty check --exclude "examples-old/"
       types: [python]
       pass_filenames: false
 

@@ -16,6 +16,7 @@
 
 use pyo3::prelude::*;
 
+mod lmdb;
 mod vtk;
 
 /// Returns the version of the native Rust library.
@@ -29,5 +30,6 @@ fn rust_version() -> &'static str {
 fn _lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rust_version, m)?)?;
     vtk::bindings::register_vtk_module(m)?;
+    lmdb::bindings::register_lmdb_module(m)?;
     Ok(())
 }

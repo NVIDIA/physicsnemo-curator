@@ -106,3 +106,52 @@ def read_vtk_parallel(paths: list[str]) -> list[VTKMesh]:
     This function is accessible via ``_lib.vtk.read_vtk_parallel()``.
     """
     ...
+
+# LMDB submodule functions (accessible via _lib.lmdb.read_lmdb, etc.)
+def read_lmdb(path: str) -> list[dict[str, object]]:
+    """Read all data rows from a single ``.aselmdb`` file.
+
+    Opens the LMDB environment in read-only mode, decompresses each
+    row value (zlib), parses the JSON, and converts ``__ndarray__``
+    markers into actual NumPy arrays.  Returns a list of row dicts
+    sorted by ascending row ID.
+
+    Parameters
+    ----------
+    path : str
+        Path to the ``.aselmdb`` file.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        List of row dictionaries.  Each dict contains the parsed ASE
+        row data with NumPy arrays and a synthetic ``"id"`` key.
+
+    Note
+    ----
+    This function is accessible via ``_lib.lmdb.read_lmdb()``.
+    """
+    ...
+
+def read_lmdb_parallel(paths: list[str]) -> list[list[dict[str, object]]]:
+    """Read rows from multiple ``.aselmdb`` files in parallel.
+
+    Each file is read on a separate Rayon worker thread.  The heavy
+    I/O, decompression, and JSON parsing run outside the GIL.
+
+    Parameters
+    ----------
+    paths : list[str]
+        List of paths to ``.aselmdb`` files.
+
+    Returns
+    -------
+    list[list[dict[str, object]]]
+        Outer list corresponds to input paths (same order); each inner
+        list contains the row dicts for that file.
+
+    Note
+    ----
+    This function is accessible via ``_lib.lmdb.read_lmdb_parallel()``.
+    """
+    ...

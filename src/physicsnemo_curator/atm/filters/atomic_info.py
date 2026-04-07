@@ -118,9 +118,10 @@ def _extract_field_info(data: AtomicData) -> list[_FieldInfo]:
                     )
                 )
 
-    # Extra data fields.
-    if hasattr(data, "extra_data") and data.extra_data:
-        for field_name, val in data.extra_data.items():
+    # Extra data fields (dynamically set via Pydantic extra="allow").
+    extra_data: dict[str, object] | None = getattr(data, "extra_data", None)
+    if extra_data:
+        for field_name, val in extra_data.items():
             if isinstance(val, torch.Tensor):
                 fields.append(
                     _FieldInfo(

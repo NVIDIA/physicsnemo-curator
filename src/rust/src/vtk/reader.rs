@@ -77,7 +77,7 @@ pub fn read_vtk_file<P: AsRef<Path>>(path: P) -> Result<VTKMesh, VTKReadError> {
 pub fn read_vtk_files_parallel<P: AsRef<Path> + Sync>(
     paths: &[P],
 ) -> Vec<Result<VTKMesh, VTKReadError>> {
-    paths.par_iter().map(|p| read_vtk_file(p)).collect()
+    paths.par_iter().map(read_vtk_file).collect()
 }
 
 #[cfg(test)]

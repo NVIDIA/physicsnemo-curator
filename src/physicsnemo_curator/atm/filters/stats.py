@@ -260,9 +260,10 @@ def _extract_atomic_fields(data: AtomicData) -> list[tuple[str, str, torch.Tenso
         if val is not None and isinstance(val, torch.Tensor):
             fields.append((name, "system", val))
 
-    # Also pick up extra_data fields (arbitrary user data).
-    if hasattr(data, "extra_data") and data.extra_data:
-        for name, val in data.extra_data.items():
+    # Also pick up extra_data fields (dynamically set via Pydantic extra="allow").
+    extra_data: dict[str, object] | None = getattr(data, "extra_data", None)
+    if extra_data:
+        for name, val in extra_data.items():
             if isinstance(val, torch.Tensor):
                 fields.append((f"extra/{name}", "extra", val))
 
