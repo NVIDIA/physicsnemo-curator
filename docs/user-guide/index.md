@@ -36,6 +36,7 @@ datasets
 
 parallel
 profiling
+checkpointing
 cli
 ```
 

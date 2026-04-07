@@ -75,11 +75,12 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from physicsnemo_curator.core.base import Pipeline
+    from physicsnemo_curator.core.checkpoint import CheckpointedPipeline
     from physicsnemo_curator.core.profiling import ProfiledPipeline
 
     #: Type alias for objects accepted by :func:`run_pipeline`.
-    #: Both ``Pipeline`` and ``ProfiledPipeline`` are supported.
-    PipelineLike = Pipeline[Any] | ProfiledPipeline[Any]
+    #: ``Pipeline``, ``ProfiledPipeline``, and ``CheckpointedPipeline`` are supported.
+    PipelineLike = Pipeline[Any] | ProfiledPipeline[Any] | CheckpointedPipeline[Any]
 
 # ---------------------------------------------------------------------------
 # Backend Registry
