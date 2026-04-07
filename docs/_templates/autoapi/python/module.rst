@@ -23,11 +23,9 @@
          {% set visible_submodules = obj.submodules|selectattr("display")|list %}
          {% set visible_submodules = (visible_subpackages + visible_submodules)|sort %}
          {% if visible_submodules %}
-Submodules
-----------
 
 .. toctree::
-   :maxdepth: 1
+   :hidden:
 
             {% for submodule in visible_submodules %}
    {{ submodule.include_path }}
