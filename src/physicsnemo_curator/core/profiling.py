@@ -41,14 +41,12 @@ import time
 import tracemalloc
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from physicsnemo_curator.core.base import Filter, Pipeline, Sink, Source
-
-T = TypeVar("T")
 
 
 @dataclass
@@ -319,7 +317,7 @@ class PipelineMetrics:
         print()
 
 
-class _TimedGenerator(Generic[T]):
+class _TimedGenerator[T]:
     """Generator wrapper that accumulates wall-clock time across ``__next__`` calls.
 
     This is used internally by :class:`ProfiledPipeline` to attribute time
@@ -374,7 +372,7 @@ class _TimedGenerator(Generic[T]):
         return value
 
 
-class ProfiledPipeline(Generic[T]):
+class ProfiledPipeline[T]:
     """Transparent profiling wrapper around :class:`~physicsnemo_curator.core.base.Pipeline`.
 
     Duck-type compatible with ``Pipeline`` — exposes ``source``, ``filters``,

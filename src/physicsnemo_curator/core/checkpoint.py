@@ -47,7 +47,7 @@ import logging
 import sqlite3
 import time
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any
 
 from physicsnemo_curator.core.base import REQUIRED, Filter, Sink, Source
 
@@ -57,8 +57,6 @@ if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar("T")
 
 # ---------------------------------------------------------------------------
 # SQL schema
@@ -203,7 +201,7 @@ def _config_hash(config: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-class CheckpointedPipeline(Generic[T]):
+class CheckpointedPipeline[T]:
     """Transparent checkpointing wrapper around :class:`~physicsnemo_curator.core.base.Pipeline`.
 
     Duck-type compatible with ``Pipeline`` — exposes ``source``, ``filters``,
