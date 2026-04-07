@@ -1,0 +1,150 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Build & Install
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# ---------------------------------------------------------------------------
+# Matrix: OS × Python version
+#
+# The package includes a Rust/PyO3 native extension built with maturin.
+# The PyO3 ABI3 stable ABI targets Python 3.12+, so we test 3.12 and 3.13.
+# We test on Ubuntu and Windows to cover Linux and Windows platforms.
+# ---------------------------------------------------------------------------
+
+jobs:
+  # ── Build wheel and verify install ──────────────────────────────────────
+  build-wheel:
+    name: "Wheel / ${{ matrix.os }} / py${{ matrix.python-version }}"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Install build tools
+        run: pip install maturin>=1.0
+
+      - name: Build wheel
+        run: maturin build --release --manifest-path src/rust/Cargo.toml --out dist
+
+      - name: Install wheel
+        shell: bash
+        run: pip install dist/physicsnemo_curator-*.whl
+
+      - name: Verify import
+        run: |
+          python -c "import physicsnemo_curator; print(f'OK: {physicsnemo_curator.__name__}')"
+          python -c "from physicsnemo_curator._lib import vtk; print('OK: Rust extension loaded')"
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: dist/*.whl
+          retention-days: 7
+
+  # ── tox: multi-version test matrix ──────────────────────────────────────
+  tox-test:
+    name: "Tox / ${{ matrix.os }} / py${{ matrix.python-version }}"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Run tox
+        shell: bash
+        run: |
+          # Convert "3.12" -> "py312", "3.13" -> "py313"
+          TOX_ENV="py$(echo '${{ matrix.python-version }}' | tr -d '.')"
+          tox -e "$TOX_ENV"
+
+      - name: Run import smoke test
+        run: tox -e build
+
+  # ── sdist: verify source distribution builds ────────────────────────────
+  build-sdist:
+    name: "Source dist / Ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Install build tools
+        run: pip install maturin>=1.0 build
+
+      - name: Build source distribution
+        run: python -m build --sdist
+
+      - name: Install from sdist
+        shell: bash
+        run: pip install dist/physicsnemo_curator-*.tar.gz
+
+      - name: Verify import
+        run: |
+          python -c "import physicsnemo_curator; print(f'OK: {physicsnemo_curator.__name__}')"
+          python -c "from physicsnemo_curator._lib import vtk; print('OK: Rust extension loaded')"
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          retention-days: 7
