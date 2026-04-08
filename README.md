@@ -11,7 +11,7 @@
 [![Lint](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml)
 [![Build & Install](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/build.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/build.yml)
 [![Docs](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml)
-[![Coverage](https://img.shields.io/codecov/c/github/nvidia/physicsnemo-curator?style=flat-square&logo=codecov)](/test)
+[![Coverage](https://img.shields.io/codecov/c/github/nvidia/physicsnemo-curator?logo=codecov)](/test)
 
 <!-- markdownlint-enable MD013 MD033 -->
 
