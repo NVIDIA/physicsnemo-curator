@@ -47,6 +47,9 @@ jobs:
       - name: Build native extension
         run: uv run maturin develop --release
 
+      - name: Patch namespace package
+        run: bash .github/scripts/patch_namespace.sh
+
       - name: Download previous ASV results
         continue-on-error: true
         uses: dawidd6/action-download-artifact@v6

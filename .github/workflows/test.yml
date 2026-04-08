@@ -107,6 +107,9 @@ jobs:
       - name: Build native extension
         run: uv run maturin develop
 
+      - name: Patch namespace package
+        run: bash .github/scripts/patch_namespace.sh
+
       - name: Verify mesh deps available
         run: >
           uv run python -c
@@ -158,6 +161,9 @@ jobs:
       - name: Build native extension
         run: uv run maturin develop
 
+      - name: Patch namespace package
+        run: bash .github/scripts/patch_namespace.sh
+
       - name: Verify da deps available
         run: >
           uv run python -c
@@ -207,6 +213,9 @@ jobs:
 
       - name: Build native extension
         run: uv run maturin develop
+
+      - name: Patch namespace package
+        run: bash .github/scripts/patch_namespace.sh
 
       - name: Verify atm deps available
         run: >
