@@ -12,7 +12,7 @@
 [![Docs](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml)
 [![Lint](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml)
 [![Test](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/test.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/test.yml)
-[![Coverage](https://img.shields.io/codecov/c/github/nvidia/physicsnemo-curator?logo=codecov)](/test)
+[![Coverage](https://img.shields.io/codecov/c/github/nvidia/physicsnemo-curator/refactor?logo=codecov)](https://codecov.io/gh/NVIDIA/physicsnemo-curator/branch/refactor)
 
 <!-- markdownlint-enable MD013 MD033 -->
 

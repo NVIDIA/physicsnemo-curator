@@ -7,8 +7,16 @@ name: Test
 on:
   push:
     branches: [main, refactor]
+    paths:
+      - "src/**"
+      - "test/**"
+      - "pyproject.toml"
   pull_request:
     branches: [main, refactor]
+    paths:
+      - "src/**"
+      - "test/**"
+      - "pyproject.toml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
