@@ -1,0 +1,4 @@
+/* Hide the external-link icon on the Benchmarks navbar entry. */
+.navbar-nav a.nav-link.nav-external[href*="benchmarks"]::after {
+    display: none !important;
+}

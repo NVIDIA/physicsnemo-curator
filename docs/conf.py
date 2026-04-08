@@ -109,6 +109,7 @@ intersphinx_mapping = {
 # ---------------------------------------------------------------------------
 html_theme = "nvidia_sphinx_theme"
 html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 html_extra_path = ["_extra"]  # placeholder benchmarks page; CI overwrites with real ASV dashboard
 templates_path = ["_templates"]
 
