@@ -12,10 +12,11 @@
         "python {build_dir}/benchmarks/asv_build.py"
     ],
     "install_command": [
-        "in_dir={build_dir} python -m pip install --no-build-isolation -e {build_dir}"
+        "in_dir={build_dir} python -m pip install --no-build-isolation -e {build_dir}[mesh,atm]"
     ],
 
     "matrix": {
+        "numpy": [],
         "fsspec": []
     },
 
