@@ -123,6 +123,7 @@ name = "nvalchemi-toolkit"
 version = "0.1.0"
 requires-dist = [
     "ase>=3.27.0",
+    "nvalchemi-toolkit-ops[torch]>=0.3.0",
     "torch>=2.5.1",
     "loguru",
     "numpy",
@@ -135,9 +136,21 @@ requires-dist = [
     "periodictable==2.0.2",
 ]
 
+# nvalchemi-toolkit-ops is a private NVIDIA package not on PyPI.
+[[tool.uv.dependency-metadata]]
+name = "nvalchemi-toolkit-ops"
+version = "0.3.0"
+requires-dist = [
+    "warp-lang>=1.10.0",
+    "numpy",
+    "torch>=2.8.0; extra == 'torch'",
+]
+provides-extras = ["torch"]
+
 [tool.uv.sources]
 nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo" }
 nvalchemi-toolkit = { git = "https://github.com/NVIDIA/nvalchemi-toolkit" }
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops" }
 
 # ---------------------------------------------------------------------------
 # ty (type checking)

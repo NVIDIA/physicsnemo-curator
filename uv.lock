@@ -13,7 +13,13 @@ resolution-markers = [
 [[manifest.dependency-metadata]]
 name = "nvalchemi-toolkit"
 version = "0.1.0"
-requires-dist = ["ase>=3.27.0", "torch>=2.5.1", "loguru", "numpy", "jaxtyping>=0.3.2", "tensordict>=0.11.0", "pydantic>=2.11.7", "dm-tree>=0.1.8", "plum-dispatch>=2.5.7", "zarr>=3", "periodictable==2.0.2"]
+requires-dist = ["ase>=3.27.0", "nvalchemi-toolkit-ops[torch]>=0.3.0", "torch>=2.5.1", "loguru", "numpy", "jaxtyping>=0.3.2", "tensordict>=0.11.0", "pydantic>=2.11.7", "dm-tree>=0.1.8", "plum-dispatch>=2.5.7", "zarr>=3", "periodictable==2.0.2"]
+
+[[manifest.dependency-metadata]]
+name = "nvalchemi-toolkit-ops"
+version = "0.3.0"
+requires-dist = ["warp-lang>=1.10.0", "numpy", "torch>=2.8.0 ; extra == 'torch'"]
+provides-extras = ["torch"]
 
 [[manifest.dependency-metadata]]
 name = "nvidia-physicsnemo"
@@ -3216,12 +3222,30 @@ dependencies = [
     { name = "jaxtyping" },
     { name = "loguru" },
     { name = "numpy" },
+    { name = "nvalchemi-toolkit-ops", extra = ["torch"] },
     { name = "periodictable" },
     { name = "plum-dispatch" },
     { name = "pydantic" },
     { name = "tensordict" },
     { name = "torch" },
     { name = "zarr" },
+]
+
+[[package]]
+name = "nvalchemi-toolkit-ops"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "warp-lang" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/a6/b051bda85ee516ff5adb6149a415c7a390485375859af29e14ac7b711a2a/nvalchemi_toolkit_ops-0.3.0-py3-none-any.whl", hash = "sha256:0847509a0279dbb950b9dfc6830dbda098db7ec78f357914100ca13f4ff5f0e8", size = 449100, upload-time = "2026-03-16T17:11:14.212Z" },
+]
+
+[package.optional-dependencies]
+torch = [
+    { name = "torch" },
 ]
 
 [[package]]
