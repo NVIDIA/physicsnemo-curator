@@ -42,6 +42,14 @@ jobs:
       - name: Build Sphinx documentation
         run: uv run --group docs sphinx-build docs docs/_build/html -W --keep-going
 
+      - name: Download benchmark dashboard
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          name: benchmark-dashboard
+          path: docs/_build/html/benchmarks
+          workflow: benchmark.yml
+          if_no_artifact_found: warn
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

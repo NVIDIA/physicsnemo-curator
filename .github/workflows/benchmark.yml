@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Benchmark
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # Nightly at 03:00 UTC
+  workflow_dispatch: # Manual trigger
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  asv:
+    name: "ASV benchmarks"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # ASV needs full git history
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Install dependencies
+        run: uv sync --group dev --extra mesh --extra atm
+
+      - name: Build native extension
+        run: uv run maturin develop --release
+
+      - name: Download previous ASV results
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          name: benchmark-results
+          path: .asv/results
+          workflow: benchmark.yml
+          if_no_artifact_found: warn
+
+      - name: Run ASV benchmarks
+        run: uv run asv run --quick NEW || uv run asv run --quick HEAD^!
+
+      - name: Publish ASV HTML dashboard
+        run: uv run asv publish
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: .asv/results
+          retention-days: 90
+          overwrite: true
+
+      - name: Upload HTML dashboard artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-dashboard
+          path: .asv/html
+          retention-days: 90
+          overwrite: true

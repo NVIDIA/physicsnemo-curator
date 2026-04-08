@@ -135,21 +135,21 @@ uv run asv find v0.1.0..HEAD TimePipelineIteration.time_iterate_all
 uv run asv show HEAD
 ```
 
-### Publishing Results
+### Live Dashboard
+
+The ASV benchmark dashboard is published automatically to GitHub Pages by the
+nightly CI workflow. View it at:
+
+> **<https://nvidia.github.io/physicsnemo-curator/benchmarks/>**
+
+The dashboard updates each night with the latest results. You can also trigger
+a run manually from the **Actions → Benchmark** tab using `workflow_dispatch`.
+
+To preview locally after running benchmarks:
 
 ```bash
-# Build the static HTML dashboard
-make asv-publish
-
-# Preview locally
-make asv-preview
-```
-
-The dashboard is a standalone HTML/JS application. For public hosting, push to
-GitHub Pages:
-
-```bash
-uv run asv gh-pages
+make asv-publish   # Build static HTML from .asv/results
+make asv-preview   # Serve at http://localhost:8080
 ```
 
 ### Configuration
