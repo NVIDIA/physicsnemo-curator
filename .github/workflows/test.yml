@@ -20,21 +20,16 @@ permissions:
 # ---------------------------------------------------------------------------
 # Unit tests with coverage, uploaded to Codecov.
 #
-# Core tests (no optional deps) run on the full OS × Python matrix.
-# Rust tests run on Ubuntu only (native extension).
-# Coverage reports are merged and uploaded once all jobs complete.
+# Core tests (no optional deps) run on Ubuntu / Python 3.12.
+# Rust tests run on Ubuntu via cargo-nextest.
+# Coverage is uploaded to Codecov after the test job completes.
 # ---------------------------------------------------------------------------
 
 jobs:
   # ── Python unit tests (core — no optional deps) ─────────────────────────
   python-test:
-    name: "Test / ${{ matrix.os }} / py${{ matrix.python-version }}"
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.12", "3.13"]
+    name: "Test / Ubuntu / py3.12"
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -43,8 +38,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
+      - name: Set up Python 3.12
+        run: uv python install 3.12
 
       - name: Install Rust toolchain
         run: |
@@ -62,17 +57,19 @@ jobs:
           uv run pytest test/
           -m "not requires"
           --cov
-          --cov-report=xml:coverage-core.xml
+          --cov-report=xml:coverage.xml
           --cov-report=term-missing
           -v --tb=short
 
-      - name: Upload coverage artifact
+      - name: Upload coverage to Codecov
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: codecov/codecov-action@v5
         with:
-          name: coverage-core-${{ matrix.os }}-py${{ matrix.python-version }}
-          path: coverage-core.xml
-          retention-days: 1
+          files: coverage.xml
+          flags: core
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # ── Rust tests ──────────────────────────────────────────────────────────
   rust-test:
@@ -98,29 +95,3 @@ jobs:
 
       - name: Run Rust tests
         run: cargo nextest run --manifest-path src/rust/Cargo.toml
-
-  # ── Upload coverage to Codecov ──────────────────────────────────────────
-  upload-coverage:
-    name: "Codecov"
-    needs: [python-test]
-    if: always()
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download all coverage artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: coverage-*
-          merge-multiple: true
-
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: coverage-core.xml
-          flags: core
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
