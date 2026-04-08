@@ -19,7 +19,7 @@ Creating a Custom Source
 =========================
 
 This example shows how to implement and register a custom
-:class:`~physicsnemo_curator.core.base.Source`.
+:class:`~physicsnemo.curator.core.base.Source`.
 
 We create a ``CylinderFlowSource`` that reads the `Navier-Stokes
 Cylinder <https://huggingface.co/datasets/SISSAmathLab/navier-stokes-cylinder>`_
@@ -42,7 +42,7 @@ has velocity (x, y) and pressure fields on a shared triangular mesh.
 # Step 1 — Define the Source
 # ---------------------------
 #
-# A source inherits from :class:`~physicsnemo_curator.core.base.Source`
+# A source inherits from :class:`~physicsnemo.curator.core.base.Source`
 # and implements four things:
 #
 # 1. ``name`` / ``description`` class variables
@@ -62,7 +62,7 @@ import torch
 from physicsnemo.mesh import Mesh
 from tensordict import TensorDict
 
-from physicsnemo_curator.core.base import Param, Source
+from physicsnemo.curator.core.base import Param, Source
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -221,7 +221,7 @@ class CylinderFlowSource(Source["Mesh"]):
 # Registration makes the source discoverable via the global registry
 # and the interactive CLI.
 
-from physicsnemo_curator.core.registry import registry
+from physicsnemo.curator.core.registry import registry
 
 registry.register_source("mesh", CylinderFlowSource)
 
@@ -235,9 +235,9 @@ assert "Cylinder Flow (Custom)" in registered
 #
 # The custom source works with any compatible filter and sink.
 
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo.curator.mesh.filters.mean import MeanFilter
+from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo.curator.run import run_pipeline
 
 source = CylinderFlowSource()
 print(f"Simulations available: {len(source)}")
@@ -277,7 +277,7 @@ print(f"  Global fields: {list(mesh.global_data.keys())}")
 #
 # To create a custom source:
 #
-# 1. Subclass :class:`~physicsnemo_curator.core.base.Source` with a
+# 1. Subclass :class:`~physicsnemo.curator.core.base.Source` with a
 #    type parameter (``Source["Mesh"]``, ``Source["xr.DataArray"]``,
 #    etc.)
 # 2. Set ``name`` and ``description`` class variables

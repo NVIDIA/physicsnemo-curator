@@ -19,9 +19,9 @@ VTK Backend Profiling: PyVista vs Rust
 =======================================
 
 This example demonstrates the built-in
-:class:`~physicsnemo_curator.core.profiling.ProfiledPipeline` utility and
+:class:`~physicsnemo.curator.core.profiling.ProfiledPipeline` utility and
 compares the two VTK reading backends available in
-:class:`~physicsnemo_curator.mesh.sources.vtk.VTKSource`:
+:class:`~physicsnemo.curator.mesh.sources.vtk.VTKSource`:
 
 - **PyVista** (default): full-featured Python reader supporting all VTK
   formats, manifold dimensions, and point-source modes.
@@ -43,21 +43,21 @@ per-stage timing breakdown so you can see exactly where time is spent.
 # Imports
 # -------
 #
-# We need :class:`~physicsnemo_curator.mesh.sources.vtk.VTKSource` (which
+# We need :class:`~physicsnemo.curator.mesh.sources.vtk.VTKSource` (which
 # exposes the ``backend`` parameter), a filter, a sink, and the
-# :class:`~physicsnemo_curator.core.profiling.ProfiledPipeline` wrapper.
+# :class:`~physicsnemo.curator.core.profiling.ProfiledPipeline` wrapper.
 
-from physicsnemo_curator.core.profiling import ProfiledPipeline
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo.curator.core.profiling import ProfiledPipeline
+from physicsnemo.curator.mesh.filters.precision import PrecisionFilter
+from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo.curator.mesh.sources.vtk import VTKSource
+from physicsnemo.curator.run import run_pipeline
 
 # %%
 # Configure the Sources
 # ---------------------
 #
-# We create two :class:`~physicsnemo_curator.mesh.sources.vtk.VTKSource`
+# We create two :class:`~physicsnemo.curator.mesh.sources.vtk.VTKSource`
 # instances reading the same DrivAerML boundary VTP files from
 # HuggingFace Hub — one using PyVista, the other using the Rust backend.
 #
@@ -95,7 +95,7 @@ pyvista_pipeline = pyvista_source.filter(PrecisionFilter(target_dtype="float32")
 # Wrap with ProfiledPipeline
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# :class:`~physicsnemo_curator.core.profiling.ProfiledPipeline` is a
+# :class:`~physicsnemo.curator.core.profiling.ProfiledPipeline` is a
 # transparent proxy — it passes through to the real pipeline while
 # recording wall-clock time, memory usage, and optional GPU metrics for
 # every stage.
@@ -177,7 +177,7 @@ if rust_total_ms > 0:
 # Export Metrics
 # --------------
 #
-# :class:`~physicsnemo_curator.core.profiling.PipelineMetrics` supports
+# :class:`~physicsnemo.curator.core.profiling.PipelineMetrics` supports
 # three export formats for further analysis:
 #
 # - **JSON**: full per-index, per-stage breakdown.

@@ -25,9 +25,9 @@ if TYPE_CHECKING:
 
 import pytest
 
-from physicsnemo_curator.core.base import Filter, Param, Sink, Source
-from physicsnemo_curator.core.profiling import ProfiledPipeline
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo.curator.core.base import Filter, Param, Sink, Source
+from physicsnemo.curator.core.profiling import ProfiledPipeline
+from physicsnemo.curator.run import run_pipeline
 
 pytestmark = pytest.mark.integration
 

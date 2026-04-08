@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration tests for :mod:`physicsnemo_curator.run` backends.
+"""Integration tests for :mod:`physicsnemo.curator.run` backends.
 
 These tests execute actual pipelines using each backend to verify
 correct behavior in realistic scenarios.
@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 
 import pytest
 
-from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
-from physicsnemo_curator.run import _pick_auto_backend, run_pipeline
+from physicsnemo.curator.core.base import Filter, Param, Pipeline, Sink, Source
+from physicsnemo.curator.run import _pick_auto_backend, run_pipeline
 
 pytestmark = pytest.mark.integration
 

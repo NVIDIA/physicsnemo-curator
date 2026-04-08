@@ -52,20 +52,20 @@ References
 # Import the core pipeline components: a **Source** to read ASE LMDB
 # files, a **Filter** to compute field statistics, a **Sink** to write
 # AtomicData to a Zarr store, and
-# :func:`~physicsnemo_curator.run.run_pipeline` for parallel execution.
+# :func:`~physicsnemo.curator.run.run_pipeline` for parallel execution.
 
 import pyarrow.parquet as pq
 
-from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
-from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
-from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
-from physicsnemo_curator.run import gather_pipeline, run_pipeline
+from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
+from physicsnemo.curator.atm.sinks.zarr_writer import AtomicDataZarrSink
+from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+from physicsnemo.curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
 # --------------------
 #
-# :class:`~physicsnemo_curator.atm.sources.aselmdb.ASELMDBSource`
+# :class:`~physicsnemo.curator.atm.sources.aselmdb.ASELMDBSource`
 # discovers all ``.aselmdb`` files in a directory, sorted
 # lexicographically.  Each file corresponds to one source index and
 # may contain thousands of atomic structures.
@@ -90,17 +90,17 @@ if source.metadata is not None:
 # ------------------
 #
 # The fluent API chains **Source → Filter → Sink** into a lazy
-# :class:`~physicsnemo_curator.core.base.Pipeline`.  Nothing is
+# :class:`~physicsnemo.curator.core.base.Pipeline`.  Nothing is
 # executed until we explicitly process indices.
 #
-# - :class:`~physicsnemo_curator.atm.filters.stats.AtomicStatsFilter`
+# - :class:`~physicsnemo.curator.atm.filters.stats.AtomicStatsFilter`
 #   examines each :class:`~nvalchemi.data.AtomicData` and accumulates
 #   per-field, per-component statistics using Welford's online algorithm.
 #   Fields are grouped by level (node, edge, system) and include
 #   ``positions``, ``forces``, ``energies``, ``atomic_numbers``, and
 #   any extra data attached to the structures.  The filter is
 #   **pass-through** — each item is yielded unchanged.
-# - :class:`~physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrSink`
+# - :class:`~physicsnemo.curator.atm.sinks.zarr_writer.AtomicDataZarrSink`
 #   collects items into batches (default 1000) and writes them to a
 #   structured Zarr store using ``AtomicDataZarrWriter``.  Multiple
 #   pipeline indices append to the **same** store.
@@ -113,7 +113,7 @@ pipeline = source.filter(AtomicStatsFilter(output="outputs/omol25/stats.parquet"
 # Run in Parallel
 # ---------------
 #
-# :func:`~physicsnemo_curator.run.run_pipeline` dispatches work to a
+# :func:`~physicsnemo.curator.run.run_pipeline` dispatches work to a
 # ``process_pool`` backend.  We pass ``indices=range(2)`` to process
 # only the first 2 LMDB files (each containing many structures).
 #
@@ -146,7 +146,7 @@ for i, paths in enumerate(results):
 #
 # When running in parallel, each worker writes per-index shard files for
 # the stateful statistics filter.
-# :func:`~physicsnemo_curator.run.gather_pipeline` discovers those shards,
+# :func:`~physicsnemo.curator.run.gather_pipeline` discovers those shards,
 # merges them using the parallel Welford algorithm (Chan et al., 1979),
 # and writes a single consolidated Parquet file.
 
@@ -190,7 +190,7 @@ print(f"Levels: {set(table.column('level').to_pylist())}")
 # ---------------------
 #
 # For large-scale runs (all 80 LMDB files), wrap the pipeline with
-# :class:`~physicsnemo_curator.core.checkpoint.CheckpointedPipeline`
+# :class:`~physicsnemo.curator.core.checkpoint.CheckpointedPipeline`
 # to enable restart from where you left off.  Create a checkpoint with
 # ``CheckpointedPipeline(pipeline, db_path="outputs/omol25/etl.db")``,
 # then pass it to ``run_pipeline`` as usual.  On restart, completed

@@ -60,7 +60,7 @@ For modified files, also read the base version to understand what changed.
 ### Step 1: API Conformance (P0)
 
 Check every new or modified Source, Filter, or Sink against the ABCs in
-`src/physicsnemo_curator/core/base.py`.
+`src/physicsnemo/curator/core/base.py`.
 
 **Source[T] checklist:**
 
@@ -185,7 +185,7 @@ Evaluate testing adequacy:
 Run coverage on affected test files if feasible:
 
 ```bash
-uv run pytest test/<domain>/<test_file> --cov=src/physicsnemo_curator/<module> --cov-report=term-missing
+uv run pytest test/<domain>/<test_file> --cov=src/physicsnemo/curator/<module> --cov-report=term-missing
 ```
 
 Missing tests for public API surfaces are **P1**. Missing edge case tests

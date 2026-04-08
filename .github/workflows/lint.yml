@@ -177,7 +177,7 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --group dev
       - name: Docstring coverage (interrogate >= 99%)
-        run: uv run interrogate src/physicsnemo_curator
+        run: uv run interrogate src/physicsnemo/curator
 
   # ── License ─────────────────────────────────────────────────────────────
   license-headers:

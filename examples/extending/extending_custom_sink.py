@@ -19,7 +19,7 @@ Creating a Custom Sink
 =======================
 
 This example shows how to implement and register a custom
-:class:`~physicsnemo_curator.core.base.Sink`.
+:class:`~physicsnemo.curator.core.base.Sink`.
 
 We create an ``HDF5Sink`` that writes :class:`xarray.DataArray` fields
 to HDF5 files — one file per source index, with each variable stored
@@ -38,7 +38,7 @@ written files.
 # Step 1 — Define the Sink
 # -------------------------
 #
-# A sink inherits from :class:`~physicsnemo_curator.core.base.Sink` and
+# A sink inherits from :class:`~physicsnemo.curator.core.base.Sink` and
 # implements three things:
 #
 # 1. ``name`` / ``description`` class variables
@@ -51,7 +51,7 @@ from __future__ import annotations
 import pathlib
 from typing import TYPE_CHECKING, ClassVar
 
-from physicsnemo_curator.core.base import Param, Sink
+from physicsnemo.curator.core.base import Param, Sink
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -177,7 +177,7 @@ class HDF5Sink(Sink["xr.DataArray"]):
 #
 # Registration makes the sink discoverable in the global registry.
 
-from physicsnemo_curator.core.registry import registry
+from physicsnemo.curator.core.registry import registry
 
 registry.register_sink("da", HDF5Sink)
 
@@ -195,8 +195,8 @@ assert "HDF5 Writer" in registered
 
 from datetime import datetime
 
-from physicsnemo_curator.da.sources.era5 import ERA5Source
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo.curator.da.sources.era5 import ERA5Source
+from physicsnemo.curator.run import run_pipeline
 
 source = ERA5Source(
     times=[datetime(2020, 6, 1, 0), datetime(2020, 6, 1, 6)],
@@ -241,7 +241,7 @@ with h5py.File(first_path, "r") as f:
 #
 # To create a custom sink:
 #
-# 1. Subclass :class:`~physicsnemo_curator.core.base.Sink` with a
+# 1. Subclass :class:`~physicsnemo.curator.core.base.Sink` with a
 #    type parameter (``Sink["xr.DataArray"]``, ``Sink["Mesh"]``, etc.)
 # 2. Set ``name`` and ``description`` class variables
 # 3. Implement ``params()`` and ``__call__(items, index) -> list[str]``
@@ -250,4 +250,4 @@ with h5py.File(first_path, "r") as f:
 # 6. Optionally register with ``registry.register_sink()``
 #
 # For **append** semantics (multiple indices writing to the same file),
-# see :class:`~physicsnemo_curator.da.sinks.zarr_writer.ZarrSink`.
+# see :class:`~physicsnemo.curator.da.sinks.zarr_writer.ZarrSink`.

@@ -24,7 +24,7 @@ Required packages: ``nvalchemi``, ``ase>=3.26.0``, ``ase-db-backends>=0.10.0``,
 
 ### ASELMDBSource
 
-{class}`~physicsnemo_curator.atm.sources.aselmdb.ASELMDBSource` reads
+{class}`~physicsnemo.curator.atm.sources.aselmdb.ASELMDBSource` reads
 `.aselmdb` database files produced by
 [ASE database backends](https://github.com/NVIDIA/ase-db-backends) and
 yields {class}`~nvalchemi.data.AtomicData` instances.
@@ -36,7 +36,7 @@ iterates over every row in that database, converting each
 files yields 80 indices, each producing thousands of atomic structures.
 
 ```python
-from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
 
 source = ASELMDBSource(data_dir="./val/")
 print(f"{len(source)} database files")  # 80
@@ -74,7 +74,7 @@ simulation (``natoms``) and data identifiers (``data_ids``).
 
 ### AtomicStatsFilter
 
-{class}`~physicsnemo_curator.atm.filters.stats.AtomicStatsFilter` computes
+{class}`~physicsnemo.curator.atm.filters.stats.AtomicStatsFilter` computes
 comprehensive per-field statistics for every tensor field in an
 {class}`~nvalchemi.data.AtomicData` object.  It is a **pass-through** filter
 — items are yielded unchanged for downstream consumption.
@@ -85,7 +85,7 @@ statistics (mean, std, min, max, skewness, kurtosis, etc.) and Welford
 accumulator state for exact cross-worker aggregation.
 
 ```python
-from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
 stats = AtomicStatsFilter(output="stats.parquet")
 pipeline = source.filter(stats).write(sink)
@@ -133,13 +133,13 @@ row per component.  Higher-rank tensors (e.g. `stresses` with shape
 
 When running with multiple workers, each worker writes a shard Parquet file.
 The static method {meth}`AtomicStatsFilter.merge` (and the public function
-{func}`~physicsnemo_curator.atm.filters.stats.merge_welford_stats`) combine
+{func}`~physicsnemo.curator.atm.filters.stats.merge_welford_stats`) combine
 shards using Chan's parallel Welford algorithm — producing exact aggregate
 statistics without re-reading raw data.
 
 ### AtomicDataZarrSink
 
-{class}`~physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrSink`
+{class}`~physicsnemo.curator.atm.sinks.zarr_writer.AtomicDataZarrSink`
 writes {class}`~nvalchemi.data.AtomicData` objects to a structured Zarr
 store using
 {class}`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter`.
@@ -150,7 +150,7 @@ from different pipeline indices) **append** to the same store, producing a
 single consolidated output.
 
 ```python
-from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
+from physicsnemo.curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
 sink = AtomicDataZarrSink(
     output_path="output.zarr",
@@ -182,10 +182,10 @@ concatenated per-atom and per-system arrays.
 ## Full Pipeline Example
 
 ```python
-from physicsnemo_curator import run_pipeline
-from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
-from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
-from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+from physicsnemo.curator import run_pipeline
+from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
+from physicsnemo.curator.atm.sinks.zarr_writer import AtomicDataZarrSink
+from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
 
 # 1. Source — read .aselmdb files from a local directory
 source = ASELMDBSource(data_dir="./val/")

@@ -162,11 +162,11 @@ The CLI uses a consistent color scheme throughout:
 Everything the CLI does can be done in Python:
 
 ```python
-from physicsnemo_curator import run_pipeline
-from physicsnemo_curator.core.store import LocalFileStore
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo.curator import run_pipeline
+from physicsnemo.curator.core.store import LocalFileStore
+from physicsnemo.curator.mesh.sources.vtk import VTKSource
+from physicsnemo.curator.mesh.filters.mean import MeanFilter
+from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
 
 store = LocalFileStore("./cfd_results/")
 pipeline = (

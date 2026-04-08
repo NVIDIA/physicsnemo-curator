@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for :mod:`physicsnemo_curator.run` — base classes and configuration."""
+"""Unit tests for :mod:`physicsnemo.curator.run` — base classes and configuration."""
 
 from __future__ import annotations
 
@@ -22,11 +22,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import pytest
 
-from physicsnemo_curator.run import RunConfig, list_backends, register_backend
-from physicsnemo_curator.run.base import RunBackend
+from physicsnemo.curator.run import RunConfig, list_backends, register_backend
+from physicsnemo.curator.run.base import RunBackend
 
 if TYPE_CHECKING:
-    from physicsnemo_curator.core.base import Pipeline
+    from physicsnemo.curator.core.base import Pipeline
 
 pytestmark = pytest.mark.unit
 
@@ -161,25 +161,25 @@ class TestImports:
 
     def test_import_from_core(self):
         """run_pipeline should be importable from core."""
-        from physicsnemo_curator.core import run_pipeline as rp
+        from physicsnemo.curator.core import run_pipeline as rp
 
         assert callable(rp)
 
     def test_import_from_top_level(self):
         """run_pipeline should be importable from top-level."""
-        from physicsnemo_curator import run_pipeline as rp
+        from physicsnemo.curator import run_pipeline as rp
 
         assert callable(rp)
 
     def test_import_from_run_module(self):
         """run_pipeline should be importable from run module."""
-        from physicsnemo_curator.run import run_pipeline as rp
+        from physicsnemo.curator.run import run_pipeline as rp
 
         assert callable(rp)
 
     def test_import_backend_classes(self):
         """Backend classes should be importable."""
-        from physicsnemo_curator.run import (
+        from physicsnemo.curator.run import (
             DaskBackend,
             LokyBackend,
             PrefectBackend,

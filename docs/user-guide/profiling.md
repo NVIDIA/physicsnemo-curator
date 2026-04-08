@@ -8,7 +8,7 @@ your pipeline or backend configuration.
 ## Quick Start
 
 ```python
-from physicsnemo_curator import Pipeline, ProfiledPipeline, run_pipeline
+from physicsnemo.curator import Pipeline, ProfiledPipeline, run_pipeline
 
 # Wrap any existing pipeline
 profiled = ProfiledPipeline(pipeline)
@@ -125,7 +125,7 @@ profiled.cleanup()
 ## Full Example
 
 ```python
-from physicsnemo_curator import Pipeline, ProfiledPipeline, run_pipeline
+from physicsnemo.curator import Pipeline, ProfiledPipeline, run_pipeline
 
 # Build a pipeline
 pipeline = (

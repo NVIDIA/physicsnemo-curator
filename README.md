@@ -77,11 +77,11 @@ uv run pre-commit install
 ### Quick Start
 
 ```python
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.mesh.filters.stats import StatsFilter
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo.curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo.curator.mesh.filters.stats import StatsFilter
+from physicsnemo.curator.mesh.filters.precision import PrecisionFilter
+from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo.curator.run import run_pipeline
 
 # Build a pipeline: Source → Filters → Sink
 pipeline = (

@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from physicsnemo_curator.core.store import RunIndexedFileStore
+from physicsnemo.curator.core.store import RunIndexedFileStore
 
 if TYPE_CHECKING:
     import pathlib
@@ -156,7 +156,7 @@ class TestDrivAerMLSourceUnit:
 
     def test_params_list(self) -> None:
         """params() should return a non-empty list of Param objects."""
-        from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+        from physicsnemo.curator.mesh.sources.drivaerml import DrivAerMLSource
 
         params = DrivAerMLSource.params()
         assert len(params) > 0
@@ -166,7 +166,7 @@ class TestDrivAerMLSourceUnit:
 
     def test_name_and_description(self) -> None:
         """Class should have name and description ClassVars."""
-        from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+        from physicsnemo.curator.mesh.sources.drivaerml import DrivAerMLSource
 
         assert DrivAerMLSource.name == "DrivAerML"
         assert len(DrivAerMLSource.description) > 0
@@ -178,7 +178,7 @@ class TestAhmedMLSourceUnit:
 
     def test_params_list(self) -> None:
         """params() should return a non-empty list of Param objects."""
-        from physicsnemo_curator.mesh.sources.ahmedml import AhmedMLSource
+        from physicsnemo.curator.mesh.sources.ahmedml import AhmedMLSource
 
         params = AhmedMLSource.params()
         assert len(params) > 0
@@ -187,7 +187,7 @@ class TestAhmedMLSourceUnit:
 
     def test_name_and_description(self) -> None:
         """Class should have name and description ClassVars."""
-        from physicsnemo_curator.mesh.sources.ahmedml import AhmedMLSource
+        from physicsnemo.curator.mesh.sources.ahmedml import AhmedMLSource
 
         assert AhmedMLSource.name == "AhmedML"
         assert len(AhmedMLSource.description) > 0
@@ -199,7 +199,7 @@ class TestWindsorMLSourceUnit:
 
     def test_params_list(self) -> None:
         """params() should return a non-empty list of Param objects."""
-        from physicsnemo_curator.mesh.sources.windsorml import WindsorMLSource
+        from physicsnemo.curator.mesh.sources.windsorml import WindsorMLSource
 
         params = WindsorMLSource.params()
         assert len(params) > 0
@@ -208,7 +208,7 @@ class TestWindsorMLSourceUnit:
 
     def test_mesh_type_choices(self) -> None:
         """WindsorML should only offer boundary and volume (no slices)."""
-        from physicsnemo_curator.mesh.sources.windsorml import WindsorMLSource
+        from physicsnemo.curator.mesh.sources.windsorml import WindsorMLSource
 
         params = WindsorMLSource.params()
         mesh_type_param = next(p for p in params if p.name == "mesh_type")
@@ -216,7 +216,7 @@ class TestWindsorMLSourceUnit:
 
     def test_name_and_description(self) -> None:
         """Class should have name and description ClassVars."""
-        from physicsnemo_curator.mesh.sources.windsorml import WindsorMLSource
+        from physicsnemo.curator.mesh.sources.windsorml import WindsorMLSource
 
         assert WindsorMLSource.name == "WindsorML"
         assert len(WindsorMLSource.description) > 0
@@ -228,7 +228,7 @@ class TestWindTunnelSourceUnit:
 
     def test_params_list(self) -> None:
         """params() should return a non-empty list of Param objects."""
-        from physicsnemo_curator.mesh.sources.windtunnel import WindTunnelSource
+        from physicsnemo.curator.mesh.sources.windtunnel import WindTunnelSource
 
         params = WindTunnelSource.params()
         assert len(params) > 0
@@ -238,7 +238,7 @@ class TestWindTunnelSourceUnit:
 
     def test_split_choices(self) -> None:
         """WindTunnel should offer train/validation/test/all splits."""
-        from physicsnemo_curator.mesh.sources.windtunnel import WindTunnelSource
+        from physicsnemo.curator.mesh.sources.windtunnel import WindTunnelSource
 
         params = WindTunnelSource.params()
         split_param = next(p for p in params if p.name == "split")
@@ -246,7 +246,7 @@ class TestWindTunnelSourceUnit:
 
     def test_name_and_description(self) -> None:
         """Class should have name and description ClassVars."""
-        from physicsnemo_curator.mesh.sources.windtunnel import WindTunnelSource
+        from physicsnemo.curator.mesh.sources.windtunnel import WindTunnelSource
 
         assert WindTunnelSource.name == "WindTunnel-20k"
         assert len(WindTunnelSource.description) > 0
@@ -263,8 +263,8 @@ class TestRegistryIntegration:
 
     def test_all_sources_registered(self) -> None:
         """All four dataset sources should appear in the mesh registry."""
-        import physicsnemo_curator.mesh  # noqa: F401
-        from physicsnemo_curator.core.registry import registry
+        import physicsnemo.curator.mesh  # noqa: F401
+        from physicsnemo.curator.core.registry import registry
 
         sources = registry.list_sources("mesh")
         source_names = {s.name for s in sources}
@@ -275,8 +275,8 @@ class TestRegistryIntegration:
 
     def test_run_indexed_store_registered(self) -> None:
         """RunIndexedFileStore should be registered as a mesh store."""
-        import physicsnemo_curator.mesh  # noqa: F401
-        from physicsnemo_curator.core.registry import registry
+        import physicsnemo.curator.mesh  # noqa: F401
+        from physicsnemo.curator.core.registry import registry
 
         stores = registry.list_stores("mesh")
         store_names = {name for name, _ in stores}
@@ -303,7 +303,7 @@ class TestDrivAerMLSourceE2E:
     @pytest.fixture(autouse=True)
     def _setup(self, tmp_path: pathlib.Path) -> None:
         """Build the source with a local cache directory."""
-        from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+        from physicsnemo.curator.mesh.sources.drivaerml import DrivAerMLSource
 
         try:
             self.source = DrivAerMLSource(
@@ -362,7 +362,7 @@ class TestDrivAerMLSlicesE2E:
     @pytest.fixture(autouse=True)
     def _setup(self, tmp_path: pathlib.Path) -> None:
         """Build the slices source with a local cache directory."""
-        from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+        from physicsnemo.curator.mesh.sources.drivaerml import DrivAerMLSource
 
         try:
             self.source = DrivAerMLSource(
@@ -403,7 +403,7 @@ class TestAhmedMLSourceE2E:
     @pytest.fixture(autouse=True)
     def _setup(self, tmp_path: pathlib.Path) -> None:
         """Build the source with a local cache directory."""
-        from physicsnemo_curator.mesh.sources.ahmedml import AhmedMLSource
+        from physicsnemo.curator.mesh.sources.ahmedml import AhmedMLSource
 
         try:
             self.source = AhmedMLSource(
@@ -460,7 +460,7 @@ class TestWindsorMLSourceE2E:
     @pytest.fixture(autouse=True)
     def _setup(self, tmp_path: pathlib.Path) -> None:
         """Build the source with a local cache directory."""
-        from physicsnemo_curator.mesh.sources.windsorml import WindsorMLSource
+        from physicsnemo.curator.mesh.sources.windsorml import WindsorMLSource
 
         try:
             self.source = WindsorMLSource(
@@ -515,7 +515,7 @@ class TestWindTunnelSourceE2E:
     @pytest.fixture(autouse=True)
     def _setup(self, tmp_path: pathlib.Path) -> None:
         """Build the source for the test split (smallest)."""
-        from physicsnemo_curator.mesh.sources.windtunnel import WindTunnelSource
+        from physicsnemo.curator.mesh.sources.windtunnel import WindTunnelSource
 
         try:
             self.source = WindTunnelSource(

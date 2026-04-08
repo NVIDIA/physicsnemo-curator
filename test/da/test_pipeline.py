@@ -123,7 +123,7 @@ class TestERA5Source:
 
     def test_params(self) -> None:
         """ERA5Source.params() returns descriptors for times, variables, cache."""
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         params = ERA5Source.params()
         names = {p.name for p in params}
@@ -131,7 +131,7 @@ class TestERA5Source:
 
     def test_name_and_description(self) -> None:
         """ERA5Source has correct name and description."""
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         assert ERA5Source.name == "ERA5"
         assert "ERA5" in ERA5Source.description
@@ -140,14 +140,14 @@ class TestERA5Source:
         """Length equals number of timestamps."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         arco_lexicon = MagicMock()
         arco_lexicon.__contains__ = lambda self, v: True
 
         with (
-            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=MagicMock()),
-            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+            patch("physicsnemo.curator.da.sources.era5._import_backend", return_value=MagicMock()),
+            patch("physicsnemo.curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
         ):
             source = ERA5Source(times=_TIMES, variables=_VARS)
         assert len(source) == 2
@@ -158,7 +158,7 @@ class TestERA5Source:
 
         import xarray as xr
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
         mock_arco.return_value = _make_dataarray(times=[_TIMES[0]])
@@ -167,8 +167,8 @@ class TestERA5Source:
         arco_lexicon.__contains__ = lambda self, v: True
 
         with (
-            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
-            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+            patch("physicsnemo.curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo.curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
         ):
             source = ERA5Source(times=_TIMES, variables=_VARS)
         results = list(source[0])
@@ -179,7 +179,7 @@ class TestERA5Source:
         """Negative indexing works."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
         mock_arco.return_value = _make_dataarray(times=[_TIMES[-1]])
@@ -188,8 +188,8 @@ class TestERA5Source:
         arco_lexicon.__contains__ = lambda self, v: True
 
         with (
-            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
-            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+            patch("physicsnemo.curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo.curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
         ):
             source = ERA5Source(times=_TIMES, variables=_VARS)
         results = list(source[-1])
@@ -199,14 +199,14 @@ class TestERA5Source:
         """Out-of-range index raises IndexError."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         arco_lexicon = MagicMock()
         arco_lexicon.__contains__ = lambda self, v: True
 
         with (
-            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=MagicMock()),
-            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+            patch("physicsnemo.curator.da.sources.era5._import_backend", return_value=MagicMock()),
+            patch("physicsnemo.curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
         ):
             source = ERA5Source(times=_TIMES, variables=_VARS)
         with pytest.raises(IndexError):
@@ -214,14 +214,14 @@ class TestERA5Source:
 
     def test_empty_times_raises(self) -> None:
         """Empty times list raises ValueError."""
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         with pytest.raises(ValueError, match="non-empty"):
             ERA5Source(times=[], variables=_VARS)
 
     def test_empty_variables_raises(self) -> None:
         """Empty variables list raises ValueError."""
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         with pytest.raises(ValueError, match="non-empty"):
             ERA5Source(times=_TIMES, variables=[])
@@ -230,14 +230,14 @@ class TestERA5Source:
         """Properties return copies of the constructor inputs."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         arco_lexicon = MagicMock()
         arco_lexicon.__contains__ = lambda self, v: True
 
         with (
-            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=MagicMock()),
-            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+            patch("physicsnemo.curator.da.sources.era5._import_backend", return_value=MagicMock()),
+            patch("physicsnemo.curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
         ):
             source = ERA5Source(times=_TIMES, variables=_VARS)
         assert source.times == _TIMES
@@ -256,7 +256,7 @@ class TestERA5MultiBackend:
         """All variables route to the single requested backend."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
         mock_lexicon = MagicMock()
@@ -264,11 +264,11 @@ class TestERA5MultiBackend:
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 return_value=mock_arco,
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 return_value=mock_lexicon,
             ),
         ):
@@ -285,7 +285,7 @@ class TestERA5MultiBackend:
         """Variables route to first backend whose lexicon contains them."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
         mock_ncar = MagicMock()
@@ -302,11 +302,11 @@ class TestERA5MultiBackend:
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 side_effect=import_backend,
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 side_effect=import_lexicon,
             ),
         ):
@@ -323,18 +323,18 @@ class TestERA5MultiBackend:
         """ValueError raised when a variable isn't in any backend."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         empty_lexicon = MagicMock()
         empty_lexicon.__contains__ = lambda self, v: False
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 return_value=MagicMock(),
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 return_value=empty_lexicon,
             ),
             pytest.raises(ValueError, match="not found in any backend"),
@@ -349,7 +349,7 @@ class TestERA5MultiBackend:
         """Backend-specific options are forwarded to the constructor."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_ncar = MagicMock()
         ncar_lexicon = MagicMock()
@@ -363,11 +363,11 @@ class TestERA5MultiBackend:
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 side_effect=import_backend,
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 return_value=ncar_lexicon,
             ),
         ):
@@ -384,7 +384,7 @@ class TestERA5MultiBackend:
         import warnings
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
         cds_lexicon = MagicMock()
@@ -402,11 +402,11 @@ class TestERA5MultiBackend:
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 side_effect=import_backend,
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 side_effect=import_lexicon,
             ),
         ):
@@ -423,7 +423,7 @@ class TestERA5MultiBackend:
 
     def test_invalid_backend_name_raises(self) -> None:
         """ValueError raised for unknown backend name."""
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         with pytest.raises(ValueError, match="Unknown backend"):
             ERA5Source(
@@ -438,7 +438,7 @@ class TestERA5MultiBackend:
 
         import xarray as xr
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
         expected = _make_dataarray(times=[_TIMES[0]], variables=["t2m", "u10m"])
@@ -449,11 +449,11 @@ class TestERA5MultiBackend:
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 return_value=mock_arco,
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 return_value=arco_lexicon,
             ),
         ):
@@ -471,7 +471,7 @@ class TestERA5MultiBackend:
         """Variables from different backends are merged along variable dim."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         # ARCO serves t2m, NCAR serves cp.
         arco_da = _make_dataarray(times=[_TIMES[0]], variables=["t2m"])
@@ -493,11 +493,11 @@ class TestERA5MultiBackend:
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 side_effect=import_backend,
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 side_effect=import_lexicon,
             ),
         ):
@@ -519,7 +519,7 @@ class TestERA5MultiBackend:
         import numpy as np
         import xarray as xr
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         # ARCO returns standard grid, NCAR returns different lats.
         arco_da = _make_dataarray(times=[_TIMES[0]], variables=["t2m"], n_lat=9)
@@ -555,11 +555,11 @@ class TestERA5MultiBackend:
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 side_effect=import_backend,
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 side_effect=import_lexicon,
             ),
         ):
@@ -576,7 +576,7 @@ class TestERA5MultiBackend:
         """Output variable order matches input regardless of backend grouping."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         # Request: v10m (arco), cp (ncar), t2m (arco) — interleaved.
         arco_da_v10m_t2m = _make_dataarray(times=[_TIMES[0]], variables=["v10m", "t2m"])
@@ -598,11 +598,11 @@ class TestERA5MultiBackend:
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 side_effect=import_backend,
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 side_effect=import_lexicon,
             ),
         ):
@@ -623,7 +623,7 @@ class TestERA5MultiBackend:
         """Default backend='arco' behaves like the old ARCO-only source."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
         mock_arco.return_value = _make_dataarray(times=[_TIMES[0]])
@@ -633,11 +633,11 @@ class TestERA5MultiBackend:
 
         with (
             patch(
-                "physicsnemo_curator.da.sources.era5._import_backend",
+                "physicsnemo.curator.da.sources.era5._import_backend",
                 return_value=mock_arco,
             ),
             patch(
-                "physicsnemo_curator.da.sources.era5._import_lexicon",
+                "physicsnemo.curator.da.sources.era5._import_lexicon",
                 return_value=arco_lexicon,
             ),
         ):
@@ -658,7 +658,7 @@ class TestZarrSink:
 
     def test_params(self) -> None:
         """ZarrSink.params() returns descriptors for output_path and chunks."""
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
 
         params = ZarrSink.params()
         names = {p.name for p in params}
@@ -666,7 +666,7 @@ class TestZarrSink:
 
     def test_name_and_description(self) -> None:
         """ZarrSink has correct name and description."""
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
 
         assert ZarrSink.name == "Zarr Writer"
         assert "Zarr" in ZarrSink.description
@@ -675,7 +675,7 @@ class TestZarrSink:
         """Writing a single-variable DataArray creates the expected Zarr group."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
 
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
         da = _make_dataarray(variables=["t2m"])
@@ -696,7 +696,7 @@ class TestZarrSink:
         """Writing a multi-variable DataArray creates one group per variable."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
 
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
         da = _make_dataarray()
@@ -715,7 +715,7 @@ class TestZarrSink:
         """Subsequent writes append along the time dimension."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
 
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
 
@@ -738,7 +738,7 @@ class TestZarrSink:
         """Custom chunk sizes are respected."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
 
         sink = ZarrSink(
             output_path=str(tmp_path / "output.zarr"),
@@ -756,7 +756,7 @@ class TestZarrSink:
 
     def test_output_path_property(self, tmp_path: Path) -> None:
         """output_path property returns the configured path."""
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
 
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
         assert sink.output_path == tmp_path / "output.zarr"
@@ -772,7 +772,7 @@ class TestNetCDF4Sink:
 
     def test_params(self) -> None:
         """NetCDF4Sink.params() returns descriptors for output_dir, chunks, compression_level, split_dim."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         params = NetCDF4Sink.params()
         names = {p.name for p in params}
@@ -780,7 +780,7 @@ class TestNetCDF4Sink:
 
     def test_name_and_description(self) -> None:
         """NetCDF4Sink has correct name and description."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         assert NetCDF4Sink.name == "NetCDF4 Writer"
         assert "NetCDF4" in NetCDF4Sink.description
@@ -789,7 +789,7 @@ class TestNetCDF4Sink:
         """Writing a single-variable DataArray creates the expected .nc file."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
         da = _make_dataarray(variables=["t2m"])
@@ -811,7 +811,7 @@ class TestNetCDF4Sink:
         """Writing a multi-variable DataArray creates one subdirectory per variable."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
         da = _make_dataarray()
@@ -830,7 +830,7 @@ class TestNetCDF4Sink:
         """Subsequent writes with the same year append along the time dimension."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
 
@@ -853,7 +853,7 @@ class TestNetCDF4Sink:
         """Custom chunk sizes are passed through to the NetCDF4 file."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(
             output_dir=str(tmp_path / "output_nc"),
@@ -873,7 +873,7 @@ class TestNetCDF4Sink:
         """compression_level=0 disables zlib compression."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(
             output_dir=str(tmp_path / "output_nc"),
@@ -893,7 +893,7 @@ class TestNetCDF4Sink:
         """DataArrays without a variable dim write to data/<year>.nc."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
         da = _make_simple_dataarray(n_samples=1, fill_value=42.0)
@@ -913,7 +913,7 @@ class TestNetCDF4Sink:
         """split_dim=None writes a single file per variable."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"), split_dim=None)
         da = _make_dataarray(variables=["t2m"])
@@ -934,7 +934,7 @@ class TestNetCDF4Sink:
         import numpy as np
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
 
@@ -972,7 +972,7 @@ class TestNetCDF4Sink:
         """Custom split_func is used for grouping."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         # Split by month: YYYY-MM
         def month_key(t):  # type: ignore[override]
@@ -1002,42 +1002,42 @@ class TestNetCDF4Sink:
 
     def test_output_dir_property(self, tmp_path: Path) -> None:
         """output_dir property returns the configured path."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir=str(tmp_path / "output_nc"))
         assert sink.output_dir == tmp_path / "output_nc"
 
     def test_compression_level_property(self) -> None:
         """compression_level property returns the configured value."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir="/tmp/output_nc", compression_level=7)
         assert sink.compression_level == 7
 
     def test_unlimited_dims_property(self) -> None:
         """unlimited_dims property returns the configured list."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir="/tmp/output_nc", unlimited_dims=["time", "lat"])
         assert sink.unlimited_dims == ["time", "lat"]
 
     def test_default_unlimited_dims(self) -> None:
         """Default unlimited_dims is ['time']."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir="/tmp/output_nc")
         assert sink.unlimited_dims == ["time"]
 
     def test_split_dim_property(self) -> None:
         """split_dim property returns the configured value."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir="/tmp/output_nc", split_dim="time")
         assert sink.split_dim == "time"
 
     def test_split_dim_none_property(self) -> None:
         """split_dim=None disables splitting."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
 
         sink = NetCDF4Sink(output_dir="/tmp/output_nc", split_dim=None)
         assert sink.split_dim is None
@@ -1053,7 +1053,7 @@ class TestMomentsFilter:
 
     def test_params(self) -> None:
         """MomentsFilter.params() returns descriptors for output and dims."""
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         params = MomentsFilter.params()
         names = {p.name for p in params}
@@ -1061,7 +1061,7 @@ class TestMomentsFilter:
 
     def test_name_and_description(self) -> None:
         """MomentsFilter has correct name and description."""
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         assert MomentsFilter.name == "Statistical Moments"
         assert "moments" in MomentsFilter.description.lower()
@@ -1070,7 +1070,7 @@ class TestMomentsFilter:
         """Filter yields the same DataArray unchanged."""
         import xarray as xr
 
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         filt = MomentsFilter(output="/tmp/stats.zarr", dims=("time",))
         da = _make_dataarray()
@@ -1084,7 +1084,7 @@ class TestMomentsFilter:
 
     def test_flush_no_data(self) -> None:
         """Flush with no data returns None."""
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         filt = MomentsFilter(output="/tmp/stats.zarr")
         assert filt.flush() is None
@@ -1093,7 +1093,7 @@ class TestMomentsFilter:
         """Flush writes mean, variance, skewness, min, max to Zarr."""
         import xarray as xr
 
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
 
@@ -1126,7 +1126,7 @@ class TestMomentsFilter:
         """Verify the computed mean is numerically correct."""
         import numpy as np
 
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
 
@@ -1155,7 +1155,7 @@ class TestMomentsFilter:
 
     def test_properties(self) -> None:
         """Properties return the configured values."""
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         filt = MomentsFilter(output="/tmp/stats.zarr", dims=("time", "variable"))
         assert filt.output_path.name == "stats.zarr"
@@ -1170,7 +1170,7 @@ class TestMomentsFilterMerge:
         import numpy as np
         import xarray as xr
 
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         # Worker 1: process samples 0-4
         filt1 = MomentsFilter(output=str(tmp_path / "stats_0.zarr"), dims=("time",))
@@ -1218,7 +1218,7 @@ class TestMomentsFilterMerge:
         import numpy as np
         import xarray as xr
 
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
         for i in range(5):
@@ -1244,14 +1244,14 @@ class TestMomentsFilterMerge:
 
     def test_merge_empty_raises(self) -> None:
         """MomentsFilter.merge should raise ValueError on empty list."""
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         with pytest.raises(ValueError, match="non-empty"):
             MomentsFilter.merge([], output="out.zarr")
 
     def test_merge_missing_store_raises(self, tmp_path: Path) -> None:
         """MomentsFilter.merge should raise FileNotFoundError for missing store."""
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         with pytest.raises(FileNotFoundError, match="not found"):
             MomentsFilter.merge([str(tmp_path / "nonexistent.zarr")], output="out.zarr")
@@ -1260,7 +1260,7 @@ class TestMomentsFilterMerge:
         """Merge should handle stores with multiple variable groups."""
         import xarray as xr
 
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
 
         # Use DataArrays with variable dimension
         filt1 = MomentsFilter(output=str(tmp_path / "stats_0.zarr"), dims=("time",))
@@ -1319,32 +1319,32 @@ class TestRegistration:
 
     def test_era5_registered(self) -> None:
         """ERA5Source is discoverable via the registry."""
-        import physicsnemo_curator.da  # noqa: F401
-        from physicsnemo_curator.core.registry import registry
+        import physicsnemo.curator.da  # noqa: F401
+        from physicsnemo.curator.core.registry import registry
 
         sources = registry.sources("da")
         assert "ERA5" in sources
 
     def test_zarrsink_registered(self) -> None:
         """ZarrSink is discoverable via the registry."""
-        import physicsnemo_curator.da  # noqa: F401
-        from physicsnemo_curator.core.registry import registry
+        import physicsnemo.curator.da  # noqa: F401
+        from physicsnemo.curator.core.registry import registry
 
         sinks = registry.sinks("da")
         assert "Zarr Writer" in sinks
 
     def test_netcdf4sink_registered(self) -> None:
         """NetCDF4Sink is discoverable via the registry."""
-        import physicsnemo_curator.da  # noqa: F401
-        from physicsnemo_curator.core.registry import registry
+        import physicsnemo.curator.da  # noqa: F401
+        from physicsnemo.curator.core.registry import registry
 
         sinks = registry.sinks("da")
         assert "NetCDF4 Writer" in sinks
 
     def test_moments_registered(self) -> None:
         """MomentsFilter is discoverable via the registry."""
-        import physicsnemo_curator.da  # noqa: F401
-        from physicsnemo_curator.core.registry import registry
+        import physicsnemo.curator.da  # noqa: F401
+        from physicsnemo.curator.core.registry import registry
 
         filters = registry.filters("da")
         assert "Statistical Moments" in filters
@@ -1362,9 +1362,9 @@ class TestDAPipeline:
         """Full pipeline: ERA5Source -> MomentsFilter -> ZarrSink."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
 
@@ -1377,8 +1377,8 @@ class TestDAPipeline:
         arco_lexicon.__contains__ = lambda self, v: True
 
         with (
-            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
-            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+            patch("physicsnemo.curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo.curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
         ):
             source = ERA5Source(times=_TIMES, variables=_VARS)
 
@@ -1403,8 +1403,8 @@ class TestDAPipeline:
         """Pipeline with just source and sink (no filter)."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
         mock_arco.return_value = _make_dataarray(times=[_TIMES[0]])
@@ -1413,8 +1413,8 @@ class TestDAPipeline:
         arco_lexicon.__contains__ = lambda self, v: True
 
         with (
-            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
-            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+            patch("physicsnemo.curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo.curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
         ):
             source = ERA5Source(times=_TIMES[:1], variables=_VARS)
 
@@ -1429,9 +1429,9 @@ class TestDAPipeline:
 
         import xarray as xr
 
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
 
@@ -1444,8 +1444,8 @@ class TestDAPipeline:
         arco_lexicon.__contains__ = lambda self, v: True
 
         with (
-            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
-            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+            patch("physicsnemo.curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo.curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
         ):
             source = ERA5Source(times=_TIMES, variables=_VARS)
 
@@ -1479,8 +1479,8 @@ class TestDAPipeline:
         """Pipeline with just source and NetCDF4Sink (no filter)."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         mock_arco = MagicMock()
         mock_arco.return_value = _make_dataarray(times=[_TIMES[0]])
@@ -1489,8 +1489,8 @@ class TestDAPipeline:
         arco_lexicon.__contains__ = lambda self, v: True
 
         with (
-            patch("physicsnemo_curator.da.sources.era5._import_backend", return_value=mock_arco),
-            patch("physicsnemo_curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
+            patch("physicsnemo.curator.da.sources.era5._import_backend", return_value=mock_arco),
+            patch("physicsnemo.curator.da.sources.era5._import_lexicon", return_value=arco_lexicon),
         ):
             source = ERA5Source(times=_TIMES[:1], variables=_VARS)
 
@@ -1516,7 +1516,7 @@ class TestERA5EndToEnd:
 
     def test_era5_fetch_single_timestep(self) -> None:
         """Fetch a single surface variable from ARCO."""
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         source = ERA5Source(
             times=[datetime(2020, 1, 1, 0)],
@@ -1537,7 +1537,7 @@ class TestERA5EndToEnd:
 
     def test_era5_fetch_multiple_variables(self) -> None:
         """Fetch multiple variables from ARCO."""
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         source = ERA5Source(
             times=[datetime(2020, 1, 1, 0)],
@@ -1552,9 +1552,9 @@ class TestERA5EndToEnd:
         """Full pipeline: ERA5 -> MomentsFilter -> ZarrSink."""
         import xarray as xr
 
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.filters.moments import MomentsFilter
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         source = ERA5Source(
             times=[datetime(2020, 1, 1, 0), datetime(2020, 1, 1, 6)],
@@ -1591,7 +1591,7 @@ class TestERA5EndToEnd:
 
     def test_era5_pressure_level(self) -> None:
         """Fetch a pressure-level variable."""
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         source = ERA5Source(
             times=[datetime(2020, 6, 15, 12)],
@@ -1607,8 +1607,8 @@ class TestERA5EndToEnd:
         """Test Zarr v3 sharding configuration."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         source = ERA5Source(
             times=[datetime(2020, 1, 1, 0)],
@@ -1632,8 +1632,8 @@ class TestERA5EndToEnd:
         """Full pipeline: ERA5 -> NetCDF4Sink with compression."""
         import xarray as xr
 
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
-        from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo.curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo.curator.da.sources.era5 import ERA5Source
 
         source = ERA5Source(
             times=[datetime(2020, 1, 1, 0), datetime(2020, 1, 1, 6)],

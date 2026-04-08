@@ -18,14 +18,14 @@
 Running a Pipeline in Parallel
 ==============================
 
-This example demonstrates :func:`~physicsnemo_curator.run.run_pipeline`
+This example demonstrates :func:`~physicsnemo.curator.run.run_pipeline`
 to execute a pipeline across multiple source indices using parallel
 workers.
 
 Building on the :doc:`Creating a Pipeline </auto_examples/getting_started/01_getting_started_pipeline>`
 example, we process multiple DrivAerML CFD meshes concurrently with a
 ``process_pool`` backend and then merge per-worker statistics using
-:func:`~physicsnemo_curator.run.gather_pipeline`.
+:func:`~physicsnemo.curator.run.gather_pipeline`.
 
 .. note::
 
@@ -38,20 +38,20 @@ example, we process multiple DrivAerML CFD meshes concurrently with a
 # Imports
 # -------
 
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.run import gather_pipeline, run_pipeline
+from physicsnemo.curator.mesh.filters.mean import MeanFilter
+from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo.curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo.curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Build the Pipeline
 # ------------------
 #
-# :class:`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
+# :class:`~physicsnemo.curator.mesh.sources.drivaerml.DrivAerMLSource`
 # provides 500 DrivAerML automotive CFD meshes from HuggingFace Hub.
-# We attach a :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter`
+# We attach a :class:`~physicsnemo.curator.mesh.filters.mean.MeanFilter`
 # for spatial statistics and a
-# :class:`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` for
+# :class:`~physicsnemo.curator.mesh.sinks.mesh_writer.MeshSink` for
 # output.
 
 pipeline = (
@@ -66,7 +66,7 @@ print(f"Total runs available: {len(pipeline)}")
 # Run in Parallel
 # ---------------
 #
-# :func:`~physicsnemo_curator.run.run_pipeline` dispatches indices to
+# :func:`~physicsnemo.curator.run.run_pipeline` dispatches indices to
 # parallel workers.  Key parameters:
 #
 # - ``n_jobs`` — number of workers (``-1`` = all CPUs)
@@ -102,9 +102,9 @@ for i, paths in enumerate(results):
 # -----------------
 #
 # When running in parallel, stateful filters (like
-# :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter`) produce
+# :class:`~physicsnemo.curator.mesh.filters.mean.MeanFilter`) produce
 # per-index shard files.
-# :func:`~physicsnemo_curator.run.gather_pipeline` discovers those
+# :func:`~physicsnemo.curator.run.gather_pipeline` discovers those
 # shards, calls the filter's ``merge()`` method to combine them into
 # a single output file, and cleans up the temporaries.
 

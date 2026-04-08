@@ -58,12 +58,12 @@ jobs:
 
       - name: Install wheel
         shell: bash
-        run: pip install dist/physicsnemo_curator-*.whl
+        run: pip install dist/physicsnemo.curator-*.whl
 
       - name: Verify import
         run: |
-          python -c "import physicsnemo_curator; print(f'OK: {physicsnemo_curator.__name__}')"
-          python -c "from physicsnemo_curator._lib import vtk; print('OK: Rust extension loaded')"
+          python -c "import physicsnemo.curator; print(f'OK: {physicsnemo.curator.__name__}')"
+          python -c "from physicsnemo.curator._lib import vtk; print('OK: Rust extension loaded')"
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4
@@ -135,12 +135,12 @@ jobs:
 
       - name: Install from sdist
         shell: bash
-        run: pip install dist/physicsnemo_curator-*.tar.gz
+        run: pip install dist/physicsnemo.curator-*.tar.gz
 
       - name: Verify import
         run: |
-          python -c "import physicsnemo_curator; print(f'OK: {physicsnemo_curator.__name__}')"
-          python -c "from physicsnemo_curator._lib import vtk; print('OK: Rust extension loaded')"
+          python -c "import physicsnemo.curator; print(f'OK: {physicsnemo.curator.__name__}')"
+          python -c "from physicsnemo.curator._lib import vtk; print('OK: Rust extension loaded')"
 
       - name: Upload sdist
         uses: actions/upload-artifact@v4

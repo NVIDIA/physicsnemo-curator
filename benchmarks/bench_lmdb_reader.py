@@ -98,7 +98,7 @@ class TimeLmdbReaderSingle:
 
     def time_rust(self, n_rows: int) -> None:
         """Benchmark Rust reader reading a single database."""
-        from physicsnemo_curator._lib.lmdb import read_lmdb
+        from physicsnemo.curator._lib.lmdb import read_lmdb
 
         _ = read_lmdb(self.db_file)
 
@@ -139,13 +139,13 @@ class TimeLmdbReaderParallel:
 
     def time_rust_parallel(self, n_files: int) -> None:
         """Benchmark Rust reader reading multiple databases in parallel."""
-        from physicsnemo_curator._lib.lmdb import read_lmdb_parallel
+        from physicsnemo.curator._lib.lmdb import read_lmdb_parallel
 
         _ = read_lmdb_parallel(self.db_files)
 
     def time_rust_sequential(self, n_files: int) -> None:
         """Benchmark Rust reader reading multiple databases sequentially."""
-        from physicsnemo_curator._lib.lmdb import read_lmdb
+        from physicsnemo.curator._lib.lmdb import read_lmdb
 
         for f in self.db_files:
             _ = read_lmdb(f)
@@ -178,7 +178,7 @@ class TimeASELMDBSourceBackend:
 
     def time_python_backend(self, n_rows: int) -> None:
         """Benchmark ASELMDBSource with the Python (ASE) backend."""
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=self._tmpdir, backend="python")
         for _ in source[0]:
@@ -186,7 +186,7 @@ class TimeASELMDBSourceBackend:
 
     def time_rust_backend(self, n_rows: int) -> None:
         """Benchmark ASELMDBSource with the Rust backend."""
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=self._tmpdir, backend="rust")
         for _ in source[0]:
@@ -214,7 +214,7 @@ class TimeASELMDBSourceMultiFile:
 
     def time_python_backend(self, n_files: int) -> None:
         """Benchmark ASELMDBSource with Python backend across all files."""
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=self._tmpdir, backend="python")
         for i in range(len(source)):
@@ -223,7 +223,7 @@ class TimeASELMDBSourceMultiFile:
 
     def time_rust_backend(self, n_files: int) -> None:
         """Benchmark ASELMDBSource with Rust backend across all files."""
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=self._tmpdir, backend="rust")
         for i in range(len(source)):
@@ -254,6 +254,6 @@ class MemLmdbReader:
 
     def mem_rust(self, n_rows: int):
         """Track memory of Rust LMDB reader."""
-        from physicsnemo_curator._lib.lmdb import read_lmdb
+        from physicsnemo.curator._lib.lmdb import read_lmdb
 
         return read_lmdb(self.db_file)

@@ -19,7 +19,7 @@
 import tempfile
 from pathlib import Path
 
-from physicsnemo_curator.core.store import LocalFileStore
+from physicsnemo.curator.core.store import LocalFileStore
 
 # ── benchmarks ───────────────────────────────────────────────────────────────
 

@@ -18,7 +18,7 @@
 
 from collections.abc import Generator, Iterator
 
-from physicsnemo_curator.core.base import Filter, Param, Sink, Source
+from physicsnemo.curator.core.base import Filter, Param, Sink, Source
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 

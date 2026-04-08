@@ -18,10 +18,10 @@
 
 
 def timeraw_import_curator():
-    """Measure import time of the physicsnemo_curator package in a fresh subprocess."""
-    return "import physicsnemo_curator"
+    """Measure import time of the physicsnemo.curator package in a fresh subprocess."""
+    return "import physicsnemo.curator"
 
 
 def timeraw_import_curator_core():
-    """Measure import time of physicsnemo_curator.core in a fresh subprocess."""
-    return "from physicsnemo_curator.core import base"
+    """Measure import time of physicsnemo.curator.core in a fresh subprocess."""
+    return "from physicsnemo.curator.core import base"

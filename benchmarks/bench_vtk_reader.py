@@ -109,7 +109,7 @@ class TimeVTKReaderSingle:
 
     def time_rust(self, n_points: int) -> None:
         """Benchmark Rust reader reading a single file."""
-        from physicsnemo_curator._lib import vtk
+        from physicsnemo.curator._lib import vtk
 
         _ = vtk.read_vtk(self.test_file)
 
@@ -201,13 +201,13 @@ class TimeVTKReaderParallel:
 
     def time_rust_parallel(self, n_files: int) -> None:
         """Benchmark Rust reader reading multiple files in parallel."""
-        from physicsnemo_curator._lib import vtk
+        from physicsnemo.curator._lib import vtk
 
         _ = vtk.read_vtk_parallel(self.test_files)
 
     def time_rust_sequential(self, n_files: int) -> None:
         """Benchmark Rust reader reading multiple files sequentially."""
-        from physicsnemo_curator._lib import vtk
+        from physicsnemo.curator._lib import vtk
 
         for f in self.test_files:
             _ = vtk.read_vtk(f)
@@ -286,6 +286,6 @@ class MemVTKReader:
 
     def peakmem_rust(self, n_points: int):
         """Track peak RSS when reading with the Rust VTK reader."""
-        from physicsnemo_curator._lib import vtk
+        from physicsnemo.curator._lib import vtk
 
         vtk.read_vtk(self.test_file)

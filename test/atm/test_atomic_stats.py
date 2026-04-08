@@ -160,7 +160,7 @@ class TestAtomicStatsFilterUnit:
 
     def test_params_list(self) -> None:
         """Params include output."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         params = AtomicStatsFilter.params()
         assert len(params) >= 1
@@ -169,7 +169,7 @@ class TestAtomicStatsFilterUnit:
 
     def test_name_and_description(self) -> None:
         """Name and description are non-empty strings."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         assert isinstance(AtomicStatsFilter.name, str)
         assert len(AtomicStatsFilter.name) > 0
@@ -178,7 +178,7 @@ class TestAtomicStatsFilterUnit:
 
     def test_output_path_property(self, tmp_path: pathlib.Path) -> None:
         """The output_path property reflects the constructor argument."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
         assert filt.output_path == tmp_path / "stats.parquet"
@@ -195,7 +195,7 @@ class TestAtomicStatsFilterPassThrough:
 
     def test_yields_items_unchanged(self, tmp_path: pathlib.Path) -> None:
         """Every item should be yielded back untouched."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
         items = [_make_mock_atomic_data(seed=i) for i in range(3)]
@@ -211,7 +211,7 @@ class TestAtomicStatsFilterPassThrough:
 
     def test_empty_generator(self, tmp_path: pathlib.Path) -> None:
         """Empty generator yields nothing and flush returns None."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
 
@@ -236,7 +236,7 @@ class TestAtomicStatsFilterComputation:
 
     def test_flush_writes_parquet(self, tmp_path: pathlib.Path) -> None:
         """Flush writes a Parquet file with the correct schema."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
         data = _make_mock_atomic_data()
@@ -279,7 +279,7 @@ class TestAtomicStatsFilterComputation:
 
     def test_constant_values_zero_std(self, tmp_path: pathlib.Path) -> None:
         """Constant-valued tensor has std=0, skewness=0, kurtosis=0."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
         data = _make_scalar_atomic_data(value=5.0, n_nodes=4)
@@ -308,7 +308,7 @@ class TestAtomicStatsFilterComputation:
 
     def test_field_levels_correct(self, tmp_path: pathlib.Path) -> None:
         """Fields are tagged with the correct semantic level."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
         data = _make_mock_atomic_data()
@@ -334,7 +334,7 @@ class TestAtomicStatsFilterComputation:
 
     def test_vector_components(self, tmp_path: pathlib.Path) -> None:
         """Vector fields produce one row per component."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
         data = _make_mock_atomic_data()
@@ -355,7 +355,7 @@ class TestAtomicStatsFilterComputation:
 
     def test_known_statistics(self, tmp_path: pathlib.Path) -> None:
         """Verify exact statistics for a known data distribution."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
 
@@ -387,7 +387,7 @@ class TestAtomicStatsFilterComputation:
 
     def test_multiple_items_accumulate(self, tmp_path: pathlib.Path) -> None:
         """Multiple items accumulate rows in a single flush."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
 
@@ -414,7 +414,7 @@ class TestAtomicStatsFilterComputation:
 
     def test_flush_clears_state(self, tmp_path: pathlib.Path) -> None:
         """After flush, internal rows are cleared."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
 
@@ -430,7 +430,7 @@ class TestAtomicStatsFilterComputation:
 
     def test_creates_parent_directory(self, tmp_path: pathlib.Path) -> None:
         """Flush creates parent directories as needed."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         nested = tmp_path / "a" / "b" / "stats.parquet"
         filt = AtomicStatsFilter(output=str(nested))
@@ -447,7 +447,7 @@ class TestAtomicStatsFilterComputation:
 
     def test_extra_data_fields(self, tmp_path: pathlib.Path) -> None:
         """Extra data dict entries produce stats rows."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "stats.parquet"))
         data = _make_scalar_atomic_data()
@@ -476,7 +476,7 @@ class TestAtomicStatsFilterMerge:
 
     def test_merge_two_shards(self, tmp_path: pathlib.Path) -> None:
         """Merging two shard files produces correct aggregate statistics."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         # Shard 1: values [1, 2, 3]
         filt1 = AtomicStatsFilter(output=str(tmp_path / "shard1.parquet"))
@@ -523,14 +523,14 @@ class TestAtomicStatsFilterMerge:
 
     def test_merge_empty_raises(self) -> None:
         """Merge with empty paths raises ValueError."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         with pytest.raises(ValueError, match="non-empty"):
             AtomicStatsFilter.merge([], "output.parquet")
 
     def test_merge_single_shard(self, tmp_path: pathlib.Path) -> None:
         """Merging a single shard is a no-op identity."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo.curator.atm.filters.stats import AtomicStatsFilter
 
         filt = AtomicStatsFilter(output=str(tmp_path / "shard.parquet"))
         mock = _make_scalar_atomic_data(value=3.0, n_nodes=4)
@@ -555,7 +555,7 @@ class TestAtomicStatsFilterMerge:
 
     def test_merge_welford_stats_function(self, tmp_path: pathlib.Path) -> None:
         """The public merge_welford_stats function returns a table."""
-        from physicsnemo_curator.atm.filters.stats import (
+        from physicsnemo.curator.atm.filters.stats import (
             AtomicStatsFilter,
             merge_welford_stats,
         )
@@ -588,7 +588,7 @@ class TestAtomicStatsFilterRegistry:
 
     def test_filter_registered(self) -> None:
         """AtomicStatsFilter is discoverable in the registry."""
-        from physicsnemo_curator.core.registry import registry
+        from physicsnemo.curator.core.registry import registry
 
         names = [f.name for f in registry.list_filters("atm")]
         assert "Atomic Statistics" in names

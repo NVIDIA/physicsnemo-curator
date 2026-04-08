@@ -83,7 +83,7 @@ typecheck:
 
 ## Check docstring coverage with interrogate
 interrogate:
-	uv run interrogate src/physicsnemo_curator
+	uv run interrogate src/physicsnemo/curator
 
 # ---------------------------------------------------------------------------
 # Testing

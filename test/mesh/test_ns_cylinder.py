@@ -110,7 +110,7 @@ class TestNavierStokesCylinderSourceUnit:
 
     def test_params_list(self) -> None:
         """params() should return a non-empty list of Param objects."""
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         params = NavierStokesCylinderSource.params()
         assert len(params) > 0
@@ -120,7 +120,7 @@ class TestNavierStokesCylinderSourceUnit:
 
     def test_name_and_description(self) -> None:
         """Class should have name and description ClassVars."""
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         assert NavierStokesCylinderSource.name == "Navier-Stokes Cylinder"
         assert len(NavierStokesCylinderSource.description) > 0
@@ -145,7 +145,7 @@ class TestNavierStokesCylinderSourceLocal:
 
     def test_len(self) -> None:
         """Length should equal the number of snapshots."""
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         source = NavierStokesCylinderSource(url=str(self.mock_root))
         assert len(source) == 3
@@ -154,7 +154,7 @@ class TestNavierStokesCylinderSourceLocal:
         """__getitem__ should yield a physicsnemo Mesh."""
         from physicsnemo.mesh import Mesh
 
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         source = NavierStokesCylinderSource(url=str(self.mock_root))
         mesh = next(source[0])
@@ -162,7 +162,7 @@ class TestNavierStokesCylinderSourceLocal:
 
     def test_mesh_geometry(self) -> None:
         """Mesh should have correct point and cell counts."""
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         source = NavierStokesCylinderSource(url=str(self.mock_root))
         mesh = next(source[0])
@@ -173,7 +173,7 @@ class TestNavierStokesCylinderSourceLocal:
 
     def test_mesh_has_point_data(self) -> None:
         """Mesh should carry velocity and pressure as point data."""
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         source = NavierStokesCylinderSource(url=str(self.mock_root))
         mesh = next(source[0])
@@ -184,7 +184,7 @@ class TestNavierStokesCylinderSourceLocal:
 
     def test_mesh_has_global_data(self) -> None:
         """Mesh should carry viscosity as global data."""
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         source = NavierStokesCylinderSource(url=str(self.mock_root))
         mesh = next(source[0])
@@ -194,7 +194,7 @@ class TestNavierStokesCylinderSourceLocal:
         """Different snapshot indices should yield different field values."""
         import torch
 
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         source = NavierStokesCylinderSource(url=str(self.mock_root))
         mesh_0 = next(source[0])
@@ -206,7 +206,7 @@ class TestNavierStokesCylinderSourceLocal:
         """Negative indexing should work."""
         from physicsnemo.mesh import Mesh
 
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         source = NavierStokesCylinderSource(url=str(self.mock_root))
         mesh = next(source[-1])
@@ -214,7 +214,7 @@ class TestNavierStokesCylinderSourceLocal:
 
     def test_out_of_range_raises(self) -> None:
         """Out-of-range index should raise IndexError."""
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         source = NavierStokesCylinderSource(url=str(self.mock_root))
         with pytest.raises(IndexError):
@@ -225,7 +225,7 @@ class TestNavierStokesCylinderSourceLocal:
         import pyarrow as pa
         import pyarrow.parquet as pq
 
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         # Write a geometry file with quad cells (4 vertices) instead of triangles.
         rng = np.random.default_rng(99)
@@ -282,8 +282,8 @@ class TestNavierStokesCylinderRegistry:
 
     def test_source_registered(self) -> None:
         """NavierStokesCylinderSource should appear in the mesh registry."""
-        import physicsnemo_curator.mesh  # noqa: F401
-        from physicsnemo_curator.core.registry import registry
+        import physicsnemo.curator.mesh  # noqa: F401
+        from physicsnemo.curator.core.registry import registry
 
         sources = registry.list_sources("mesh")
         source_names = {s.name for s in sources}
@@ -310,7 +310,7 @@ class TestNavierStokesCylinderSourceE2E:
     @pytest.fixture(autouse=True)
     def _setup(self, tmp_path: pathlib.Path) -> None:
         """Build the source with a local cache directory."""
-        from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+        from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
         self.source = NavierStokesCylinderSource(
             cache_storage=str(tmp_path / "cache"),
