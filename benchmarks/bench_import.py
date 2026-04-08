@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Import-time benchmarks for the curator package."""
+"""Import-time benchmarks for the physicsnemo-curator package."""
 
 
 def timeraw_import_curator():
-    """Measure import time of the curator package in a fresh subprocess."""
-    return "import curator"
+    """Measure import time of the physicsnemo_curator package in a fresh subprocess."""
+    return "import physicsnemo_curator"
 
 
 def timeraw_import_curator_core():
-    """Measure import time of curator.core in a fresh subprocess."""
-    return "from curator.core import base"
+    """Measure import time of physicsnemo_curator.core in a fresh subprocess."""
+    return "from physicsnemo_curator.core import base"

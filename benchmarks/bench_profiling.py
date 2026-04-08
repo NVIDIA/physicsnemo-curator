@@ -17,10 +17,10 @@
 """Benchmarks for profiling overhead (ProfiledPipeline vs raw Pipeline)."""
 
 import os
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 
-from curator.core.base import Filter, Param, Sink, Source
-from curator.core.profiling import ProfiledPipeline
+from physicsnemo_curator.core.base import Filter, Param, Sink, Source
+from physicsnemo_curator.core.profiling import ProfiledPipeline
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ class _NullSink(Sink[int]):
     def params(cls) -> list[Param]:  # noqa: D102
         return []
 
-    def __call__(self, items: Generator[int], index: int) -> list[str]:  # noqa: D102
+    def __call__(self, items: Iterator[int], index: int) -> list[str]:  # noqa: D102
         for _ in items:
             pass
         return []
