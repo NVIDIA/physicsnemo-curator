@@ -259,6 +259,36 @@ class Registry:
         """
         return list(self._submodules[submodule].stores.items())
 
+    def list_filters(self, submodule: str) -> list[type]:
+        """Return a list of registered filter classes for *submodule*.
+
+        Parameters
+        ----------
+        submodule : str
+            Submodule name.
+
+        Returns
+        -------
+        list[type]
+            List of filter classes (each has a ``name`` attribute).
+        """
+        return list(self._submodules[submodule].filters.values())
+
+    def list_sinks(self, submodule: str) -> list[type]:
+        """Return a list of registered sink classes for *submodule*.
+
+        Parameters
+        ----------
+        submodule : str
+            Submodule name.
+
+        Returns
+        -------
+        list[type]
+            List of sink classes (each has a ``name`` attribute).
+        """
+        return list(self._submodules[submodule].sinks.values())
+
     # -- Internal ------------------------------------------------------------
 
     def _ensure_submodule(self, name: str) -> None:

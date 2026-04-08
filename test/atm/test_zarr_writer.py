@@ -99,7 +99,7 @@ class TestAtomicDataZarrSinkUnit:
 class TestAtomicDataZarrSinkWrite:
     """Tests for write/append semantics with mocked AtomicDataZarrWriter."""
 
-    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
     def test_writes_single_item(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
@@ -115,7 +115,7 @@ class TestAtomicDataZarrSinkWrite:
         # First flush should call write (not append) since store doesn't exist.
         mock_writer.write.assert_called_once()
 
-    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
     def test_writes_multiple_items(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
@@ -129,7 +129,7 @@ class TestAtomicDataZarrSinkWrite:
         assert len(paths) == 1
         mock_writer.write.assert_called_once()
 
-    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
     def test_batching(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
@@ -145,7 +145,7 @@ class TestAtomicDataZarrSinkWrite:
         mock_writer.write.assert_called_once()
         assert mock_writer.append.call_count == 2
 
-    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
     def test_append_on_existing_store(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
@@ -164,7 +164,7 @@ class TestAtomicDataZarrSinkWrite:
         mock_writer.append.assert_called_once()
         mock_writer.write.assert_not_called()
 
-    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
     def test_second_index_appends(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
@@ -181,7 +181,7 @@ class TestAtomicDataZarrSinkWrite:
         sink(iter([_make_mock_atomic_data()]), index=1)
         mock_writer.append.assert_called_once()
 
-    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
     def test_empty_iterator(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 
@@ -195,7 +195,7 @@ class TestAtomicDataZarrSinkWrite:
         mock_writer.write.assert_not_called()
         mock_writer.append.assert_not_called()
 
-    @patch("physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrWriter")
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
     def test_creates_parent_directory(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
 

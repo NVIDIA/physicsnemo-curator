@@ -17,7 +17,7 @@
 """Tests for ASELMDBSource.
 
 Unit tests use mock ASE LMDB databases to avoid requiring real data.
-E2E tests (marked ``slow``) use the val/ dataset.
+E2E tests generate real ASE LMDB databases on the fly via ``_create_real_aselmdb``.
 """
 
 from __future__ import annotations
@@ -296,18 +296,20 @@ class TestASELMDBSourceRegistry:
 
 @pytest.mark.requires("atm")
 @pytest.mark.e2e
-@pytest.mark.slow
 class TestASELMDBSourceE2E:
-    """End-to-end tests against the val/ dataset."""
+    """End-to-end tests with real ASE LMDB databases generated on the fly."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self) -> None:
+    def _setup(self, tmp_path: pathlib.Path) -> None:
+        self.db_dir = tmp_path / "e2e_data"
+        _create_real_aselmdb(self.db_dir, n_files=3, n_rows=5, with_calc=True)
+
         from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
-        self.source = ASELMDBSource(data_dir="val/")
+        self.source = ASELMDBSource(data_dir=str(self.db_dir))
 
     def test_discovers_files(self) -> None:
-        assert len(self.source) == 80
+        assert len(self.source) == 3
 
     def test_reads_first_item(self) -> None:
         from nvalchemi.data import AtomicData
@@ -318,7 +320,7 @@ class TestASELMDBSourceE2E:
 
     def test_yields_multiple_items(self) -> None:
         items = list(self.source[0])
-        assert len(items) > 1
+        assert len(items) == 5
 
 
 # ---------------------------------------------------------------------------
