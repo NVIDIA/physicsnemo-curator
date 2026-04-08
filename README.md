@@ -8,8 +8,9 @@
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![ty](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json)](https://github.com/astral-sh/ty)
 
-[![Lint](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml)
 [![Build & Install](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/build.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/build.yml)
+[![Test](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/test.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/test.yml)
+[![Lint](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml)
 [![Docs](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml)
 [![Coverage](https://img.shields.io/codecov/c/github/nvidia/physicsnemo-curator?logo=codecov)](/test)
 
