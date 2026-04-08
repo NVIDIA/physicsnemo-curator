@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 import torch
@@ -80,14 +80,14 @@ _KNOWN_RESULT_TYPES: dict[str, dict[str, str]] = {
 
 
 def _extract_result_field(
-    model: object,
+    model: Any,
     result_name: str,
 ) -> tuple[np.ndarray, str] | None:
     """Extract a single result field from a DPF model.
 
     Parameters
     ----------
-    model : object
+    model : Any
         A ``dpf.Model`` instance.
     result_name : str
         Name of the result operator (e.g. ``"temperature"``).
@@ -99,7 +99,7 @@ def _extract_result_field(
         ``"elemental"``, or ``None`` if the result is not available.
     """
     try:
-        result_op = getattr(model.results, result_name)()  # ty: ignore[unresolved-attribute]
+        result_op = getattr(model.results, result_name)()
         fields_container = result_op.outputs.fields_container()
         if len(fields_container) == 0:
             return None
@@ -111,12 +111,12 @@ def _extract_result_field(
         return None
 
 
-def _discover_available_results(model: object) -> list[str]:
+def _discover_available_results(model: Any) -> list[str]:
     """Discover which result types are available in the DPF model.
 
     Parameters
     ----------
-    model : object
+    model : Any
         A ``dpf.Model`` instance.
 
     Returns
@@ -127,7 +127,7 @@ def _discover_available_results(model: object) -> list[str]:
     available: list[str] = []
     for result_name in _KNOWN_RESULT_TYPES:
         try:
-            result_op = getattr(model.results, result_name)()  # ty: ignore[unresolved-attribute]
+            result_op = getattr(model.results, result_name)()
             fc = result_op.outputs.fields_container()
             if len(fc) > 0 and len(fc[0].data) > 0:
                 available.append(result_name)
@@ -136,14 +136,14 @@ def _discover_available_results(model: object) -> list[str]:
     return sorted(available)
 
 
-def _extract_connectivity(meshed_region: object) -> np.ndarray:
+def _extract_connectivity(meshed_region: Any) -> np.ndarray:
     """Extract element connectivity from a DPF meshed region.
 
     Pads ragged connectivity to a uniform width using ``-1`` fill.
 
     Parameters
     ----------
-    meshed_region : object
+    meshed_region : Any
         A ``dpf.MeshedRegion`` instance.
 
     Returns
@@ -151,7 +151,7 @@ def _extract_connectivity(meshed_region: object) -> np.ndarray:
     np.ndarray
         Element connectivity, shape ``(E, max_nodes_per_element)``, int64.
     """
-    elements = meshed_region.elements  # ty: ignore[unresolved-attribute]
+    elements = meshed_region.elements
     n_elements = elements.n_elements
 
     # Collect element connectivity lists.
@@ -165,7 +165,7 @@ def _extract_connectivity(meshed_region: object) -> np.ndarray:
             max_nodes = len(node_ids)
 
     # Build node-ID-to-index map for 0-based indexing.
-    nodes = meshed_region.nodes  # ty: ignore[unresolved-attribute]
+    nodes = meshed_region.nodes
     node_id_to_index: dict[int, int] = {}
     for i in range(nodes.n_nodes):
         node_id_to_index[nodes.node_by_index(i).id] = i
@@ -388,8 +388,8 @@ class AnsysRSTSource(Source["Mesh"]):  # noqa: F821
                     )
 
         # -- Build TensorDicts -----------------------------------------------
-        point_data = TensorDict(pd_dict, batch_size=[n_nodes]) if pd_dict else None  # ty: ignore[invalid-argument-type]
-        cell_data = TensorDict(cd_dict, batch_size=[n_elements]) if cd_dict else None  # ty: ignore[invalid-argument-type]
+        point_data = TensorDict(pd_dict, batch_size=[n_nodes]) if pd_dict else None
+        cell_data = TensorDict(cd_dict, batch_size=[n_elements]) if cd_dict else None
 
         global_data = TensorDict(
             {

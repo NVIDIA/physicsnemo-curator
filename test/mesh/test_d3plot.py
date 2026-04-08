@@ -29,6 +29,13 @@ import numpy as np
 import pytest
 import torch
 
+try:
+    import lasso  # noqa: F401
+
+    _has_lasso = True
+except ImportError:
+    _has_lasso = False
+
 if TYPE_CHECKING:
     import pathlib
 
@@ -197,6 +204,7 @@ class TestD3PlotSourceUnit:
 
 
 @pytest.mark.requires("mesh")
+@pytest.mark.skipif(not _has_lasso, reason="lasso (lasso-python) not installed")
 class TestD3PlotSourceLocal:
     """Unit tests using mocked lasso D3plot reader."""
 
@@ -276,7 +284,7 @@ class TestD3PlotSourceLocal:
         source = D3PlotSource(input_dir=str(self.mock_root))
         mesh = next(source[0])
         assert "num_timesteps" in mesh.global_data
-        assert mesh.global_data["num_timesteps"].item() == 5  # ty: ignore[unresolved-attribute]
+        assert mesh.global_data["num_timesteps"].item() == 5
 
     @patch("lasso.dyna.D3plot")
     def test_read_stress_produces_cell_data(self, mock_d3plot_cls: MagicMock) -> None:
@@ -335,7 +343,7 @@ class TestD3PlotSourceLocal:
         mock_d3plot_cls.return_value = _make_mock_d3plot()
         source = D3PlotSource(input_dir=str(no_k_root))
         mesh = next(source[0])
-        assert torch.all(mesh.point_data["thickness"] == 0.0)  # ty: ignore[no-matching-overload]
+        assert torch.all(mesh.point_data["thickness"] == 0.0)
 
 
 # ---------------------------------------------------------------------------

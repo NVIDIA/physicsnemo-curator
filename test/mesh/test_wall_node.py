@@ -90,13 +90,13 @@ def _make_crash_mesh(
 
     pd_dict["thickness"] = torch.ones(n_points, dtype=torch.float32)
 
-    point_data = TensorDict(pd_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
+    point_data = TensorDict(pd_dict, batch_size=[n_points])
 
     # Cell data: simple scalar per cell per timestep.
     cd_dict: dict[str, torch.Tensor] = {}
     for t in range(n_timesteps):
         cd_dict[f"stress_vm_t{t:03d}"] = torch.from_numpy(rng.uniform(0, 100, size=(n_cells,)).astype(np.float64))
-    cell_data = TensorDict(cd_dict, batch_size=[n_cells])  # ty: ignore[invalid-argument-type]
+    cell_data = TensorDict(cd_dict, batch_size=[n_cells])
 
     global_data = TensorDict(
         {"num_timesteps": torch.tensor([n_timesteps], dtype=torch.int64)},
@@ -217,7 +217,7 @@ class TestWallNodeFilterBehavior:
             yield mesh
 
         result = list(filt(gen()))
-        assert result[0].global_data["num_timesteps"].item() == 3  # ty: ignore[unresolved-attribute]
+        assert result[0].global_data["num_timesteps"].item() == 3
 
     def test_connectivity_remapped(self) -> None:
         """Cell indices should be remapped to new contiguous node indices."""

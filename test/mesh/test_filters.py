@@ -692,7 +692,7 @@ class TestPrecisionFilter:
         converted_temp = meshes_out[0].point_data["temperature"]
 
         # Values should be close (within float32 precision)
-        assert torch.allclose(converted_temp.double(), original_temp, atol=1e-6)  # ty: ignore[invalid-argument-type]
+        assert torch.allclose(converted_temp.double(), original_temp, atol=1e-6)
 
     def test_float16_conversion(self, tmp_path):
         """PrecisionFilter should support float16 conversion."""

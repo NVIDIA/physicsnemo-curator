@@ -810,10 +810,10 @@ class TestMeanFilterExtended:
         result1 = filt.flush()
         assert result1 == str(parquet_path)
 
-        # The internal rows are still there but no new data added.
-        # Since _rows is not cleared, flush should still return the path.
+        # flush() clears internal rows after writing, so a second call
+        # with no new data should return None.
         result2 = filt.flush()
-        assert result2 == str(parquet_path)
+        assert result2 is None
 
     def test_multiple_meshes_accumulate(self, tmp_path):
         """Processing many items should accumulate all rows before flush."""
@@ -862,7 +862,7 @@ class TestMeshSinkExtended:
         paths = sink(source[0], index=0)
 
         # Load it back.
-        loaded = Mesh.load(paths[0])  # ty: ignore[unresolved-attribute]
+        loaded = Mesh.load(paths[0])
         assert loaded.n_points == 4
         assert loaded.n_cells == 2
 
@@ -979,7 +979,7 @@ class TestMeshPipelineExtended:
         pipeline = VTKSource.from_path(str(vtk_dir)).filter(mean_filter).write(MeshSink(output_dir=str(output_dir)))
 
         paths = pipeline[0]
-        loaded = Mesh.load(paths[0])  # ty: ignore[unresolved-attribute]
+        loaded = Mesh.load(paths[0])
 
         # Verify geometry.
         assert loaded.n_points == 4
@@ -1088,7 +1088,7 @@ class TestMeshDeviceOps:
         assert pathlib.Path(paths[0]).exists()
 
         # Verify the saved mesh can be loaded.
-        loaded = Mesh.load(paths[0])  # ty: ignore[unresolved-attribute]
+        loaded = Mesh.load(paths[0])
         assert loaded.n_points == 4
 
 
@@ -1279,7 +1279,7 @@ class TestDrivAerMLRemotePipeline:
 
         # Verify saved meshes can be loaded back.
         for p in all_paths:
-            loaded = Mesh.load(p)  # ty: ignore[unresolved-attribute]
+            loaded = Mesh.load(p)
             assert loaded.n_points > 0
             assert loaded.n_cells > 0
             assert loaded.n_manifold_dims == 2
@@ -1294,7 +1294,7 @@ class TestDrivAerMLRemotePipeline:
         for i in range(len(self.source)):
             original = next(self.source[i])
             paths = sink(iter([original]), index=i)
-            loaded = Mesh.load(paths[0])  # ty: ignore[unresolved-attribute]
+            loaded = Mesh.load(paths[0])
 
             assert loaded.n_points == original.n_points
             assert loaded.n_cells == original.n_cells

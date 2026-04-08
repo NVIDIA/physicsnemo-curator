@@ -360,8 +360,10 @@ class NetCDF4Sink(Sink["xr.DataArray"]):
     def _append_existing(self, ds: xr.Dataset, nc_path: pathlib.Path) -> None:
         """Append a Dataset to an existing NetCDF4 file along time.
 
-        Uses the ``netCDF4`` library directly for efficient appending
-        to the unlimited time dimension.
+        Reads the existing file with xarray, concatenates the new data
+        along the ``time`` dimension, and rewrites.  This avoids
+        incompatible HDF5 library issues that can arise when mixing
+        ``xarray.to_netcdf`` with ``netCDF4.Dataset(mode='a')``.
 
         Parameters
         ----------
@@ -370,33 +372,22 @@ class NetCDF4Sink(Sink["xr.DataArray"]):
         nc_path : pathlib.Path
             Path to the existing NetCDF4 file.
         """
-        import netCDF4
+        import xarray
 
-        with netCDF4.Dataset(str(nc_path), mode="a") as nc:
-            time_var = nc.variables["time"]
-            data_var = nc.variables["data"]
-            existing_len = len(time_var)
-            new_len = ds.sizes["time"]
+        existing = xarray.open_dataset(str(nc_path))
+        try:
+            merged = xarray.concat([existing, ds], dim="time")
+        finally:
+            existing.close()
 
-            # Append time coordinate
-            import numpy as np
-
-            new_times = ds["time"].values
-            # Convert numpy datetime64 to numeric values matching existing encoding
-            if hasattr(time_var, "units"):
-                time_units = time_var.units
-                time_calendar = getattr(time_var, "calendar", "proleptic_gregorian")
-                from netCDF4 import date2num
-
-                # Convert np.datetime64 to python datetime
-                py_times = [t.astype("datetime64[us]").astype("O") for t in np.atleast_1d(new_times)]
-                numeric_times = date2num(py_times, units=time_units, calendar=time_calendar)
-                time_var[existing_len : existing_len + new_len] = numeric_times
-            else:
-                time_var[existing_len : existing_len + new_len] = np.arange(existing_len, existing_len + new_len)
-
-            # Append data
-            data_var[existing_len : existing_len + new_len] = ds["data"].values
+        encoding = self._build_encoding(merged["data"])
+        merged.to_netcdf(
+            path=str(nc_path),
+            mode="w",
+            format="NETCDF4",
+            encoding=encoding,
+            unlimited_dims=self._unlimited_dims,
+        )
 
     @property
     def output_dir(self) -> pathlib.Path:

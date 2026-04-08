@@ -107,6 +107,8 @@ jobs:
           print('mesh deps OK')"
 
       - name: Run mesh tests with coverage
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: >
           uv run pytest test/mesh/
           --cov --cov-fail-under=0
@@ -155,6 +157,8 @@ jobs:
           print('da deps OK')"
 
       - name: Run da tests with coverage
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: >
           uv run pytest test/da/
           --cov --cov-fail-under=0
@@ -192,6 +196,9 @@ jobs:
 
       - name: Install dependencies (dev + atm extras)
         run: uv sync --group dev --extra atm
+
+      - name: Install missing transitive deps
+        run: uv pip install periodictable
 
       - name: Build native extension
         run: uv run maturin develop
