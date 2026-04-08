@@ -80,6 +80,15 @@ user-guide/index
 domains/index
 ```
 
+## Benchmarks
+
+```{toctree}
+:maxdepth: 1
+:hidden:
+
+Benchmarks <https://nvidia.github.io/physicsnemo-curator/benchmarks/>
+```
+
 ## Examples
 
 ```{toctree}
