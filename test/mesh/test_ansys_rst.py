@@ -243,7 +243,7 @@ class TestAnsysRSTSourceUnit:
 
     def test_params_list(self) -> None:
         """Params include input_dir and result_types."""
-        from physicsnemo.curator.mesh.sources.ansys_rst import AnsysRSTSource
+        from physicsnemo_curator.mesh.sources.ansys_rst import AnsysRSTSource
 
         params = AnsysRSTSource.params()
         assert len(params) > 0
@@ -253,7 +253,7 @@ class TestAnsysRSTSourceUnit:
 
     def test_name_and_description(self) -> None:
         """Name and description ClassVars are set."""
-        from physicsnemo.curator.mesh.sources.ansys_rst import AnsysRSTSource
+        from physicsnemo_curator.mesh.sources.ansys_rst import AnsysRSTSource
 
         assert isinstance(AnsysRSTSource.name, str)
         assert len(AnsysRSTSource.name) > 0
@@ -296,7 +296,7 @@ class TestAnsysRSTSourceLocal:
         result_types: list[str] | None = None,
     ) -> AnsysRSTSource:  # type: ignore[name-defined]  # noqa: F821  # ty: ignore[unresolved-reference]
         """Create an AnsysRSTSource pointing at mock data."""
-        from physicsnemo.curator.mesh.sources.ansys_rst import AnsysRSTSource
+        from physicsnemo_curator.mesh.sources.ansys_rst import AnsysRSTSource
 
         return AnsysRSTSource(
             input_dir=str(self.mock_root),
@@ -436,7 +436,7 @@ class TestAnsysRSTSourceLocal:
 
     def test_nonexistent_dir(self, tmp_path: pathlib.Path) -> None:
         """Non-existent directory raises FileNotFoundError."""
-        from physicsnemo.curator.mesh.sources.ansys_rst import AnsysRSTSource
+        from physicsnemo_curator.mesh.sources.ansys_rst import AnsysRSTSource
 
         with pytest.raises(FileNotFoundError):
             AnsysRSTSource(input_dir=str(tmp_path / "nonexistent"))
@@ -463,7 +463,7 @@ class TestAnsysRSTHelpers:
 
     def test_extract_connectivity(self) -> None:
         """Connectivity extraction produces correct 0-based indices."""
-        from physicsnemo.curator.mesh.sources.ansys_rst import _extract_connectivity
+        from physicsnemo_curator.mesh.sources.ansys_rst import _extract_connectivity
 
         region = _MockMeshedRegion(n_nodes=6, n_elements=3)
         conn = _extract_connectivity(region)
@@ -477,7 +477,7 @@ class TestAnsysRSTHelpers:
 
     def test_discover_available_results(self) -> None:
         """Discovery finds results that are configured."""
-        from physicsnemo.curator.mesh.sources.ansys_rst import _discover_available_results
+        from physicsnemo_curator.mesh.sources.ansys_rst import _discover_available_results
 
         model = _make_mock_model(
             available_results={
@@ -494,7 +494,7 @@ class TestAnsysRSTHelpers:
 
     def test_extract_result_field_success(self) -> None:
         """Successful result extraction returns data and location."""
-        from physicsnemo.curator.mesh.sources.ansys_rst import _extract_result_field
+        from physicsnemo_curator.mesh.sources.ansys_rst import _extract_result_field
 
         model = _make_mock_model(
             available_results={"temperature": np.arange(10, dtype=np.float64)},
@@ -509,7 +509,7 @@ class TestAnsysRSTHelpers:
 
     def test_extract_result_field_missing(self) -> None:
         """Missing result returns None."""
-        from physicsnemo.curator.mesh.sources.ansys_rst import _extract_result_field
+        from physicsnemo_curator.mesh.sources.ansys_rst import _extract_result_field
 
         model = _make_mock_model(available_results={})
         result = _extract_result_field(model, "temperature")
@@ -528,7 +528,7 @@ class TestAnsysRSTRegistry:
 
     def test_source_registered(self) -> None:
         """AnsysRSTSource should appear in the mesh registry."""
-        from physicsnemo.curator.core.registry import registry
+        from physicsnemo_curator.core.registry import registry
 
         sources = registry.sources("mesh")
         assert "Ansys RST" in sources

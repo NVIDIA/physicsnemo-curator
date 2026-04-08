@@ -75,7 +75,7 @@ atm = [
 ]
 
 [project.scripts]
-curator = "physicsnemo.curator.cli:main"
+curator = "physicsnemo_curator.cli:main"
 
 [dependency-groups]
 dev = [
@@ -171,7 +171,7 @@ unresolved-import = "ignore"
 [tool.maturin]
 python-source = "src"
 manifest-path = "src/rust/Cargo.toml"
-module-name = "physicsnemo.curator._lib"
+module-name = "physicsnemo_curator._lib"
 
 # ---------------------------------------------------------------------------
 # Ruff (linting + formatting)
@@ -237,7 +237,7 @@ markers = [
 # Coverage (pytest-cov)
 # ---------------------------------------------------------------------------
 [tool.coverage.run]
-source = ["physicsnemo.curator"]
+source = ["physicsnemo_curator"]
 omit = [
     "test/*",
     "docs/*",

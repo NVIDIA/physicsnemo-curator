@@ -40,21 +40,21 @@ example fast.
 #
 # Import the core pipeline components: a **Source** to fetch ERA5 fields,
 # a **Filter** to compute temporal statistics, a **Sink** to write
-# outputs, and :func:`~physicsnemo.curator.run.run_pipeline` for
+# outputs, and :func:`~physicsnemo_curator.run.run_pipeline` for
 # parallel execution.
 
 from datetime import datetime
 
-from physicsnemo.curator.da.filters.moments import MomentsFilter
-from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
-from physicsnemo.curator.da.sources.era5 import ERA5Source
-from physicsnemo.curator.run import gather_pipeline, run_pipeline
+from physicsnemo_curator.da.filters.moments import MomentsFilter
+from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+from physicsnemo_curator.da.sources.era5 import ERA5Source
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
 # --------------------
 #
-# :class:`~physicsnemo.curator.da.sources.era5.ERA5Source` connects to a
+# :class:`~physicsnemo_curator.da.sources.era5.ERA5Source` connects to a
 # cloud-hosted ERA5 mirror and discovers available timestamps.  Each
 # index yields one hourly snapshot as an :class:`xarray.DataArray` with
 # dimensions ``(time, variable, lat, lon)``.
@@ -93,15 +93,15 @@ print(f"Backend: {source.active_backend}")
 # ------------------
 #
 # The fluent API chains **Source → Filter → Sink** into a lazy
-# :class:`~physicsnemo.curator.core.base.Pipeline`.  Nothing is
+# :class:`~physicsnemo_curator.core.base.Pipeline`.  Nothing is
 # executed until we explicitly process indices.
 #
-# - :class:`~physicsnemo.curator.da.filters.moments.MomentsFilter`
+# - :class:`~physicsnemo_curator.da.filters.moments.MomentsFilter`
 #   computes running temporal statistics (mean, variance, skewness,
 #   min, max) using Welford's numerically stable online algorithm.
 #   The filter is **pass-through** — each DataArray is yielded
 #   unchanged while accumulators update in the background.
-# - :class:`~physicsnemo.curator.da.sinks.zarr_writer.ZarrSink`
+# - :class:`~physicsnemo_curator.da.sinks.zarr_writer.ZarrSink`
 #   writes each DataArray to a Zarr store, with one group per
 #   variable and automatic append along the ``time`` dimension.
 
@@ -113,7 +113,7 @@ pipeline = source.filter(MomentsFilter(output="outputs/era5/moments.zarr", dims=
 # Run the Pipeline
 # ----------------
 #
-# :func:`~physicsnemo.curator.run.run_pipeline` dispatches work
+# :func:`~physicsnemo_curator.run.run_pipeline` dispatches work
 # sequentially here (ERA5 backends are I/O-bound and share an
 # in-process cache, so parallelism offers limited benefit for small
 # fetches).  For large time ranges, use ``backend="process_pool"``

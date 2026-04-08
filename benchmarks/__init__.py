@@ -15,25 +15,3 @@
 # limitations under the License.
 
 """ASV benchmark suite for physicsnemo-curator."""
-
-from __future__ import annotations
-
-from pathlib import Path
-
-# ---------------------------------------------------------------------------
-# Namespace package extension (same fix as test/conftest.py)
-# ---------------------------------------------------------------------------
-# nvidia-physicsnemo installs a regular ``physicsnemo/__init__.py`` that
-# prevents Python from discovering ``physicsnemo.curator`` in our editable
-# ``src/`` tree.  Extend ``physicsnemo.__path__`` so both packages coexist.
-
-_src_dir = str(Path(__file__).resolve().parent.parent / "src" / "physicsnemo")
-if Path(_src_dir).is_dir():
-    try:
-        import physicsnemo  # type: ignore[import-untyped]
-
-        if _src_dir not in physicsnemo.__path__:
-            physicsnemo.__path__.insert(0, _src_dir)
-    except ImportError:
-        # physicsnemo not installed — namespace package works natively.
-        pass

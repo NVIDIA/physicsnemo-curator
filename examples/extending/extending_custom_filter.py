@@ -19,7 +19,7 @@ Creating a Custom Filter
 =========================
 
 This example shows how to implement and register a custom
-:class:`~physicsnemo.curator.core.base.Filter`.
+:class:`~physicsnemo_curator.core.base.Filter`.
 
 We create a ``LogTransformFilter`` that applies a ``log1p`` transform
 to a chosen variable in an :class:`xarray.DataArray` — a common
@@ -42,7 +42,7 @@ or **stateful** (accumulate results and flush at the end).
 # Step 1 — Define the Filter
 # ----------------------------
 #
-# A filter inherits from :class:`~physicsnemo.curator.core.base.Filter`
+# A filter inherits from :class:`~physicsnemo_curator.core.base.Filter`
 # and implements three things:
 #
 # 1. ``name`` / ``description`` class variables (for CLI discovery)
@@ -55,7 +55,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
-from physicsnemo.curator.core.base import Filter, Param
+from physicsnemo_curator.core.base import Filter, Param
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -132,7 +132,7 @@ class LogTransformFilter(Filter["xr.DataArray"]):
 # and the interactive CLI.  This is optional — unregistered filters
 # work fine in pipelines built with Python code.
 
-from physicsnemo.curator.core.registry import registry
+from physicsnemo_curator.core.registry import registry
 
 registry.register_filter("da", LogTransformFilter)
 
@@ -153,9 +153,9 @@ assert "Log Transform" in registered
 
 from datetime import datetime
 
-from physicsnemo.curator.da.sinks.zarr_writer import ZarrSink
-from physicsnemo.curator.da.sources.era5 import ERA5Source
-from physicsnemo.curator.run import run_pipeline
+from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+from physicsnemo_curator.da.sources.era5 import ERA5Source
+from physicsnemo_curator.run import run_pipeline
 
 source = ERA5Source(
     times=[datetime(2020, 6, 1, 0), datetime(2020, 6, 1, 6)],
@@ -185,7 +185,7 @@ for i, paths in enumerate(results):
 #
 # To create a custom filter:
 #
-# 1. Subclass :class:`~physicsnemo.curator.core.base.Filter` with a
+# 1. Subclass :class:`~physicsnemo_curator.core.base.Filter` with a
 #    type parameter (``Filter["xr.DataArray"]``, ``Filter["Mesh"]``,
 #    etc.)
 # 2. Set ``name`` and ``description`` class variables
@@ -194,5 +194,5 @@ for i, paths in enumerate(results):
 #
 # For **stateful** filters (like statistics accumulators), add a
 # ``flush()`` method and an ``_output_path`` attribute.  See
-# :class:`~physicsnemo.curator.mesh.filters.stats.StatsFilter` for
+# :class:`~physicsnemo_curator.mesh.filters.stats.StatsFilter` for
 # an example with Welford accumulators and cross-worker merging.

@@ -22,8 +22,8 @@ Which submodule does this filter belong to?
 
 | Domain | Type parameter | Submodule | Dependency group |
 |--------|---------------|-----------|-----------------|
-| **mesh** | `Filter["Mesh"]` | `src/physicsnemo/curator/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
-| **da** | `Filter["xr.DataArray"]` | `src/physicsnemo/curator/da/` | `da` (xarray, earth2studio, zarr) |
+| **mesh** | `Filter["Mesh"]` | `src/physicsnemo_curator/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
+| **da** | `Filter["xr.DataArray"]` | `src/physicsnemo_curator/da/` | `da` (xarray, earth2studio, zarr) |
 
 ### Filter Design
 
@@ -63,8 +63,8 @@ Which submodule does this filter belong to?
 
 Create the filter file at the appropriate location:
 
-- **mesh**: `src/physicsnemo/curator/mesh/filters/<name>.py`
-- **da**: `src/physicsnemo/curator/da/filters/<name>.py`
+- **mesh**: `src/physicsnemo_curator/mesh/filters/<name>.py`
+- **da**: `src/physicsnemo_curator/da/filters/<name>.py`
 
 ### Required SPDX Header
 
@@ -101,7 +101,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 # Third-party imports as needed (torch, pyarrow, numpy, etc.)
 
-from physicsnemo.curator.core.base import Filter, Param
+from physicsnemo_curator.core.base import Filter, Param
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -502,7 +502,7 @@ class Test<ClassName>Integration:
 
     def test_yields_mesh_unchanged(self, tmp_path: pathlib.Path) -> None:
         """Filter should yield the mesh without modification."""
-        from physicsnemo.curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
         _create_test_mesh(tmp_path / "vtk")
         source = VTKSource.from_path(str(tmp_path / "vtk"))
@@ -585,8 +585,8 @@ class Test<ClassName>Pipeline:
 
     def test_chained_in_pipeline(self, tmp_path: pathlib.Path) -> None:
         """Filter works correctly in a multi-filter pipeline."""
-        from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
-        from physicsnemo.curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+        from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
         vtk_dir = tmp_path / "vtk"
         _create_test_mesh(vtk_dir, "mesh_0.vtu")
@@ -620,7 +620,7 @@ class Test<ClassName>Registry:
     """Test that the filter is registered."""
 
     def test_filter_registered(self) -> None:
-        from physicsnemo.curator.core.registry import registry
+        from physicsnemo_curator.core.registry import registry
 
         names = [f.name for f in registry.list_filters("<domain>")]
         assert "<Display Name>" in names
@@ -653,11 +653,11 @@ uv run pytest test/<domain>/ -v -k "not slow"
 
 ### Edit the domain `__init__.py`
 
-For **mesh** filters, edit `src/physicsnemo/curator/mesh/__init__.py`:
+For **mesh** filters, edit `src/physicsnemo_curator/mesh/__init__.py`:
 
 ```python
 # Add import (alphabetical order among filters)
-from physicsnemo.curator.mesh.filters.<module> import <ClassName>
+from physicsnemo_curator.mesh.filters.<module> import <ClassName>
 
 # Add registration (after existing register_filter calls)
 registry.register_filter("mesh", <ClassName>)
@@ -670,7 +670,7 @@ __all__ = [
 ]
 ```
 
-For **da** filters, edit `src/physicsnemo/curator/da/__init__.py` with
+For **da** filters, edit `src/physicsnemo_curator/da/__init__.py` with
 the same pattern using `"da"` as the submodule name.
 
 ### Export any public helpers
@@ -679,7 +679,7 @@ If the filter provides a public helper function (like `merge_welford_stats`
 in `StatsFilter`), add it to the import and `__all__` as well:
 
 ```python
-from physicsnemo.curator.mesh.filters.<module> import <ClassName>, <helper_func>
+from physicsnemo_curator.mesh.filters.<module> import <ClassName>, <helper_func>
 
 __all__ = [
     ...,
@@ -696,12 +696,12 @@ Run all checks before committing:
 ```bash
 # Format
 uv run ruff format \
-  src/physicsnemo/curator/<domain>/filters/<name>.py \
+  src/physicsnemo_curator/<domain>/filters/<name>.py \
   test/<domain>/test_<name>.py
 
 # Lint
 uv run ruff check --fix \
-  src/physicsnemo/curator/<domain>/filters/<name>.py \
+  src/physicsnemo_curator/<domain>/filters/<name>.py \
   test/<domain>/test_<name>.py
 
 # Docstring coverage (must be >= 99%)
@@ -761,7 +761,7 @@ Before considering the filter complete, verify:
 
 ## Reference: Filter[T] ABC
 
-From `src/physicsnemo/curator/core/base.py`:
+From `src/physicsnemo_curator/core/base.py`:
 
 ```python
 class Filter[T](ABC):

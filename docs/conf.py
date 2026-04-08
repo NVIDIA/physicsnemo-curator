@@ -66,7 +66,7 @@ sphinx_gallery_conf = {
 # ---------------------------------------------------------------------------
 # AutoAPI (static analysis — reads .pyi stubs without importing)
 # ---------------------------------------------------------------------------
-autoapi_dirs = ["../src/physicsnemo/curator"]
+autoapi_dirs = ["../src/physicsnemo_curator"]
 autoapi_type = "python"
 autoapi_template_dir = "_templates/autoapi"
 autoapi_options = [

@@ -181,7 +181,7 @@ class TestD3PlotSourceUnit:
 
     def test_params_list(self) -> None:
         """params() should return a non-empty list of Param objects."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         params = D3PlotSource.params()
         assert len(params) > 0
@@ -192,7 +192,7 @@ class TestD3PlotSourceUnit:
 
     def test_name_and_description(self) -> None:
         """Class should have name and description ClassVars."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         assert D3PlotSource.name == "LS-DYNA D3Plot"
         assert len(D3PlotSource.description) > 0
@@ -217,14 +217,14 @@ class TestD3PlotSourceLocal:
 
     def test_nonexistent_dir_raises(self, tmp_path: pathlib.Path) -> None:
         """FileNotFoundError should be raised for non-existent input_dir."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         with pytest.raises(FileNotFoundError):
             D3PlotSource(input_dir=str(tmp_path / "nonexistent"))
 
     def test_len(self) -> None:
         """Length should equal the number of run directories."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         source = D3PlotSource(input_dir=str(self.mock_root))
         assert len(source) == 3
@@ -234,7 +234,7 @@ class TestD3PlotSourceLocal:
         """__getitem__ should yield a physicsnemo Mesh."""
         from physicsnemo.mesh import Mesh
 
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         mock_d3plot_cls.return_value = _make_mock_d3plot()
         source = D3PlotSource(input_dir=str(self.mock_root))
@@ -244,7 +244,7 @@ class TestD3PlotSourceLocal:
     @patch("lasso.dyna.D3plot")
     def test_mesh_geometry(self, mock_d3plot_cls: MagicMock) -> None:
         """Mesh should have correct point and cell counts."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         mock_d3plot_cls.return_value = _make_mock_d3plot(n_points=8, n_cells=4)
         source = D3PlotSource(input_dir=str(self.mock_root))
@@ -255,7 +255,7 @@ class TestD3PlotSourceLocal:
     @patch("lasso.dyna.D3plot")
     def test_mesh_has_displacement_fields(self, mock_d3plot_cls: MagicMock) -> None:
         """Mesh should have displacement_t* fields in point_data."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         mock_d3plot_cls.return_value = _make_mock_d3plot(n_timesteps=3)
         source = D3PlotSource(input_dir=str(self.mock_root))
@@ -268,7 +268,7 @@ class TestD3PlotSourceLocal:
     @patch("lasso.dyna.D3plot")
     def test_mesh_has_thickness(self, mock_d3plot_cls: MagicMock) -> None:
         """Mesh should have thickness in point_data."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         mock_d3plot_cls.return_value = _make_mock_d3plot()
         source = D3PlotSource(input_dir=str(self.mock_root))
@@ -278,7 +278,7 @@ class TestD3PlotSourceLocal:
     @patch("lasso.dyna.D3plot")
     def test_mesh_has_global_data(self, mock_d3plot_cls: MagicMock) -> None:
         """Mesh should carry num_timesteps as global data."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         mock_d3plot_cls.return_value = _make_mock_d3plot(n_timesteps=5)
         source = D3PlotSource(input_dir=str(self.mock_root))
@@ -289,7 +289,7 @@ class TestD3PlotSourceLocal:
     @patch("lasso.dyna.D3plot")
     def test_read_stress_produces_cell_data(self, mock_d3plot_cls: MagicMock) -> None:
         """With read_stress=True, mesh should have stress/strain cell data."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         mock_d3plot_cls.return_value = _make_mock_d3plot(n_timesteps=2, include_stress=True)
         source = D3PlotSource(input_dir=str(self.mock_root), read_stress=True)
@@ -303,7 +303,7 @@ class TestD3PlotSourceLocal:
     @patch("lasso.dyna.D3plot")
     def test_no_stress_gives_no_cell_data(self, mock_d3plot_cls: MagicMock) -> None:
         """With read_stress=False, cell_data should have no fields."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         mock_d3plot_cls.return_value = _make_mock_d3plot()
         source = D3PlotSource(input_dir=str(self.mock_root), read_stress=False)
@@ -316,7 +316,7 @@ class TestD3PlotSourceLocal:
         """Negative indexing should work."""
         from physicsnemo.mesh import Mesh
 
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         mock_d3plot_cls.return_value = _make_mock_d3plot()
         source = D3PlotSource(input_dir=str(self.mock_root))
@@ -325,7 +325,7 @@ class TestD3PlotSourceLocal:
 
     def test_out_of_range_raises(self) -> None:
         """Out-of-range index should raise IndexError."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         source = D3PlotSource(input_dir=str(self.mock_root))
         with pytest.raises(IndexError):
@@ -334,7 +334,7 @@ class TestD3PlotSourceLocal:
     @patch("lasso.dyna.D3plot")
     def test_no_k_file_gives_zero_thickness(self, mock_d3plot_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         """Without a .k file, thickness should be all zeros."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         # Create runs without .k files.
         no_k_root = tmp_path / "no_k"
@@ -357,7 +357,7 @@ class TestD3PlotHelpers:
 
     def test_parse_k_file(self, tmp_path: pathlib.Path) -> None:
         """_parse_k_file should extract part thickness mapping."""
-        from physicsnemo.curator.mesh.sources.d3plot import _parse_k_file
+        from physicsnemo_curator.mesh.sources.d3plot import _parse_k_file
 
         k_content = """$
 *KEYWORD
@@ -382,7 +382,7 @@ Part_2
 
     def test_von_mises_from_voigt(self) -> None:
         """_von_mises_from_voigt should compute correct stress."""
-        from physicsnemo.curator.mesh.sources.d3plot import _von_mises_from_voigt
+        from physicsnemo_curator.mesh.sources.d3plot import _von_mises_from_voigt
 
         # Uniaxial stress: sigma_x = 100, rest = 0.
         sig = np.array([[[100.0, 0.0, 0.0, 0.0, 0.0, 0.0]]])
@@ -392,7 +392,7 @@ Part_2
 
     def test_reduce_shell_layers_scalar(self) -> None:
         """_reduce_shell_layers_scalar should average two layers."""
-        from physicsnemo.curator.mesh.sources.d3plot import _reduce_shell_layers_scalar
+        from physicsnemo_curator.mesh.sources.d3plot import _reduce_shell_layers_scalar
 
         x = np.array([[[1.0, 3.0], [2.0, 4.0]]])  # (1, 2, 2)
         result = _reduce_shell_layers_scalar(x)
@@ -412,8 +412,8 @@ class TestD3PlotRegistry:
 
     def test_source_registered(self) -> None:
         """D3PlotSource should appear in the mesh registry."""
-        import physicsnemo.curator.mesh  # noqa: F401
-        from physicsnemo.curator.core.registry import registry
+        import physicsnemo_curator.mesh  # noqa: F401
+        from physicsnemo_curator.core.registry import registry
 
         sources = registry.list_sources("mesh")
         source_names = {s.name for s in sources}
@@ -431,7 +431,7 @@ class TestD3PlotRustConsistency:
 
     def test_parse_k_file_consistency(self, tmp_path: pathlib.Path) -> None:
         """Rust parse_k_file must match Python parse_k_file exactly."""
-        from physicsnemo.curator.mesh.sources.d3plot import (
+        from physicsnemo_curator.mesh.sources.d3plot import (
             _parse_k_file,
             _parse_k_file_rust,
         )
@@ -470,7 +470,7 @@ Part_3
 
     def test_compute_node_thickness_consistency(self) -> None:
         """Rust compute_node_thickness must match Python exactly."""
-        from physicsnemo.curator.mesh.sources.d3plot import (
+        from physicsnemo_curator.mesh.sources.d3plot import (
             _compute_node_thickness,
             _compute_node_thickness_rust,
         )
@@ -497,7 +497,7 @@ Part_3
 
     def test_compute_node_thickness_no_actual_ids(self) -> None:
         """Consistency when actual_part_ids is None."""
-        from physicsnemo.curator.mesh.sources.d3plot import (
+        from physicsnemo_curator.mesh.sources.d3plot import (
             _compute_node_thickness,
             _compute_node_thickness_rust,
         )
@@ -518,7 +518,7 @@ Part_3
 
     def test_von_mises_consistency_uniaxial(self) -> None:
         """Rust von Mises must match Python for uniaxial stress."""
-        from physicsnemo.curator.mesh.sources.d3plot import (
+        from physicsnemo_curator.mesh.sources.d3plot import (
             _von_mises_from_voigt,
             _von_mises_from_voigt_rust,
         )
@@ -531,7 +531,7 @@ Part_3
 
     def test_von_mises_consistency_random(self) -> None:
         """Rust von Mises must match Python for random stress tensors."""
-        from physicsnemo.curator.mesh.sources.d3plot import (
+        from physicsnemo_curator.mesh.sources.d3plot import (
             _von_mises_from_voigt,
             _von_mises_from_voigt_rust,
         )
@@ -547,7 +547,7 @@ Part_3
 
     def test_von_mises_consistency_hydrostatic(self) -> None:
         """Hydrostatic stress should yield ~0 von Mises in both backends."""
-        from physicsnemo.curator.mesh.sources.d3plot import (
+        from physicsnemo_curator.mesh.sources.d3plot import (
             _von_mises_from_voigt,
             _von_mises_from_voigt_rust,
         )
@@ -564,7 +564,7 @@ Part_3
     @pytest.mark.skipif(not _has_lasso, reason="lasso (lasso-python) not installed")
     def test_source_backend_param(self, mock_d3plot_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         """D3PlotSource should accept backend='rust' and backend='python'."""
-        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+        from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
 
         mock_root = tmp_path / "sims"
         _write_mock_d3plot_dir(mock_root, n_runs=1)

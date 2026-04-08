@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import pyvista as pv
 
-from physicsnemo.curator._lib import vtk
+from physicsnemo_curator._lib import vtk
 
 if TYPE_CHECKING:
     import pathlib

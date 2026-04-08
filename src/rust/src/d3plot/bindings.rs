@@ -151,7 +151,7 @@ pub fn register_d3plot_module(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register in sys.modules so `from _lib.d3plot import ...` works.
     let sys = py.import("sys")?;
     let modules = sys.getattr("modules")?;
-    modules.set_item("physicsnemo.curator._lib.d3plot", &d3plot)?;
+    modules.set_item("physicsnemo_curator._lib.d3plot", &d3plot)?;
 
     Ok(())
 }

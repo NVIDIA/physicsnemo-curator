@@ -136,7 +136,7 @@ class TestAtomicInfoFilterUnit:
 
     def test_params_list(self) -> None:
         """Params include output, log_level, include_fields."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         params = AtomicInfoFilter.params()
         assert len(params) == 3
@@ -147,7 +147,7 @@ class TestAtomicInfoFilterUnit:
 
     def test_name_and_description(self) -> None:
         """Name and description are non-empty strings."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         assert isinstance(AtomicInfoFilter.name, str)
         assert len(AtomicInfoFilter.name) > 0
@@ -156,7 +156,7 @@ class TestAtomicInfoFilterUnit:
 
     def test_default_params(self) -> None:
         """Default construction uses info level, include fields, no output."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         filt = AtomicInfoFilter()
         assert filt._output_path is None
@@ -174,7 +174,7 @@ class TestAtomicInfoFilterPassThrough:
 
     def test_yields_items_unchanged(self) -> None:
         """Every item should be yielded back untouched."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         filt = AtomicInfoFilter()
         items = [_make_mock_atomic_data(seed=i) for i in range(3)]
@@ -190,7 +190,7 @@ class TestAtomicInfoFilterPassThrough:
 
     def test_empty_generator(self) -> None:
         """Empty generator yields nothing and flush returns None."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         filt = AtomicInfoFilter()
 
@@ -214,7 +214,7 @@ class TestAtomicInfoFilterLogging:
 
     def test_logs_at_info_level(self, caplog: pytest.LogCaptureFixture) -> None:
         """Default log_level='info' produces INFO-level messages."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         filt = AtomicInfoFilter(log_level="info")
         data = _make_mock_atomic_data(n_nodes=10, n_edges=20)
@@ -229,7 +229,7 @@ class TestAtomicInfoFilterLogging:
 
     def test_logs_at_debug_level(self, caplog: pytest.LogCaptureFixture) -> None:
         """Debug log_level produces field-level detail."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         filt = AtomicInfoFilter(log_level="debug", include_fields=True)
         data = _make_mock_atomic_data(n_nodes=5, n_edges=8)
@@ -243,7 +243,7 @@ class TestAtomicInfoFilterLogging:
 
     def test_logs_pbc_and_cell_info(self, caplog: pytest.LogCaptureFixture) -> None:
         """When pbc/cell are present, they appear in the log metadata."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         filt = AtomicInfoFilter(log_level="info")
         data = _make_full_mock()
@@ -256,7 +256,7 @@ class TestAtomicInfoFilterLogging:
 
     def test_item_index_increments(self, caplog: pytest.LogCaptureFixture) -> None:
         """Item index increments for each item processed."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         filt = AtomicInfoFilter()
 
@@ -282,7 +282,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_writes_jsonl_file(self, tmp_path: pathlib.Path) -> None:
         """Output file is written when output path is provided."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         output = tmp_path / "info.jsonl"
         filt = AtomicInfoFilter(output=str(output))
@@ -304,7 +304,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_writes_multiple_records(self, tmp_path: pathlib.Path) -> None:
         """Multiple items produce multiple JSON lines."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         output = tmp_path / "info.jsonl"
         filt = AtomicInfoFilter(output=str(output))
@@ -326,7 +326,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_includes_field_details(self, tmp_path: pathlib.Path) -> None:
         """With include_fields=True, output contains field metadata."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         output = tmp_path / "info.jsonl"
         filt = AtomicInfoFilter(output=str(output), include_fields=True)
@@ -349,7 +349,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_excludes_field_details(self, tmp_path: pathlib.Path) -> None:
         """With include_fields=False, output omits field details."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         output = tmp_path / "info.jsonl"
         filt = AtomicInfoFilter(output=str(output), include_fields=False)
@@ -364,7 +364,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_flush_returns_path(self, tmp_path: pathlib.Path) -> None:
         """Flush returns the output path when a file was used."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         output = tmp_path / "info.jsonl"
         filt = AtomicInfoFilter(output=str(output))
@@ -374,7 +374,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_flush_returns_none_without_output(self) -> None:
         """Flush returns None when no output path was specified."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         filt = AtomicInfoFilter()
         list(filt(_single(_make_mock_atomic_data())))
@@ -382,7 +382,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_creates_parent_directory(self, tmp_path: pathlib.Path) -> None:
         """Flush creates parent directories as needed."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         nested = tmp_path / "a" / "b" / "info.jsonl"
         filt = AtomicInfoFilter(output=str(nested))
@@ -394,7 +394,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_pbc_and_cell_in_output(self, tmp_path: pathlib.Path) -> None:
         """PBC and cell shape appear in JSON output."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         output = tmp_path / "info.jsonl"
         filt = AtomicInfoFilter(output=str(output))
@@ -409,7 +409,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_none_pbc_and_cell_in_output(self, tmp_path: pathlib.Path) -> None:
         """None PBC and cell produce null in JSON output."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         output = tmp_path / "info.jsonl"
         filt = AtomicInfoFilter(output=str(output))
@@ -424,7 +424,7 @@ class TestAtomicInfoFilterOutput:
 
     def test_extra_data_fields_in_output(self, tmp_path: pathlib.Path) -> None:
         """Extra data dict entries appear in field inventory."""
-        from physicsnemo.curator.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
 
         output = tmp_path / "info.jsonl"
         filt = AtomicInfoFilter(output=str(output), include_fields=True)
@@ -449,7 +449,7 @@ class TestAtomicInfoFieldExtraction:
 
     def test_field_levels(self) -> None:
         """Fields are tagged with the correct semantic level."""
-        from physicsnemo.curator.atm.filters.atomic_info import _extract_field_info
+        from physicsnemo_curator.atm.filters.atomic_info import _extract_field_info
 
         data = _make_mock_atomic_data()
         fields = _extract_field_info(data)
@@ -462,7 +462,7 @@ class TestAtomicInfoFieldExtraction:
 
     def test_field_shapes(self) -> None:
         """Field shapes match the original tensor shapes."""
-        from physicsnemo.curator.atm.filters.atomic_info import _extract_field_info
+        from physicsnemo_curator.atm.filters.atomic_info import _extract_field_info
 
         data = _make_mock_atomic_data(n_nodes=10, n_edges=20)
         fields = _extract_field_info(data)
@@ -473,7 +473,7 @@ class TestAtomicInfoFieldExtraction:
 
     def test_field_memory(self) -> None:
         """Field nbytes equals numel * element_size."""
-        from physicsnemo.curator.atm.filters.atomic_info import _extract_field_info
+        from physicsnemo_curator.atm.filters.atomic_info import _extract_field_info
 
         data = _make_mock_atomic_data(n_nodes=10, n_edges=20)
         fields = _extract_field_info(data)
@@ -497,7 +497,7 @@ class TestAtomicInfoFilterRegistry:
 
     def test_filter_registered(self) -> None:
         """AtomicInfoFilter is discoverable in the registry."""
-        from physicsnemo.curator.core.registry import registry
+        from physicsnemo_curator.core.registry import registry
 
         names = [f.name for f in registry.list_filters("atm")]
         assert "Atomic Info Logger" in names

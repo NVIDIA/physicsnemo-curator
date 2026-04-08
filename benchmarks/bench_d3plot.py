@@ -98,13 +98,13 @@ class TimeParseKFile:
 
     def time_python(self, n_parts: int) -> None:
         """Parse k-file with Python backend."""
-        from physicsnemo.curator.mesh.sources.d3plot import _parse_k_file
+        from physicsnemo_curator.mesh.sources.d3plot import _parse_k_file
 
         _parse_k_file(self._k_file)
 
     def time_rust(self, n_parts: int) -> None:
         """Parse k-file with Rust backend."""
-        from physicsnemo.curator.mesh.sources.d3plot import _parse_k_file_rust
+        from physicsnemo_curator.mesh.sources.d3plot import _parse_k_file_rust
 
         _parse_k_file_rust(self._k_file)
 
@@ -128,13 +128,13 @@ class TimeComputeNodeThickness:
 
     def time_python(self, n_elements: int) -> None:
         """Compute node thickness with Python backend."""
-        from physicsnemo.curator.mesh.sources.d3plot import _compute_node_thickness
+        from physicsnemo_curator.mesh.sources.d3plot import _compute_node_thickness
 
         _compute_node_thickness(self._connectivity, self._part_ids, self._part_thickness, self._actual_part_ids)
 
     def time_rust(self, n_elements: int) -> None:
         """Compute node thickness with Rust backend."""
-        from physicsnemo.curator.mesh.sources.d3plot import _compute_node_thickness_rust
+        from physicsnemo_curator.mesh.sources.d3plot import _compute_node_thickness_rust
 
         _compute_node_thickness_rust(self._connectivity, self._part_ids, self._part_thickness, self._actual_part_ids)
 
@@ -155,13 +155,13 @@ class TimeVonMises:
 
     def time_python(self, n_entries: int) -> None:
         """Compute von Mises with Python (numpy vectorized)."""
-        from physicsnemo.curator.mesh.sources.d3plot import _von_mises_from_voigt
+        from physicsnemo_curator.mesh.sources.d3plot import _von_mises_from_voigt
 
         _von_mises_from_voigt(self._stress)
 
     def time_rust(self, n_entries: int) -> None:
         """Compute von Mises with Rust backend."""
-        from physicsnemo.curator.mesh.sources.d3plot import _von_mises_from_voigt_rust
+        from physicsnemo_curator.mesh.sources.d3plot import _von_mises_from_voigt_rust
 
         _von_mises_from_voigt_rust(self._stress)
 
@@ -185,12 +185,12 @@ class PeakmemNodeThickness:
 
     def peakmem_python(self, n_elements: int) -> None:
         """Peak memory with Python backend."""
-        from physicsnemo.curator.mesh.sources.d3plot import _compute_node_thickness
+        from physicsnemo_curator.mesh.sources.d3plot import _compute_node_thickness
 
         _compute_node_thickness(self._connectivity, self._part_ids, self._part_thickness, self._actual_part_ids)
 
     def peakmem_rust(self, n_elements: int) -> None:
         """Peak memory with Rust backend."""
-        from physicsnemo.curator.mesh.sources.d3plot import _compute_node_thickness_rust
+        from physicsnemo_curator.mesh.sources.d3plot import _compute_node_thickness_rust
 
         _compute_node_thickness_rust(self._connectivity, self._part_ids, self._part_thickness, self._actual_part_ids)

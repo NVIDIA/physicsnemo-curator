@@ -122,7 +122,7 @@ class TestWallNodeFilterUnit:
 
     def test_params_list(self) -> None:
         """params() should return a non-empty list of Param objects."""
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         params = WallNodeFilter.params()
         assert len(params) == 1
@@ -130,14 +130,14 @@ class TestWallNodeFilterUnit:
 
     def test_name_and_description(self) -> None:
         """Class should have name and description ClassVars."""
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         assert WallNodeFilter.name == "Wall Node Filter"
         assert len(WallNodeFilter.description) > 0
 
     def test_negative_threshold_raises(self) -> None:
         """Negative threshold should raise ValueError."""
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         with pytest.raises(ValueError, match="non-negative"):
             WallNodeFilter(threshold=-1.0)
@@ -154,7 +154,7 @@ class TestWallNodeFilterBehavior:
 
     def test_removes_wall_nodes(self) -> None:
         """Filter should reduce node count by removing wall nodes."""
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         mesh = _make_crash_mesh(n_points=10, n_cells=4, n_timesteps=3, wall_fraction=0.5)
         original_points = mesh.n_points
@@ -171,7 +171,7 @@ class TestWallNodeFilterBehavior:
 
     def test_all_structure_nodes_kept_with_zero_threshold(self) -> None:
         """With threshold=0, all non-stationary nodes should be kept."""
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         mesh = _make_crash_mesh(n_points=10, n_cells=4, n_timesteps=3, wall_fraction=0.5)
 
@@ -188,7 +188,7 @@ class TestWallNodeFilterBehavior:
 
     def test_preserves_displacement_fields(self) -> None:
         """Filtered mesh should still have displacement_t* fields."""
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         mesh = _make_crash_mesh(n_points=10, n_cells=4, n_timesteps=3, wall_fraction=0.5)
 
@@ -207,7 +207,7 @@ class TestWallNodeFilterBehavior:
 
     def test_preserves_global_data(self) -> None:
         """Filtered mesh should carry the same global data."""
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         mesh = _make_crash_mesh(n_points=10, n_cells=4, n_timesteps=3, wall_fraction=0.5)
 
@@ -221,7 +221,7 @@ class TestWallNodeFilterBehavior:
 
     def test_connectivity_remapped(self) -> None:
         """Cell indices should be remapped to new contiguous node indices."""
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         mesh = _make_crash_mesh(n_points=10, n_cells=4, n_timesteps=3, wall_fraction=0.5)
 
@@ -238,7 +238,7 @@ class TestWallNodeFilterBehavior:
 
     def test_cell_data_filtered(self) -> None:
         """Cell data should be filtered to match surviving cells."""
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         mesh = _make_crash_mesh(n_points=10, n_cells=4, n_timesteps=3, wall_fraction=0.5)
 
@@ -258,7 +258,7 @@ class TestWallNodeFilterBehavior:
         """Without displacement fields, mesh should pass through unchanged."""
         from physicsnemo.mesh import Mesh
 
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         points = torch.rand(5, 3)
         cells = torch.tensor([[0, 1, 2], [2, 3, 4]], dtype=torch.int64)
@@ -278,7 +278,7 @@ class TestWallNodeFilterBehavior:
         """Without point_data, mesh should pass through unchanged."""
         from physicsnemo.mesh import Mesh
 
-        from physicsnemo.curator.mesh.filters.wall_node import WallNodeFilter
+        from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 
         points = torch.rand(5, 3)
         cells = torch.tensor([[0, 1, 2], [2, 3, 4]], dtype=torch.int64)
@@ -304,8 +304,8 @@ class TestWallNodeFilterRegistry:
 
     def test_filter_registered(self) -> None:
         """WallNodeFilter should appear in the mesh registry."""
-        import physicsnemo.curator.mesh  # noqa: F401
-        from physicsnemo.curator.core.registry import registry
+        import physicsnemo_curator.mesh  # noqa: F401
+        from physicsnemo_curator.core.registry import registry
 
         filters = registry.filters("mesh")
         assert "Wall Node Filter" in filters

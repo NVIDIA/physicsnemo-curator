@@ -19,7 +19,7 @@ Checkpointing a Pipeline
 =========================
 
 This example demonstrates how to checkpoint pipeline execution using
-:class:`~physicsnemo.curator.core.checkpoint.CheckpointedPipeline`.
+:class:`~physicsnemo_curator.core.checkpoint.CheckpointedPipeline`.
 
 ``CheckpointedPipeline`` wraps a pipeline and records completed indices
 in a SQLite database.  If the pipeline is interrupted and restarted,
@@ -40,18 +40,18 @@ datasets where you want crash resilience without re-processing.
 # Imports
 # -------
 
-from physicsnemo.curator.core.checkpoint import CheckpointedPipeline
-from physicsnemo.curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
-from physicsnemo.curator.run import run_pipeline
+from physicsnemo_curator.core.checkpoint import CheckpointedPipeline
+from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.run import run_pipeline
 
 # %%
 # Build and Wrap the Pipeline
 # ----------------------------
 #
 # First build a normal pipeline, then wrap it with
-# :class:`~physicsnemo.curator.core.checkpoint.CheckpointedPipeline`.
+# :class:`~physicsnemo_curator.core.checkpoint.CheckpointedPipeline`.
 # The ``db_path`` argument specifies where the SQLite checkpoint file
 # is stored.
 
@@ -119,12 +119,12 @@ print(f"Database: {checkpointed.db_path}")
 # --------------------------------
 #
 # ``CheckpointedPipeline`` composes with
-# :class:`~physicsnemo.curator.core.profiling.ProfiledPipeline` — you
+# :class:`~physicsnemo_curator.core.profiling.ProfiledPipeline` — you
 # can profile *and* checkpoint at the same time:
 #
 # .. code-block:: python
 #
-#     from physicsnemo.curator.core.profiling import ProfiledPipeline
+#     from physicsnemo_curator.core.profiling import ProfiledPipeline
 #
 #     profiled = ProfiledPipeline(pipeline)
 #     checkpointed = CheckpointedPipeline(profiled, db_path="ckpt.db")

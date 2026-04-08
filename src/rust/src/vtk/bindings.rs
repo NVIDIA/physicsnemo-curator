@@ -139,7 +139,7 @@ pub fn register_vtk_module(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register in sys.modules so `from _lib import vtk` works
     let sys = py.import("sys")?;
     let modules = sys.getattr("modules")?;
-    modules.set_item("physicsnemo.curator._lib.vtk", &vtk)?;
+    modules.set_item("physicsnemo_curator._lib.vtk", &vtk)?;
 
     Ok(())
 }

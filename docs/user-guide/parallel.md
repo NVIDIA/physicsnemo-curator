@@ -7,7 +7,7 @@ and returns the collected sink outputs.  It replaces the manual
 ## Quick Start
 
 ```python
-from physicsnemo.curator import run_pipeline
+from physicsnemo_curator import run_pipeline
 
 # Sequential (default)
 results = run_pipeline(pipeline)
@@ -54,7 +54,7 @@ pip install 'physicsnemo-curator[loky,dask]'
 You can register your own backends:
 
 ```python
-from physicsnemo.curator.run import register_backend, RunBackend, RunConfig
+from physicsnemo_curator.run import register_backend, RunBackend, RunConfig
 
 class MyBackend(RunBackend):
     name = "my_backend"
@@ -123,10 +123,10 @@ for details.
 ### Basic parallel ETL
 
 ```python
-from physicsnemo.curator.core.store import LocalFileStore
-from physicsnemo.curator.mesh.sources.vtk import VTKSource
-from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo.curator import run_pipeline
+from physicsnemo_curator.core.store import LocalFileStore
+from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator import run_pipeline
 
 pipeline = (
     VTKSource.from_path("./cfd_results/")
@@ -141,9 +141,9 @@ print(f"Wrote {sum(len(r) for r in results)} files")
 ### With HuggingFace dataset sources
 
 ```python
-from physicsnemo.curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo.curator import run_pipeline
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator import run_pipeline
 
 pipeline = (
     DrivAerMLSource(mesh_type="boundary")
@@ -157,7 +157,7 @@ results = run_pipeline(pipeline, n_jobs=4, indices=list(range(10)))
 ### Using Prefect with retries
 
 ```python
-from physicsnemo.curator import run_pipeline
+from physicsnemo_curator import run_pipeline
 
 # Prefect provides automatic retries, logging, and observability
 results = run_pipeline(
@@ -173,7 +173,7 @@ results = run_pipeline(
 
 ```python
 import os
-from physicsnemo.curator import run_pipeline
+from physicsnemo_curator import run_pipeline
 
 # CI uses sequential; production uses all CPUs
 n = 1 if os.getenv("CI") else -1
@@ -183,7 +183,7 @@ results = run_pipeline(pipeline, n_jobs=n)
 ### Listing available backends
 
 ```python
-from physicsnemo.curator.run import list_backends
+from physicsnemo_curator.run import list_backends
 
 backends = list_backends()
 for name, info in backends.items():

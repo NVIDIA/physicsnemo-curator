@@ -16,7 +16,7 @@
 
 """Consistency tests comparing Rust LMDB reader against Python ASE reader.
 
-The Rust reader (``physicsnemo.curator._lib.lmdb.read_lmdb``) returns raw
+The Rust reader (``physicsnemo_curator._lib.lmdb.read_lmdb``) returns raw
 row dictionaries with NumPy arrays for ``__ndarray__`` markers.  The Python
 ASE path (``ase.db.connect`` → ``row.toatoms()``) deserialises the same
 underlying zlib-compressed JSON but exposes it through an ``AtomsRow`` object.
@@ -127,7 +127,7 @@ def _read_with_ase(db_path: pathlib.Path) -> list[dict[str, object]]:
 
 def _read_with_rust(db_path: pathlib.Path) -> list[dict[str, object]]:
     """Read all rows from an .aselmdb via the Rust reader."""
-    from physicsnemo.curator._lib.lmdb import read_lmdb
+    from physicsnemo_curator._lib.lmdb import read_lmdb
 
     return read_lmdb(str(db_path))
 
@@ -142,7 +142,7 @@ class TestRustLmdbReader:
 
     def test_import(self) -> None:
         """Rust LMDB functions are importable."""
-        from physicsnemo.curator._lib.lmdb import read_lmdb, read_lmdb_parallel
+        from physicsnemo_curator._lib.lmdb import read_lmdb, read_lmdb_parallel
 
         assert callable(read_lmdb)
         assert callable(read_lmdb_parallel)
@@ -161,7 +161,7 @@ class TestRustLmdbReader:
 
     def test_parallel_read(self, single_water_db: pathlib.Path, multi_row_db: pathlib.Path) -> None:
         """Parallel reader returns correct results for multiple files."""
-        from physicsnemo.curator._lib.lmdb import read_lmdb_parallel
+        from physicsnemo_curator._lib.lmdb import read_lmdb_parallel
 
         results = read_lmdb_parallel([str(single_water_db), str(multi_row_db)])
         assert len(results) == 2
@@ -179,7 +179,7 @@ class TestRustLmdbReader:
 
     def test_file_not_found(self) -> None:
         """Rust reader raises on missing file."""
-        from physicsnemo.curator._lib.lmdb import read_lmdb
+        from physicsnemo_curator._lib.lmdb import read_lmdb
 
         with pytest.raises(IOError):
             read_lmdb("/nonexistent/path.aselmdb")

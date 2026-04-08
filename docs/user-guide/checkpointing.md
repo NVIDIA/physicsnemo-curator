@@ -13,7 +13,7 @@ immediately without re-executing the source, filters, or sink.
 ## Quick Start
 
 ```python
-from physicsnemo.curator import Pipeline, CheckpointedPipeline, run_pipeline
+from physicsnemo_curator import Pipeline, CheckpointedPipeline, run_pipeline
 
 # Wrap any existing pipeline
 cp = CheckpointedPipeline(pipeline, db_path="run.checkpoint.db")
@@ -51,7 +51,7 @@ When you resume from a checkpoint with a different pipeline configuration,
 a warning is logged but processing continues:
 
 ```text
-WARNING:physicsnemo.curator.core.checkpoint:Pipeline config has changed
+WARNING:physicsnemo_curator.core.checkpoint:Pipeline config has changed
 since the original checkpoint (stored hash a1b2c3d4e5f6…, current hash
 9f8e7d6c5b4a…). Resuming anyway — completed indices from prior config
 will be kept.
@@ -106,7 +106,7 @@ profiled pipeline with the checkpoint to get both profiling and
 resumability:
 
 ```python
-from physicsnemo.curator import ProfiledPipeline, CheckpointedPipeline
+from physicsnemo_curator import ProfiledPipeline, CheckpointedPipeline
 
 profiled = ProfiledPipeline(pipeline, track_gpu=True)
 cp = CheckpointedPipeline(profiled, db_path="run.checkpoint.db")
@@ -149,8 +149,8 @@ database contains two tables:
 ## Full Example
 
 ```python
-from physicsnemo.curator import CheckpointedPipeline, run_pipeline
-from physicsnemo.curator.atm import ASELMDBSource, AtomicDataZarrSink
+from physicsnemo_curator import CheckpointedPipeline, run_pipeline
+from physicsnemo_curator.atm import ASELMDBSource, AtomicDataZarrSink
 
 # Build pipeline
 pipeline = (

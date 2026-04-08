@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for :mod:`physicsnemo.curator.core.checkpoint`."""
+"""Tests for :mod:`physicsnemo_curator.core.checkpoint`."""
 
 from __future__ import annotations
 
@@ -25,14 +25,14 @@ from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 
-from physicsnemo.curator.core.base import Filter, Param, Pipeline, Sink, Source
-from physicsnemo.curator.core.checkpoint import (
+from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
+from physicsnemo_curator.core.checkpoint import (
     CheckpointedPipeline,
     _component_config,
     _config_hash,
     _pipeline_config,
 )
-from physicsnemo.curator.run import run_pipeline
+from physicsnemo_curator.run import run_pipeline
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
@@ -609,7 +609,7 @@ class TestComposability:
 
     def test_wraps_profiled_pipeline(self, tmp_path: pathlib.Path) -> None:
         """CheckpointedPipeline can wrap a ProfiledPipeline."""
-        from physicsnemo.curator.core.profiling import ProfiledPipeline
+        from physicsnemo_curator.core.profiling import ProfiledPipeline
 
         pipeline = _make_pipeline(tmp_path, count=2)
         profiled = ProfiledPipeline(pipeline)

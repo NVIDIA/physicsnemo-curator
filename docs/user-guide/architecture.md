@@ -57,11 +57,11 @@ concrete PhysicsNeMo Curator classes.
 
 | Pattern concept | Curator equivalent | Role |
 |-----------------|--------------------|------|
-| **Data source** | {class}`~physicsnemo.curator.core.base.Source` | Produces typed items from storage |
-| **Filter** | {class}`~physicsnemo.curator.core.base.Filter` | Transforms or observes the stream |
+| **Data source** | {class}`~physicsnemo_curator.core.base.Source` | Produces typed items from storage |
+| **Filter** | {class}`~physicsnemo_curator.core.base.Filter` | Transforms or observes the stream |
 | **Pipe** | Python generators (`Generator[T]`) | Lazy connectors between stages |
-| **Data sink** | {class}`~physicsnemo.curator.core.base.Sink` | Consumes and persists output |
-| **Pipeline** | {class}`~physicsnemo.curator.core.base.Pipeline` | Chains source, filters, sink |
+| **Data sink** | {class}`~physicsnemo_curator.core.base.Sink` | Consumes and persists output |
+| **Pipeline** | {class}`~physicsnemo_curator.core.base.Pipeline` | Chains source, filters, sink |
 
 ### Why Pipes and Filters?
 
@@ -76,7 +76,7 @@ several reasons:
    dataset in memory.
 3. **Parallelism** — because each source index produces an independent stream,
    the pipeline is *embarrassingly parallel* across indices.  The
-   {func}`~physicsnemo.curator.run.run_pipeline` function exploits this with six
+   {func}`~physicsnemo_curator.run.run_pipeline` function exploits this with six
    pluggable backends (see {doc}`/user-guide/parallel`).
 4. **Extensibility** — adding a new stage requires implementing a single
    abstract method (`__getitem__` for sources, `__call__` for filters and
@@ -98,7 +98,7 @@ patterns (Gamma et al., 1994) reinforce the framework:
 
 ### Source
 
-{class}`~physicsnemo.curator.core.base.Source` is an abstract base class representing
+{class}`~physicsnemo_curator.core.base.Source` is an abstract base class representing
 a collection of data items.  Sources are indexed by integer and yield
 items as generators:
 
@@ -122,7 +122,7 @@ Key properties:
 
 ### Filter
 
-{class}`~physicsnemo.curator.core.base.Filter` transforms a stream of items.  A filter
+{class}`~physicsnemo_curator.core.base.Filter` transforms a stream of items.  A filter
 is a callable that receives a generator and returns a generator:
 
 ```python
@@ -149,7 +149,7 @@ expose a `flush()` method to finalize their output.
 
 ### Sink
 
-{class}`~physicsnemo.curator.core.base.Sink` persists items and returns file paths:
+{class}`~physicsnemo_curator.core.base.Sink` persists items and returns file paths:
 
 ```python
 class Sink[T](ABC):
@@ -166,7 +166,7 @@ output files).
 
 ### Pipeline
 
-{class}`~physicsnemo.curator.core.base.Pipeline` chains a source through filters into
+{class}`~physicsnemo_curator.core.base.Pipeline` chains a source through filters into
 a sink.  Pipelines are **immutable** — `.filter()` and `.write()` return
 new instances:
 
@@ -192,11 +192,11 @@ Execution flow for `pipeline[i]`:
 
 ### Batch & Parallel Execution
 
-For processing all indices, use {func}`~physicsnemo.curator.core.parallel.run_pipeline`
+For processing all indices, use {func}`~physicsnemo_curator.core.parallel.run_pipeline`
 instead of a manual loop:
 
 ```python
-from physicsnemo.curator import run_pipeline
+from physicsnemo_curator import run_pipeline
 
 # Sequential with progress bar
 results = run_pipeline(pipeline)
@@ -219,7 +219,7 @@ aggregated.
 
 ### Param
 
-{class}`~physicsnemo.curator.core.base.Param` describes a configurable parameter on
+{class}`~physicsnemo_curator.core.base.Param` describes a configurable parameter on
 any component.  It drives the interactive CLI prompts:
 
 ```python
@@ -244,12 +244,12 @@ group:
 | `atm` | `nvalchemi.data.AtomicData` | `atm` | Implemented |
 
 Submodules register their components with the global
-{class}`~physicsnemo.curator.core.registry.Registry` at import time, enabling the
+{class}`~physicsnemo_curator.core.registry.Registry` at import time, enabling the
 CLI to discover them dynamically.
 
 ## FileStore
 
-{class}`~physicsnemo.curator.core.store.FileStore` is a protocol that decouples
+{class}`~physicsnemo_curator.core.store.FileStore` is a protocol that decouples
 **file discovery and access** from **file reading**.  Sources accept a
 `FileStore` via dependency injection, so the same reader works with local
 directories, S3 buckets, HuggingFace Hub datasets, or any custom backend.
@@ -263,7 +263,7 @@ class FileStore(Protocol):
 ```
 
 Built-in implementations are registered with each submodule's
-{class}`~physicsnemo.curator.core.registry.Registry` and are selectable in the CLI.
+{class}`~physicsnemo_curator.core.registry.Registry` and are selectable in the CLI.
 Users can also register custom stores at runtime (see {ref}`store-registration`
 above).
 
@@ -271,11 +271,11 @@ Two built-in implementations are provided:
 
 ### LocalFileStore
 
-{class}`~physicsnemo.curator.core.store.LocalFileStore` discovers and serves files
+{class}`~physicsnemo_curator.core.store.LocalFileStore` discovers and serves files
 from a local directory using `pathlib.Path.glob`:
 
 ```python
-from physicsnemo.curator.core.store import LocalFileStore
+from physicsnemo_curator.core.store import LocalFileStore
 
 store = LocalFileStore("./data/", extensions=frozenset({".vtk", ".vtu"}))
 path = store[0]  # "/absolute/path/to/data/mesh_0000.vtu"
@@ -283,11 +283,11 @@ path = store[0]  # "/absolute/path/to/data/mesh_0000.vtu"
 
 ### FsspecFileStore
 
-{class}`~physicsnemo.curator.core.store.FsspecFileStore` discovers and serves files
+{class}`~physicsnemo_curator.core.store.FsspecFileStore` discovers and serves files
 from any `fsspec`-compatible URL, transparently caching downloads:
 
 ```python
-from physicsnemo.curator.core.store import FsspecFileStore
+from physicsnemo_curator.core.store import FsspecFileStore
 
 # HuggingFace Hub
 store = FsspecFileStore(
@@ -323,11 +323,11 @@ class DatabaseFileStore:
 
 ## Registry
 
-The {class}`~physicsnemo.curator.core.registry.Registry` is a global singleton that
+The {class}`~physicsnemo_curator.core.registry.Registry` is a global singleton that
 tracks all submodules, their pipeline components, and their file stores:
 
 ```python
-from physicsnemo.curator.core.registry import registry
+from physicsnemo_curator.core.registry import registry
 
 # Registration happens at import time in each submodule's __init__.py
 registry.register_submodule("mesh", "Mesh processing", "physicsnemo.mesh")
@@ -345,7 +345,7 @@ registry.filters("mesh")      # {"Mean Statistics": <class MeanFilter>}
 registry.sinks("mesh")        # {"PhysicsNeMo Mesh Writer": <class MeshSink>}
 ```
 
-Each {class}`~physicsnemo.curator.core.registry.SubmoduleEntry` can check whether its
+Each {class}`~physicsnemo_curator.core.registry.SubmoduleEntry` can check whether its
 dependencies are available via the `.available` property.
 
 (store-registration)=
@@ -358,7 +358,7 @@ registered automatically when a submodule is imported.  Users can register
 custom stores at runtime:
 
 ```python
-from physicsnemo.curator.core.registry import registry
+from physicsnemo_curator.core.registry import registry
 
 registry.register_store("mesh", "My Database Store", DatabaseFileStore)
 ```

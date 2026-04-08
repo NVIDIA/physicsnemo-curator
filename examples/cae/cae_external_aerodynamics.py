@@ -42,14 +42,14 @@ We process only the first 3 runs to keep the example fast.
 # Import the core pipeline components: a **Source** to read meshes,
 # **Filters** for metadata logging, statistics, and precision conversion,
 # a **Sink** to write outputs, and
-# :func:`~physicsnemo.curator.run.run_pipeline` for parallel execution.
+# :func:`~physicsnemo_curator.run.run_pipeline` for parallel execution.
 
-from physicsnemo.curator.mesh.filters.mesh_info import MeshInfoFilter
-from physicsnemo.curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo.curator.mesh.filters.stats import StatsFilter
-from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo.curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo.curator.run import gather_pipeline, run_pipeline
+from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
+from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.mesh.filters.stats import StatsFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Surface (Boundary) Mesh Pipeline
@@ -60,15 +60,15 @@ from physicsnemo.curator.run import gather_pipeline, run_pipeline
 #
 # We chain four stages:
 #
-# 1. :class:`~physicsnemo.curator.mesh.sources.drivaerml.DrivAerMLSource`
+# 1. :class:`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
 #    discovers runs and reads surface meshes from HuggingFace Hub.
-# 2. :class:`~physicsnemo.curator.mesh.filters.mesh_info.MeshInfoFilter`
+# 2. :class:`~physicsnemo_curator.mesh.filters.mesh_info.MeshInfoFilter`
 #    logs metadata (point/cell counts, field shapes) and writes structured
 #    records to a JSON-lines file for post-analysis.
-# 3. :class:`~physicsnemo.curator.mesh.filters.stats.StatsFilter` computes
+# 3. :class:`~physicsnemo_curator.mesh.filters.stats.StatsFilter` computes
 #    comprehensive per-field statistics (mean, std, skewness, kurtosis) and
 #    stores Welford accumulator state for cross-file aggregation.
-# 4. :class:`~physicsnemo.curator.mesh.filters.precision.PrecisionFilter`
+# 4. :class:`~physicsnemo_curator.mesh.filters.precision.PrecisionFilter`
 #    casts all float64 fields to float32, reducing memory and storage by
 #    half — a standard step before ML training.
 
@@ -96,7 +96,7 @@ surface_pipeline = (
 # meshes are typically much larger than surface meshes, so we read cell
 # centroids rather than raw vertices.
 #
-# Here we use :class:`~physicsnemo.curator.mesh.filters.stats.StatsFilter`
+# Here we use :class:`~physicsnemo_curator.mesh.filters.stats.StatsFilter`
 # for volume field statistics.  This filter includes Welford accumulators
 # that can be merged across parallel workers for exact global statistics.
 
@@ -117,7 +117,7 @@ volume_pipeline = (
 # Run the Surface Pipeline
 # -------------------------
 #
-# :func:`~physicsnemo.curator.run.run_pipeline` dispatches work to a
+# :func:`~physicsnemo_curator.run.run_pipeline` dispatches work to a
 # ``process_pool`` backend with 4 workers.  Each worker gets an
 # independent copy of the pipeline, so meshes are read, filtered, and
 # written concurrently.
@@ -158,7 +158,7 @@ for i, paths in enumerate(volume_results):
 # ------------------
 #
 # Each worker writes per-index shard files for stateful filters.
-# :func:`~physicsnemo.curator.run.gather_pipeline` merges them into
+# :func:`~physicsnemo_curator.run.gather_pipeline` merges them into
 # single output files and removes the temporary shards.
 
 for pipe in (surface_pipeline, volume_pipeline):

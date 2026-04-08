@@ -37,19 +37,19 @@ by the ``drivaer_ml_surface.yaml`` dataset config.
 #
 # Import the core pipeline components: a **Source** to read meshes, a
 # **Filter** to compute statistics, a **Sink** to write outputs, and
-# :func:`~physicsnemo.curator.run.run_pipeline` for parallel execution.
+# :func:`~physicsnemo_curator.run.run_pipeline` for parallel execution.
 
-from physicsnemo.curator.mesh.filters.mean import MeanFilter
-from physicsnemo.curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo.curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo.curator.run import gather_pipeline, run_pipeline
+from physicsnemo_curator.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
 # --------------------
 #
-# :class:`~physicsnemo.curator.mesh.sources.drivaerml.DrivAerMLSource`
+# :class:`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
 # connects to the HuggingFace Hub dataset and discovers available runs.
 # We select ``mesh_type="boundary"`` to read the surface VTP files
 # which contain the flow fields on the vehicle boundary.
@@ -84,14 +84,14 @@ print(f"Train: {len(train_indices)} runs, Val: {len(val_indices)} runs")
 # ----------------------------
 #
 # The fluent API chains **Source → Filter → Sink** into a lazy
-# :class:`~physicsnemo.curator.core.base.Pipeline`.  Nothing is
+# :class:`~physicsnemo_curator.core.base.Pipeline`.  Nothing is
 # executed until we explicitly process indices.
 #
-# - :class:`~physicsnemo.curator.mesh.filters.mean.MeanFilter` computes
+# - :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter` computes
 #   per-field spatial means and accumulates them into a Parquet summary.
-# - :class:`~physicsnemo.curator.mesh.filters.precision.PrecisionFilter`
+# - :class:`~physicsnemo_curator.mesh.filters.precision.PrecisionFilter`
 #   converts to float32 for consistency with training.
-# - :class:`~physicsnemo.curator.mesh.sinks.mesh_writer.MeshSink` writes
+# - :class:`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` writes
 #   each mesh in PhysicsNeMo's native ``.pmsh`` format.
 #
 # The ``naming_template`` produces output names like
@@ -132,7 +132,7 @@ val_pipeline = (
 # Run in Parallel
 # ---------------
 #
-# :func:`~physicsnemo.curator.run.run_pipeline` dispatches work to a
+# :func:`~physicsnemo_curator.run.run_pipeline` dispatches work to a
 # ``process_pool`` backend with 4 workers.  We process the training
 # split first, then the validation split.
 #
@@ -172,7 +172,7 @@ for i, paths in enumerate(train_results[:3]):
 # -----------------
 #
 # When running in parallel, each worker writes per-index shard files for
-# stateful filters.  :func:`~physicsnemo.curator.run.gather_pipeline`
+# stateful filters.  :func:`~physicsnemo_curator.run.gather_pipeline`
 # discovers those shards, merges them into a single output file, and
 # cleans up the temporary shard files.
 

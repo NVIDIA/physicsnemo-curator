@@ -42,18 +42,18 @@ compose pipelines before running them.
 # Every pipeline has three ingredients: a **Source** (data reader), zero
 # or more **Filters** (transforms or analytics), and a **Sink** (writer).
 
-from physicsnemo.curator.mesh.filters.mean import MeanFilter
-from physicsnemo.curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo.curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
 # %%
 # Step 1: Create a Source
 # -----------------------
 #
-# A :class:`~physicsnemo.curator.core.base.Source` is an indexed
+# A :class:`~physicsnemo_curator.core.base.Source` is an indexed
 # collection of data items.  Here we use
-# :class:`~physicsnemo.curator.mesh.sources.ns_cylinder.NavierStokesCylinderSource`
+# :class:`~physicsnemo_curator.mesh.sources.ns_cylinder.NavierStokesCylinderSource`
 # which provides 500 Navier-Stokes flow simulations as
 # :class:`~physicsnemo.mesh.Mesh` objects.
 
@@ -69,9 +69,9 @@ print(f"Items available: {len(source)}")
 # Filters transform or inspect items as they flow through the pipeline.
 # The fluent ``.filter()`` method chains multiple filters together:
 #
-# - :class:`~physicsnemo.curator.mesh.filters.mean.MeanFilter`
+# - :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter`
 #   computes spatial means and writes a Parquet summary.
-# - :class:`~physicsnemo.curator.mesh.filters.precision.PrecisionFilter`
+# - :class:`~physicsnemo_curator.mesh.filters.precision.PrecisionFilter`
 #   converts floating-point fields to ``float32``.
 
 pipeline = source.filter(MeanFilter(output="outputs/getting_started/stats.parquet")).filter(
@@ -85,7 +85,7 @@ print(f"Sink: {pipeline.sink}")  # None — no sink yet
 # Step 3: Attach a Sink
 # ---------------------
 #
-# A :class:`~physicsnemo.curator.core.base.Sink` persists items to
+# A :class:`~physicsnemo_curator.core.base.Sink` persists items to
 # storage.  The ``.write()`` method attaches a sink and returns a
 # complete pipeline.
 
@@ -119,5 +119,5 @@ print(f"Index 0 wrote: {paths}")
 #     )
 #
 # Each call returns a new immutable
-# :class:`~physicsnemo.curator.core.base.Pipeline` — the original
+# :class:`~physicsnemo_curator.core.base.Pipeline` — the original
 # source, filters, and sink are never modified.

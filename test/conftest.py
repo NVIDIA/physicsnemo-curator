@@ -51,50 +51,9 @@ The ``device`` fixture yields ``"cpu"`` and, when CUDA is available,
 from __future__ import annotations
 
 import importlib
-
-# ---------------------------------------------------------------------------
-# Namespace package extension
-# ---------------------------------------------------------------------------
-# nvidia-physicsnemo installs a regular ``physicsnemo/__init__.py`` that
-# prevents Python from discovering ``physicsnemo.curator`` in our editable
-# ``src/`` tree.  We extend ``physicsnemo.__path__`` so both packages
-# coexist.  This runs before any test module imports ``physicsnemo.curator``.
-#
-# IMPORTANT: We avoid ``import physicsnemo`` because nvidia-physicsnemo's
-# ``__init__.py`` triggers heavy transitive imports (torch, numpy, etc.)
-# that can fail in minimal CI environments.  Instead we locate the installed
-# ``__init__.py`` via importlib and load only its spec/path.
-import sys
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-
-_src_dir = str(Path(__file__).resolve().parent.parent / "src" / "physicsnemo")
-if Path(_src_dir).is_dir():
-    if "physicsnemo" in sys.modules:
-        _mod = sys.modules["physicsnemo"]
-        if hasattr(_mod, "__path__") and _src_dir not in _mod.__path__:
-            _mod.__path__.insert(0, _src_dir)
-    else:
-        import importlib.util
-        import types
-
-        _spec = importlib.util.find_spec("physicsnemo")
-        if _spec is not None and _spec.submodule_search_locations is not None:
-            # nvidia-physicsnemo is installed — create a lightweight module
-            # stub with the combined paths instead of executing its __init__.py.
-            _ns = types.ModuleType("physicsnemo")
-            _ns.__path__ = [_src_dir, *_spec.submodule_search_locations]
-            _ns.__package__ = "physicsnemo"
-            _ns.__spec__ = _spec
-            sys.modules["physicsnemo"] = _ns
-        else:
-            # physicsnemo not installed — inject a minimal namespace stub.
-            _ns = types.ModuleType("physicsnemo")
-            _ns.__path__ = [_src_dir]
-            _ns.__package__ = "physicsnemo"
-            sys.modules["physicsnemo"] = _ns
 
 if TYPE_CHECKING:
     import pathlib

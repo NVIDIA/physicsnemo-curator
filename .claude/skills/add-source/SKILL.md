@@ -23,8 +23,8 @@ Which submodule does this source belong to?
 
 | Domain | Type parameter | Submodule | Dependency group |
 |--------|---------------|-----------|-----------------|
-| **mesh** | `Source[Mesh]` | `src/physicsnemo/curator/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
-| **da** | `Source[xr.DataArray]` | `src/physicsnemo/curator/da/` | `da` (xarray, earth2studio, zarr) |
+| **mesh** | `Source[Mesh]` | `src/physicsnemo_curator/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
+| **da** | `Source[xr.DataArray]` | `src/physicsnemo_curator/da/` | `da` (xarray, earth2studio, zarr) |
 
 ### Dataset Information
 
@@ -85,8 +85,8 @@ Choose the right FileStore based on dataset organization:
 
 Create the source file at the appropriate location:
 
-- **mesh**: `src/physicsnemo/curator/mesh/sources/<name>.py`
-- **da**: `src/physicsnemo/curator/da/sources/<name>.py`
+- **mesh**: `src/physicsnemo_curator/mesh/sources/<name>.py`
+- **da**: `src/physicsnemo_curator/da/sources/<name>.py`
 
 ### Required SPDX Header
 
@@ -131,7 +131,7 @@ from __future__ import annotations
 import tempfile
 from typing import TYPE_CHECKING, ClassVar
 
-from physicsnemo.curator.core.base import Param, Source
+from physicsnemo_curator.core.base import Param, Source
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -407,7 +407,7 @@ class Test<ClassName>Registry:
     """Test that the source is registered."""
 
     def test_source_registered(self) -> None:
-        from physicsnemo.curator.core.registry import registry
+        from physicsnemo_curator.core.registry import registry
         names = [s.name for s in registry.list_sources("<domain>")]
         assert "<Display Name>" in names
 
@@ -472,11 +472,11 @@ uv run pytest test/<domain>/test_<name>.py -v -k "E2E"
 
 ### Edit the domain `__init__.py`
 
-For **mesh** sources, edit `src/physicsnemo/curator/mesh/__init__.py`:
+For **mesh** sources, edit `src/physicsnemo_curator/mesh/__init__.py`:
 
 ```python
 # Add import (alphabetical order among sources)
-from physicsnemo.curator.mesh.sources.<module> import <ClassName>
+from physicsnemo_curator.mesh.sources.<module> import <ClassName>
 
 # Add registration (after existing register_source calls)
 registry.register_source("mesh", <ClassName>)
@@ -489,7 +489,7 @@ __all__ = [
 ]
 ```
 
-For **da** sources, edit `src/physicsnemo/curator/da/__init__.py` with the
+For **da** sources, edit `src/physicsnemo_curator/da/__init__.py` with the
 same pattern using `"da"` as the submodule name.
 
 ## Step 4: Quality Checks
@@ -498,10 +498,10 @@ Run all checks before committing:
 
 ```bash
 # Format
-uv run ruff format src/physicsnemo/curator/<domain>/sources/<name>.py test/<domain>/test_<name>.py
+uv run ruff format src/physicsnemo_curator/<domain>/sources/<name>.py test/<domain>/test_<name>.py
 
 # Lint
-uv run ruff check --fix src/physicsnemo/curator/<domain>/sources/<name>.py test/<domain>/test_<name>.py
+uv run ruff check --fix src/physicsnemo_curator/<domain>/sources/<name>.py test/<domain>/test_<name>.py
 
 # Docstring coverage (must be >= 99%)
 uv run interrogate

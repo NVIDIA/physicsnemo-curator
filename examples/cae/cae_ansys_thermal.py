@@ -24,7 +24,7 @@ curating Ansys thermal simulation data.
 Ansys solvers produce ``.rst`` result files containing mesh coordinates,
 temperature distributions, heat flux vectors, and other physics fields.
 The pipeline reads these files with
-:class:`~physicsnemo.curator.mesh.sources.ansys_rst.AnsysRSTSource`,
+:class:`~physicsnemo_curator.mesh.sources.ansys_rst.AnsysRSTSource`,
 logs mesh metadata, computes summary statistics, converts fields to
 single precision, and writes the processed meshes to disk.
 
@@ -42,21 +42,21 @@ single precision, and writes the processed meshes to disk.
 #
 # Import the pipeline building blocks: a **Source** for Ansys ``.rst``
 # files, informational / statistics / precision filters, a **Sink** for
-# writing outputs, and :func:`~physicsnemo.curator.run.run_pipeline` for
+# writing outputs, and :func:`~physicsnemo_curator.run.run_pipeline` for
 # parallel execution.
 
-from physicsnemo.curator.mesh.filters.mesh_info import MeshInfoFilter
-from physicsnemo.curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo.curator.mesh.filters.stats import StatsFilter
-from physicsnemo.curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo.curator.mesh.sources.ansys_rst import AnsysRSTSource
-from physicsnemo.curator.run import gather_pipeline, run_pipeline
+from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
+from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.mesh.filters.stats import StatsFilter
+from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.mesh.sources.ansys_rst import AnsysRSTSource
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
 # --------------------
 #
-# :class:`~physicsnemo.curator.mesh.sources.ansys_rst.AnsysRSTSource`
+# :class:`~physicsnemo_curator.mesh.sources.ansys_rst.AnsysRSTSource`
 # scans ``input_dir`` for files matching ``*.rst``.  Each file
 # corresponds to one simulation case (e.g. a different thermal scenario).
 #
@@ -145,7 +145,7 @@ for path in merged:
 # This example showed how to:
 #
 # - Read Ansys ``.rst`` thermal simulation results with
-#   :class:`~physicsnemo.curator.mesh.sources.ansys_rst.AnsysRSTSource`.
+#   :class:`~physicsnemo_curator.mesh.sources.ansys_rst.AnsysRSTSource`.
 # - Auto-discover or explicitly select result fields (temperature,
 #   heat flux, displacement, stress, etc.).
 # - Log mesh metadata, compute statistics, and convert precision in a

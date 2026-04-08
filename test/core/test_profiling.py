@@ -31,8 +31,8 @@ if TYPE_CHECKING:
 
 import pytest
 
-from physicsnemo.curator.core.base import Filter, Param, Sink, Source
-from physicsnemo.curator.core.profiling import (
+from physicsnemo_curator.core.base import Filter, Param, Sink, Source
+from physicsnemo_curator.core.profiling import (
     IndexMetrics,
     PipelineMetrics,
     ProfiledPipeline,
@@ -570,12 +570,12 @@ class TestPublicAPI:
 
     def test_import_profiled_pipeline(self):
         """ProfiledPipeline is importable from top-level package."""
-        from physicsnemo.curator import ProfiledPipeline
+        from physicsnemo_curator import ProfiledPipeline
 
         assert ProfiledPipeline is not None
 
     def test_import_pipeline_metrics(self):
         """PipelineMetrics is importable from top-level package."""
-        from physicsnemo.curator import PipelineMetrics
+        from physicsnemo_curator import PipelineMetrics
 
         assert PipelineMetrics is not None

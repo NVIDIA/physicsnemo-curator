@@ -153,7 +153,7 @@ class TestASELMDBSourceUnit:
     """Metadata and parameter tests (no data access)."""
 
     def test_params_list(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         params = ASELMDBSource.params()
         assert len(params) > 0
@@ -163,7 +163,7 @@ class TestASELMDBSourceUnit:
         assert "backend" in names
 
     def test_name_and_description(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         assert isinstance(ASELMDBSource.name, str)
         assert ASELMDBSource.name == "ASE LMDB"
@@ -188,13 +188,13 @@ class TestASELMDBSourceLocal:
         _write_mock_metadata(self.mock_root)
 
     def test_len(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         assert len(source) == 3
 
     def test_no_aselmdb_files_raises(self, tmp_path: pathlib.Path) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
@@ -202,21 +202,21 @@ class TestASELMDBSourceLocal:
             ASELMDBSource(data_dir=str(empty_dir))
 
     def test_files_sorted_lexicographically(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         names = [p.name for p in source.db_files]
         assert names == sorted(names)
 
     def test_metadata_loaded(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         assert "natoms" in source.metadata
         assert "data_ids" in source.metadata
 
     def test_metadata_not_required(self, tmp_path: pathlib.Path) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         no_meta = tmp_path / "no_meta"
         no_meta.mkdir()
@@ -229,7 +229,7 @@ class TestASELMDBSourceLocal:
     def test_getitem_yields_atomic_data(self, mock_connect: MagicMock) -> None:
         from nvalchemi.data import AtomicData
 
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         mock_connect.return_value = _make_mock_db(n_rows=3)
 
@@ -241,7 +241,7 @@ class TestASELMDBSourceLocal:
 
     @patch("ase.db.connect")
     def test_negative_index(self, mock_connect: MagicMock) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         mock_connect.return_value = _make_mock_db(n_rows=2)
 
@@ -251,21 +251,21 @@ class TestASELMDBSourceLocal:
         assert len(items_neg) == 2
 
     def test_index_out_of_bounds(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         with pytest.raises(IndexError):
             next(source[len(source)])
 
     def test_index_out_of_bounds_negative(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         with pytest.raises(IndexError):
             next(source[-(len(source) + 1)])
 
     def test_data_dir_property(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         assert source.data_dir == self.mock_root
@@ -281,8 +281,8 @@ class TestASELMDBSourceRegistry:
     """Test that the source is registered."""
 
     def test_source_registered(self) -> None:
-        import physicsnemo.curator.atm  # noqa: F401
-        from physicsnemo.curator.core.registry import registry
+        import physicsnemo_curator.atm  # noqa: F401
+        from physicsnemo_curator.core.registry import registry
 
         sources = registry.list_sources("atm")
         source_names = {s.name for s in sources}
@@ -304,7 +304,7 @@ class TestASELMDBSourceE2E:
         self.db_dir = tmp_path / "e2e_data"
         _create_real_aselmdb(self.db_dir, n_files=3, n_rows=5, with_calc=True)
 
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         self.source = ASELMDBSource(data_dir=str(self.db_dir))
 
@@ -339,19 +339,19 @@ class TestASELMDBSourceBackend:
         _write_mock_aselmdb_files(self.mock_root, n_files=2)
 
     def test_default_backend_is_python(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         assert source.backend == "python"
 
     def test_explicit_python_backend(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root), backend="python")
         assert source.backend == "python"
 
     def test_rust_backend_accepted(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root), backend="rust")
         assert source.backend == "rust"
@@ -360,27 +360,27 @@ class TestASELMDBSourceBackend:
         import sys
         from types import ModuleType
 
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         # Temporarily remove the lmdb submodule so the import check fails.
-        saved = sys.modules.pop("physicsnemo.curator._lib.lmdb", None)
+        saved = sys.modules.pop("physicsnemo_curator._lib.lmdb", None)
         # Replacing with a broken module triggers ImportError on
-        # ``from physicsnemo.curator._lib.lmdb import read_lmdb``.
-        broken: ModuleType = ModuleType("physicsnemo.curator._lib.lmdb")
+        # ``from physicsnemo_curator._lib.lmdb import read_lmdb``.
+        broken: ModuleType = ModuleType("physicsnemo_curator._lib.lmdb")
         broken.__dict__.clear()  # make it empty so import-from fails
-        sys.modules["physicsnemo.curator._lib.lmdb"] = broken
+        sys.modules["physicsnemo_curator._lib.lmdb"] = broken
         try:
             source = ASELMDBSource(data_dir=str(self.mock_root), backend="rust")
             assert source.backend == "python"
         finally:
             # Restore
             if saved is not None:
-                sys.modules["physicsnemo.curator._lib.lmdb"] = saved
+                sys.modules["physicsnemo_curator._lib.lmdb"] = saved
             else:
-                sys.modules.pop("physicsnemo.curator._lib.lmdb", None)
+                sys.modules.pop("physicsnemo_curator._lib.lmdb", None)
 
     def test_backend_in_params(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         params = ASELMDBSource.params()
         backend_param = next(p for p in params if p.name == "backend")
@@ -404,7 +404,7 @@ class TestASELMDBSourceRustBackend:
         _create_real_aselmdb(self.db_dir, n_files=2, n_rows=4, with_calc=True)
 
     def test_rust_reads_correct_count(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
         items = list(source[0])
@@ -413,7 +413,7 @@ class TestASELMDBSourceRustBackend:
     def test_rust_yields_atomic_data(self) -> None:
         from nvalchemi.data import AtomicData
 
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
         for ad in source[0]:
@@ -422,7 +422,7 @@ class TestASELMDBSourceRustBackend:
             assert ad.positions is not None
 
     def test_rust_captures_energy(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
         ad = next(source[0])
@@ -430,7 +430,7 @@ class TestASELMDBSourceRustBackend:
         assert ad.energies.shape == (1, 1)
 
     def test_rust_captures_forces(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
         ad = next(source[0])
@@ -439,7 +439,7 @@ class TestASELMDBSourceRustBackend:
         assert ad.forces.shape == (n_atoms, 3)
 
     def test_rust_captures_cell_and_pbc(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
         ad = next(source[0])
@@ -451,7 +451,7 @@ class TestASELMDBSourceRustBackend:
     def test_backends_agree_on_positions(self) -> None:
         import torch
 
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         src_py = ASELMDBSource(data_dir=str(self.db_dir), backend="python")
         src_rs = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
@@ -467,7 +467,7 @@ class TestASELMDBSourceRustBackend:
     def test_backends_agree_on_cell(self) -> None:
         import torch
 
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         src_py = ASELMDBSource(data_dir=str(self.db_dir), backend="python")
         src_rs = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
@@ -481,7 +481,7 @@ class TestASELMDBSourceRustBackend:
         assert torch.allclose(ad_py.cell, ad_rs.cell, atol=1e-5)
 
     def test_multiple_files(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
         assert len(source) == 2
@@ -503,7 +503,7 @@ class TestAtomicDataFromRow:
     def test_basic_construction(self) -> None:
         import torch
 
-        from physicsnemo.curator.atm.sources.aselmdb import _atomic_data_from_row
+        from physicsnemo_curator.atm.sources.aselmdb import _atomic_data_from_row
 
         row: dict[str, object] = {
             "numbers": np.array([1, 1, 8], dtype=np.int64),
@@ -525,7 +525,7 @@ class TestAtomicDataFromRow:
         assert ad.pbc is None
 
     def test_energy_float(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import _atomic_data_from_row
+        from physicsnemo_curator.atm.sources.aselmdb import _atomic_data_from_row
 
         row: dict[str, object] = {
             "numbers": np.array([6], dtype=np.int64),
@@ -546,7 +546,7 @@ class TestAtomicDataFromRow:
         assert abs(float(ad.energies.item()) - (-42.5)) < 1e-3
 
     def test_forces_and_stress(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import _atomic_data_from_row
+        from physicsnemo_curator.atm.sources.aselmdb import _atomic_data_from_row
 
         row: dict[str, object] = {
             "numbers": np.array([1, 8], dtype=np.int64),
@@ -571,7 +571,7 @@ class TestAtomicDataFromRow:
 
     def test_voigt_stress_conversion(self) -> None:
 
-        from physicsnemo.curator.atm.sources.aselmdb import _voigt_to_matrix
+        from physicsnemo_curator.atm.sources.aselmdb import _voigt_to_matrix
 
         voigt = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
         mat = _voigt_to_matrix(voigt)
@@ -587,7 +587,7 @@ class TestAtomicDataFromRow:
         assert mat[0, 1] == 6.0  # xy
 
     def test_missing_numbers_raises(self) -> None:
-        from physicsnemo.curator.atm.sources.aselmdb import _atomic_data_from_row
+        from physicsnemo_curator.atm.sources.aselmdb import _atomic_data_from_row
 
         row: dict[str, object] = {
             "numbers": "not_an_array",
