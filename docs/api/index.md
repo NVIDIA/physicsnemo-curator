@@ -5,16 +5,6 @@
 
 # API Reference
 
-Auto-generated reference for the `physicsnemo_curator` package.  Each section
-links to the detailed module documentation produced by
-[sphinx-autoapi](https://sphinx-autoapi.readthedocs.io/).
-
-```{toctree}
-:hidden:
-
-/autoapi/physicsnemo_curator/index
-```
-
 ## Core
 
 Base abstractions, file stores, component registry, checkpointing, and
