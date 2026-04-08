@@ -31,6 +31,17 @@ from physicsnemo_curator.core.store import RunIndexedFileStore
 if TYPE_CHECKING:
     import pathlib
 
+# Network errors that should cause E2E tests to be skipped rather than
+# reported as failures (the remote API is outside our control).
+_NETWORK_ERRORS: tuple[type[BaseException], ...] = (OSError, TimeoutError)
+
+try:
+    import httpx
+
+    _NETWORK_ERRORS = (*_NETWORK_ERRORS, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError)
+except ImportError:
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Unit tests — RunIndexedFileStore
@@ -294,11 +305,14 @@ class TestDrivAerMLSourceE2E:
         """Build the source with a local cache directory."""
         from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
 
-        self.source = DrivAerMLSource(
-            mesh_type="boundary",
-            cache_storage=str(tmp_path / "cache"),
-            warn_on_lost_data=False,
-        )
+        try:
+            self.source = DrivAerMLSource(
+                mesh_type="boundary",
+                cache_storage=str(tmp_path / "cache"),
+                warn_on_lost_data=False,
+            )
+        except _NETWORK_ERRORS as exc:
+            pytest.skip(f"HuggingFace API unreachable: {exc}")
         self.tmp_path = tmp_path
 
     def test_discovers_runs(self) -> None:
@@ -350,11 +364,14 @@ class TestDrivAerMLSlicesE2E:
         """Build the slices source with a local cache directory."""
         from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
 
-        self.source = DrivAerMLSource(
-            mesh_type="slices",
-            cache_storage=str(tmp_path / "cache"),
-            warn_on_lost_data=False,
-        )
+        try:
+            self.source = DrivAerMLSource(
+                mesh_type="slices",
+                cache_storage=str(tmp_path / "cache"),
+                warn_on_lost_data=False,
+            )
+        except _NETWORK_ERRORS as exc:
+            pytest.skip(f"HuggingFace API unreachable: {exc}")
         self.tmp_path = tmp_path
 
     def test_discovers_runs(self) -> None:
@@ -388,11 +405,14 @@ class TestAhmedMLSourceE2E:
         """Build the source with a local cache directory."""
         from physicsnemo_curator.mesh.sources.ahmedml import AhmedMLSource
 
-        self.source = AhmedMLSource(
-            mesh_type="boundary",
-            cache_storage=str(tmp_path / "cache"),
-            warn_on_lost_data=False,
-        )
+        try:
+            self.source = AhmedMLSource(
+                mesh_type="boundary",
+                cache_storage=str(tmp_path / "cache"),
+                warn_on_lost_data=False,
+            )
+        except _NETWORK_ERRORS as exc:
+            pytest.skip(f"HuggingFace API unreachable: {exc}")
         self.tmp_path = tmp_path
 
     def test_discovers_runs(self) -> None:
@@ -442,11 +462,14 @@ class TestWindsorMLSourceE2E:
         """Build the source with a local cache directory."""
         from physicsnemo_curator.mesh.sources.windsorml import WindsorMLSource
 
-        self.source = WindsorMLSource(
-            mesh_type="boundary",
-            cache_storage=str(tmp_path / "cache"),
-            warn_on_lost_data=False,
-        )
+        try:
+            self.source = WindsorMLSource(
+                mesh_type="boundary",
+                cache_storage=str(tmp_path / "cache"),
+                warn_on_lost_data=False,
+            )
+        except _NETWORK_ERRORS as exc:
+            pytest.skip(f"HuggingFace API unreachable: {exc}")
         self.tmp_path = tmp_path
 
     def test_discovers_runs(self) -> None:
@@ -494,11 +517,14 @@ class TestWindTunnelSourceE2E:
         """Build the source for the test split (smallest)."""
         from physicsnemo_curator.mesh.sources.windtunnel import WindTunnelSource
 
-        self.source = WindTunnelSource(
-            split="test",
-            cache_storage=str(tmp_path / "cache"),
-            warn_on_lost_data=False,
-        )
+        try:
+            self.source = WindTunnelSource(
+                split="test",
+                cache_storage=str(tmp_path / "cache"),
+                warn_on_lost_data=False,
+            )
+        except _NETWORK_ERRORS as exc:
+            pytest.skip(f"HuggingFace API unreachable: {exc}")
         self.tmp_path = tmp_path
 
     def test_discovers_simulations(self) -> None:

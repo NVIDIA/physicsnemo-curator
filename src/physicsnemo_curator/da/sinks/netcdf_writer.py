@@ -38,6 +38,8 @@ compression.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import pathlib
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -361,9 +363,12 @@ class NetCDF4Sink(Sink["xr.DataArray"]):
         """Append a Dataset to an existing NetCDF4 file along time.
 
         Reads the existing file with xarray, concatenates the new data
-        along the ``time`` dimension, and rewrites.  This avoids
-        incompatible HDF5 library issues that can arise when mixing
-        ``xarray.to_netcdf`` with ``netCDF4.Dataset(mode='a')``.
+        along the ``time`` dimension, and rewrites via an atomic
+        temp-file rename.  This avoids incompatible HDF5 library issues
+        that can arise when mixing ``xarray.to_netcdf`` with
+        ``netCDF4.Dataset(mode='a')``, and avoids PermissionError on
+        platforms where the HDF5 C library holds a file lock until the
+        process fully releases the handle.
 
         Parameters
         ----------
@@ -372,22 +377,37 @@ class NetCDF4Sink(Sink["xr.DataArray"]):
         nc_path : pathlib.Path
             Path to the existing NetCDF4 file.
         """
+        import tempfile
+
         import xarray
 
-        existing = xarray.open_dataset(str(nc_path))
-        try:
+        # Load into memory so the file handle is fully released before
+        # we attempt to overwrite the same path.
+        with xarray.open_dataset(str(nc_path)) as existing:
+            existing.load()
             merged = xarray.concat([existing, ds], dim="time")
-        finally:
-            existing.close()
 
         encoding = self._build_encoding(merged["data"])
-        merged.to_netcdf(
-            path=str(nc_path),
-            mode="w",
-            format="NETCDF4",
-            encoding=encoding,
-            unlimited_dims=self._unlimited_dims,
-        )
+
+        # Write to a temporary file in the same directory, then
+        # atomically replace the original to avoid partial-write risk.
+        fd, tmp_path_str = tempfile.mkstemp(dir=str(nc_path.parent), suffix=".nc.tmp")
+        os.close(fd)
+        tmp = pathlib.Path(tmp_path_str)
+        try:
+            merged.to_netcdf(
+                path=str(tmp),
+                mode="w",
+                format="NETCDF4",
+                encoding=encoding,
+                unlimited_dims=self._unlimited_dims,
+            )
+            tmp.replace(nc_path)
+        except BaseException:
+            # Clean up the temp file on any failure.
+            with contextlib.suppress(OSError):
+                tmp.unlink()
+            raise
 
     @property
     def output_dir(self) -> pathlib.Path:
