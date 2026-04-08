@@ -13,7 +13,7 @@ profiling utilities.
 ```{toctree}
 :maxdepth: 2
 
-/autoapi/physicsnemo/curator/core/index
+/autoapi/curator/core/index
 ```
 
 ## CLI
@@ -23,7 +23,7 @@ Interactive command-line interface for guided pipeline construction.
 ```{toctree}
 :maxdepth: 2
 
-/autoapi/physicsnemo/curator/cli/index
+/autoapi/curator/cli/index
 ```
 
 ## Run
@@ -33,7 +33,7 @@ Execution backends for parallel and distributed pipeline processing.
 ```{toctree}
 :maxdepth: 2
 
-/autoapi/physicsnemo/curator/run/index
+/autoapi/curator/run/index
 ```
 
 ## Domains
@@ -43,7 +43,7 @@ Domain-specific sources, filters, and sinks.
 ```{toctree}
 :maxdepth: 2
 
-/autoapi/physicsnemo/curator/mesh/index
-/autoapi/physicsnemo/curator/atm/index
-/autoapi/physicsnemo/curator/da/index
+/autoapi/curator/mesh/index
+/autoapi/curator/atm/index
+/autoapi/curator/da/index
 ```
