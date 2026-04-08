@@ -109,6 +109,7 @@ intersphinx_mapping = {
 # ---------------------------------------------------------------------------
 html_theme = "nvidia_sphinx_theme"
 html_static_path = ["_static"]
+html_extra_path = ["_extra"]  # placeholder benchmarks page; CI overwrites with real ASV dashboard
 templates_path = ["_templates"]
 
 # PyData Sphinx Theme options (nvidia-sphinx-theme extends pydata-sphinx-theme)
@@ -129,4 +130,5 @@ source_suffix = {
 
 # Suppress "cannot cache unpickleable configuration value" for sphinx_gallery_conf
 # (contains class references for sorting which are not pickleable).
-suppress_warnings = ["config.cache"]
+# Suppress myst.xref_missing for benchmarks/index.html (injected post-build by CI).
+suppress_warnings = ["config.cache", "myst.xref_missing"]
