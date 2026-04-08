@@ -60,7 +60,7 @@ jobs:
         run: uv run asv machine --yes
 
       - name: Run ASV benchmarks
-        run: uv run asv run --quick NEW || uv run asv run --quick HEAD^!
+        run: uv run asv run --quick --set-commit-hash $(git rev-parse HEAD)
 
       - name: Publish ASV HTML dashboard
         run: uv run asv publish

@@ -5,20 +5,8 @@
     "repo": ".",
     "branches": ["HEAD"],
     "dvcs": "git",
-    "environment_type": "virtualenv",
+    "environment_type": "existing",
     "show_commit_url": "https://github.com/NVIDIA/physicsnemo-curator/commit/",
-
-    "build_command": [
-        "python {build_dir}/benchmarks/asv_build.py"
-    ],
-    "install_command": [
-        "in_dir={build_dir} python -m pip install --no-build-isolation -e {build_dir}[mesh,atm]"
-    ],
-
-    "matrix": {
-        "numpy": [],
-        "fsspec": []
-    },
 
     "benchmark_dir": "benchmarks",
     "env_dir": ".asv/env",
