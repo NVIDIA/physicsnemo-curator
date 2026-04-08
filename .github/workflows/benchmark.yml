@@ -5,6 +5,8 @@
 name: Benchmark
 
 on:
+  push:
+    branches: [main, refactor]
   schedule:
     - cron: "0 3 * * *" # Nightly at 03:00 UTC
   workflow_dispatch: # Manual trigger
