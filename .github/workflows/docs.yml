@@ -7,6 +7,7 @@ name: Docs
 on:
   push:
     branches: [main, refactor]
+  workflow_call: # Allow other workflows (e.g. benchmark) to trigger a rebuild
   workflow_dispatch:
 
 # Allow only one concurrent deployment

@@ -82,3 +82,10 @@ jobs:
           path: .asv/html
           retention-days: 90
           overwrite: true
+
+  # Trigger docs rebuild so the benchmark dashboard is picked up
+  docs:
+    needs: asv
+    uses: ./.github/workflows/docs.yml
+    permissions:
+      contents: write
