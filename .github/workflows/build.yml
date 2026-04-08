@@ -58,7 +58,7 @@ jobs:
 
       - name: Install wheel
         shell: bash
-        run: pip install dist/physicsnemo.curator-*.whl
+        run: pip install dist/physicsnemo_curator-*.whl
 
       - name: Verify import
         run: |
@@ -135,7 +135,7 @@ jobs:
 
       - name: Install from sdist
         shell: bash
-        run: pip install dist/physicsnemo.curator-*.tar.gz
+        run: pip install dist/physicsnemo_curator-*.tar.gz
 
       - name: Verify import
         run: |
