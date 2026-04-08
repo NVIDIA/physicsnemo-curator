@@ -18,17 +18,18 @@ permissions:
   contents: read
 
 # ---------------------------------------------------------------------------
-# Unit tests with coverage, uploaded to Codecov.
+# Unit + integration tests with coverage, uploaded to Codecov.
 #
-# Core tests (no optional deps) run on Ubuntu / Python 3.12.
-# Rust tests run on Ubuntu via cargo-nextest.
-# Coverage is uploaded to Codecov after the test job completes.
+# Each domain (core, mesh, da, atm) runs in its own job with an isolated
+# venv containing only the dependencies needed for that domain.
+# Rust tests run separately via cargo-nextest.
+# Coverage from all jobs is merged and uploaded to Codecov.
 # ---------------------------------------------------------------------------
 
 jobs:
-  # ── Python unit tests (core — no optional deps) ─────────────────────────
-  python-test:
-    name: "Test / Ubuntu / py3.12"
+  # ── Core tests (no optional deps) ──────────────────────────────────────
+  test-core:
+    name: "Test / core"
     runs-on: ubuntu-latest
 
     steps:
@@ -52,27 +53,151 @@ jobs:
       - name: Build native extension
         run: uv run maturin develop
 
-      - name: Run unit tests with coverage
+      - name: Run core tests with coverage
         run: >
           uv run pytest test/
           -m "not requires"
           --cov
-          --cov-report=xml:coverage.xml
+          --cov-report=xml:coverage-core.xml
           --cov-report=term-missing
           -v --tb=short
 
-      - name: Upload coverage to Codecov
+      - name: Upload coverage artifact
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: actions/upload-artifact@v4
         with:
-          files: coverage.xml
-          flags: core
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          name: coverage-core
+          path: coverage-core.xml
+          retention-days: 1
 
-  # ── Rust tests ──────────────────────────────────────────────────────────
-  rust-test:
+  # ── Mesh domain tests ──────────────────────────────────────────────────
+  test-mesh:
+    name: "Test / mesh"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Install dependencies (dev + mesh extras)
+        run: uv sync --group dev --extra mesh
+
+      - name: Build native extension
+        run: uv run maturin develop
+
+      - name: Run mesh tests with coverage
+        run: >
+          uv run pytest test/mesh/
+          --cov
+          --cov-report=xml:coverage-mesh.xml
+          --cov-report=term-missing
+          -v --tb=short
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-mesh
+          path: coverage-mesh.xml
+          retention-days: 1
+
+  # ── DataArray domain tests ─────────────────────────────────────────────
+  test-da:
+    name: "Test / da"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Install dependencies (dev + da extras)
+        run: uv sync --group dev --extra da
+
+      - name: Build native extension
+        run: uv run maturin develop
+
+      - name: Run da tests with coverage
+        run: >
+          uv run pytest test/da/
+          --cov
+          --cov-report=xml:coverage-da.xml
+          --cov-report=term-missing
+          -v --tb=short
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-da
+          path: coverage-da.xml
+          retention-days: 1
+
+  # ── Atomic domain tests ────────────────────────────────────────────────
+  test-atm:
+    name: "Test / atm"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Install dependencies (dev + atm extras)
+        run: uv sync --group dev --extra atm
+
+      - name: Build native extension
+        run: uv run maturin develop
+
+      - name: Run atm tests with coverage
+        run: >
+          uv run pytest test/atm/
+          --cov
+          --cov-report=xml:coverage-atm.xml
+          --cov-report=term-missing
+          -v --tb=short
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-atm
+          path: coverage-atm.xml
+          retention-days: 1
+
+  # ── Rust tests ─────────────────────────────────────────────────────────
+  test-rust:
     name: "Test / Rust (nextest)"
     runs-on: ubuntu-latest
 
@@ -95,3 +220,29 @@ jobs:
 
       - name: Run Rust tests
         run: cargo nextest run --manifest-path src/rust/Cargo.toml
+
+  # ── Upload merged coverage to Codecov ──────────────────────────────────
+  upload-coverage:
+    name: "Codecov"
+    needs: [test-core, test-mesh, test-da, test-atm]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage-core.xml,coverage-mesh.xml,coverage-da.xml,coverage-atm.xml
+          flags: unit,integration
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
