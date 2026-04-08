@@ -7,6 +7,11 @@ name: Bench
 on:
   push:
     branches: [main, refactor]
+    paths:
+      - "benchmarks/**"
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/workflows/benchmark.yml"
   schedule:
     - cron: "0 3 * * *" # Nightly at 03:00 UTC
   workflow_dispatch: # Manual trigger
