@@ -47,6 +47,9 @@ dask = [
 prefect = [
     "prefect>=3.0",
 ]
+yaml = [
+    "pyyaml>=6.0",
+]
 mesh = [
     "nvidia-physicsnemo>=2.0",
     "pyvista",
@@ -88,6 +91,7 @@ dev = [
     "pre-commit>=4.0",
     "interrogate>=1.7",
     "maturin>=1.0,<2.0",
+    "pyyaml>=6.0",
 ]
 docs = [
     "sphinx>=9.0,<10",
