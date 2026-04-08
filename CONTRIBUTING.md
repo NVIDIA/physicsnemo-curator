@@ -81,5 +81,3 @@ git commit -s -m "feat(mesh): add new VTK filter"
 
 - **GitHub Issues** — bug reports, feature requests
 - **GitHub Discussions** — questions, ideas, research directions
-- **[Proposal form](https://forms.gle/fYsbZEtgRWJUQ3oQ9)** — for larger
-  collaborations with the NVIDIA PhysicsNeMo team
