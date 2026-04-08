@@ -80,15 +80,6 @@ user-guide/index
 domains/index
 ```
 
-## Benchmarks
-
-```{toctree}
-:maxdepth: 1
-:hidden:
-
-Benchmarks <https://nvidia.github.io/physicsnemo-curator/benchmarks/>
-```
-
 ## Examples
 
 ```{toctree}
@@ -96,6 +87,11 @@ Benchmarks <https://nvidia.github.io/physicsnemo-curator/benchmarks/>
 
 auto_examples/index
 ```
+
+## Benchmarks
+
+View the [ASV benchmark dashboard](benchmarks/index.html) for historical
+performance data across Rust and Python backends.
 
 ## API
 
