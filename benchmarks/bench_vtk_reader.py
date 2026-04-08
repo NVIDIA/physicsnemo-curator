@@ -284,8 +284,8 @@ class MemVTKReader:
 </VTKFile>"""
         path.write_text(xml)
 
-    def mem_rust(self, n_points: int):
-        """Track memory of Rust VTK reader."""
+    def peakmem_rust(self, n_points: int):
+        """Track peak RSS when reading with the Rust VTK reader."""
         from physicsnemo_curator._lib import vtk
 
-        return vtk.read_vtk(self.test_file)
+        vtk.read_vtk(self.test_file)
