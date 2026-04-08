@@ -96,4 +96,6 @@ jobs:
     needs: asv
     uses: ./.github/workflows/docs.yml
     permissions:
-      contents: write
+      contents: read
+      pages: write
+      id-token: write
