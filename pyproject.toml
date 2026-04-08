@@ -48,7 +48,7 @@ prefect = [
     "prefect>=3.0",
 ]
 mesh = [
-    "nvidia-physicsnemo",
+    "nvidia-physicsnemo>=2.0",
     "pyvista",
     "pyarrow",
     "torch",
@@ -114,8 +114,11 @@ default-groups = ["dev"]
 # so uv can resolve the dependency graph without a registry lookup.
 [[tool.uv.dependency-metadata]]
 name = "nvidia-physicsnemo"
-version = "0.1.0"
-requires-dist = []
+version = "2.0.0"
+requires-dist = [
+    "torch>=2.5.0",
+    "numpy>=1.22.4",
+]
 
 # nvalchemi-toolkit is a private NVIDIA package not on PyPI.
 # Declare its actual dependencies so uv resolves them correctly.

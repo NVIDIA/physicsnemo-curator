@@ -23,7 +23,8 @@ provides-extras = ["torch"]
 
 [[manifest.dependency-metadata]]
 name = "nvidia-physicsnemo"
-version = "0.1.0"
+version = "2.0.0"
+requires-dist = ["torch>=2.5.0", "numpy>=1.22.4"]
 
 [[package]]
 name = "absl-py"
@@ -3399,8 +3400,12 @@ wheels = [
 
 [[package]]
 name = "nvidia-physicsnemo"
-version = "0.1.0"
+version = "2.0.0"
 source = { git = "https://github.com/NVIDIA/physicsnemo#44ccfdd6a688fd36356f76568079d2f00717d0cd" }
+dependencies = [
+    { name = "numpy" },
+    { name = "torch" },
+]
 
 [[package]]
 name = "nvidia-sphinx-theme"

@@ -51,10 +51,6 @@ The ``device`` fixture yields ``"cpu"`` and, when CUDA is available,
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
-from typing import TYPE_CHECKING
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # Namespace package extension
@@ -63,33 +59,42 @@ import pytest
 # prevents Python from discovering ``physicsnemo.curator`` in our editable
 # ``src/`` tree.  We extend ``physicsnemo.__path__`` so both packages
 # coexist.  This runs before any test module imports ``physicsnemo.curator``.
+#
+# IMPORTANT: We avoid ``import physicsnemo`` because nvidia-physicsnemo's
+# ``__init__.py`` triggers heavy transitive imports (torch, numpy, etc.)
+# that can fail in minimal CI environments.  Instead we locate the installed
+# ``__init__.py`` via importlib and load only its spec/path.
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import pytest
 
 _src_dir = str(Path(__file__).resolve().parent.parent / "src" / "physicsnemo")
 if Path(_src_dir).is_dir():
-    import sys
-
     if "physicsnemo" in sys.modules:
         _mod = sys.modules["physicsnemo"]
         if hasattr(_mod, "__path__") and _src_dir not in _mod.__path__:
             _mod.__path__.insert(0, _src_dir)
     else:
-        # Try importing — nvidia-physicsnemo may install a regular __init__.py
-        # whose transitive imports (torch, numpy) can clash.  Catch broadly so
-        # conftest always loads.
-        try:
-            import physicsnemo  # type: ignore[import-untyped]
+        import importlib.util
+        import types
 
-            if _src_dir not in physicsnemo.__path__:
-                physicsnemo.__path__.insert(0, _src_dir)
-        except Exception:  # noqa: BLE001
-            # If the import fails for any reason, inject a minimal namespace
-            # package stub so physicsnemo.curator is still discoverable.
-            import types
-
-            ns = types.ModuleType("physicsnemo")
-            ns.__path__ = [_src_dir]
-            ns.__package__ = "physicsnemo"
-            sys.modules["physicsnemo"] = ns
+        _spec = importlib.util.find_spec("physicsnemo")
+        if _spec is not None and _spec.submodule_search_locations is not None:
+            # nvidia-physicsnemo is installed — create a lightweight module
+            # stub with the combined paths instead of executing its __init__.py.
+            _ns = types.ModuleType("physicsnemo")
+            _ns.__path__ = [_src_dir, *_spec.submodule_search_locations]
+            _ns.__package__ = "physicsnemo"
+            _ns.__spec__ = _spec
+            sys.modules["physicsnemo"] = _ns
+        else:
+            # physicsnemo not installed — inject a minimal namespace stub.
+            _ns = types.ModuleType("physicsnemo")
+            _ns.__path__ = [_src_dir]
+            _ns.__package__ = "physicsnemo"
+            sys.modules["physicsnemo"] = _ns
 
 if TYPE_CHECKING:
     import pathlib
