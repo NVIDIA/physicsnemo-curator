@@ -12,7 +12,13 @@
 
 set -euo pipefail
 
-INIT=$(uv run python -c "import physicsnemo; print(physicsnemo.__file__)" 2>/dev/null || true)
+INIT=$(uv run python -c "
+try:
+    import physicsnemo
+    print(physicsnemo.__file__)
+except Exception:
+    pass
+" 2>/dev/null || true)
 
 if [ -n "$INIT" ] && [ -f "$INIT" ]; then
     if ! grep -q "extend_path" "$INIT"; then

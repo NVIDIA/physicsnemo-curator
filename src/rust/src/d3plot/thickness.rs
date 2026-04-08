@@ -51,6 +51,10 @@ pub fn compute_node_thickness(
     actual_part_ids: Option<&[i64]>,
 ) -> Vec<f64> {
     // Build part-index → part-ID mapping.
+    if n_elements == 0 {
+        return Vec::new();
+    }
+
     let part_index_to_id: HashMap<i64, i64> = match actual_part_ids {
         Some(ids) => ids
             .iter()

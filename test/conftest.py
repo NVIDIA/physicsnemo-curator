@@ -66,14 +66,30 @@ import pytest
 
 _src_dir = str(Path(__file__).resolve().parent.parent / "src" / "physicsnemo")
 if Path(_src_dir).is_dir():
-    try:
-        import physicsnemo  # type: ignore[import-untyped]
+    import sys
 
-        if _src_dir not in physicsnemo.__path__:
-            physicsnemo.__path__.insert(0, _src_dir)
-    except ImportError:
-        # physicsnemo not installed — namespace package works natively.
-        pass
+    if "physicsnemo" in sys.modules:
+        _mod = sys.modules["physicsnemo"]
+        if hasattr(_mod, "__path__") and _src_dir not in _mod.__path__:
+            _mod.__path__.insert(0, _src_dir)
+    else:
+        # Try importing — nvidia-physicsnemo may install a regular __init__.py
+        # whose transitive imports (torch, numpy) can clash.  Catch broadly so
+        # conftest always loads.
+        try:
+            import physicsnemo  # type: ignore[import-untyped]
+
+            if _src_dir not in physicsnemo.__path__:
+                physicsnemo.__path__.insert(0, _src_dir)
+        except Exception:  # noqa: BLE001
+            # If the import fails for any reason, inject a minimal namespace
+            # package stub so physicsnemo.curator is still discoverable.
+            import types
+
+            ns = types.ModuleType("physicsnemo")
+            ns.__path__ = [_src_dir]
+            ns.__package__ = "physicsnemo"
+            sys.modules["physicsnemo"] = ns
 
 if TYPE_CHECKING:
     import pathlib
