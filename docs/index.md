@@ -90,8 +90,11 @@ auto_examples/index
 
 ## Benchmarks
 
-View the [ASV benchmark dashboard](benchmarks/index.html) for historical
-performance data across Rust and Python backends.
+```{toctree}
+:maxdepth: 1
+
+benchmarking
+```
 
 ## API
 

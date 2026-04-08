@@ -130,5 +130,4 @@ source_suffix = {
 
 # Suppress "cannot cache unpickleable configuration value" for sphinx_gallery_conf
 # (contains class references for sorting which are not pickleable).
-# Suppress myst.xref_missing for benchmarks/index.html (injected post-build by CI).
-suppress_warnings = ["config.cache", "myst.xref_missing"]
+suppress_warnings = ["config.cache"]
