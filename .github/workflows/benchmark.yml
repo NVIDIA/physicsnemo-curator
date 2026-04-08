@@ -48,12 +48,16 @@ jobs:
         run: uv run maturin develop --release
 
       - name: Download previous ASV results
+        continue-on-error: true
         uses: dawidd6/action-download-artifact@v6
         with:
           name: benchmark-results
           path: .asv/results
           workflow: benchmark.yml
           if_no_artifact_found: warn
+
+      - name: Register ASV machine
+        run: uv run asv machine --yes
 
       - name: Run ASV benchmarks
         run: uv run asv run --quick NEW || uv run asv run --quick HEAD^!
