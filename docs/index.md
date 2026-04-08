@@ -91,9 +91,9 @@ auto_examples/index
 ## Benchmarks
 
 ```{toctree}
-:maxdepth: 1
+:hidden:
 
-benchmarking
+Benchmarks <https://nvidia.github.io/physicsnemo-curator/benchmarks/>
 ```
 
 ## API
