@@ -51,9 +51,29 @@ The ``device`` fixture yields ``"cpu"`` and, when CUDA is available,
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+# ---------------------------------------------------------------------------
+# Namespace package extension
+# ---------------------------------------------------------------------------
+# nvidia-physicsnemo installs a regular ``physicsnemo/__init__.py`` that
+# prevents Python from discovering ``physicsnemo.curator`` in our editable
+# ``src/`` tree.  We extend ``physicsnemo.__path__`` so both packages
+# coexist.  This runs before any test module imports ``physicsnemo.curator``.
+
+_src_dir = str(Path(__file__).resolve().parent.parent / "src" / "physicsnemo")
+if Path(_src_dir).is_dir():
+    try:
+        import physicsnemo  # type: ignore[import-untyped]
+
+        if _src_dir not in physicsnemo.__path__:
+            physicsnemo.__path__.insert(0, _src_dir)
+    except ImportError:
+        # physicsnemo not installed — namespace package works natively.
+        pass
 
 if TYPE_CHECKING:
     import pathlib

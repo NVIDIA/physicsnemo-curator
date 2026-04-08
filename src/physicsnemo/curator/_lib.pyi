@@ -155,3 +155,83 @@ def read_lmdb_parallel(paths: list[str]) -> list[list[dict[str, object]]]:
     This function is accessible via ``_lib.lmdb.read_lmdb_parallel()``.
     """
     ...
+
+# D3Plot submodule functions (accessible via _lib.d3plot.*, etc.)
+def parse_k_file(path: str) -> dict[int, float]:
+    """Parse an LS-DYNA ``.k`` keyword file for part thickness.
+
+    Reads the file in Rust, extracts ``*PART`` and ``*SECTION_SHELL``
+    definitions, and returns a mapping from part ID to thickness.
+
+    Parameters
+    ----------
+    path : str
+        Path to the ``.k`` file.
+
+    Returns
+    -------
+    dict[int, float]
+        Mapping from part ID to thickness value.
+
+    Note
+    ----
+    This function is accessible via ``_lib.d3plot.parse_k_file()``.
+    """
+    ...
+
+def compute_node_thickness(
+    connectivity: npt.NDArray[np.int64],
+    part_ids: npt.NDArray[np.int64],
+    part_thickness: dict[int, float],
+    actual_part_ids: npt.NDArray[np.int64] | None = None,
+) -> npt.NDArray[np.float64]:
+    """Compute per-node thickness from element connectivity.
+
+    Scatter-accumulates element thickness onto mesh nodes and averages
+    by incident element count.
+
+    Parameters
+    ----------
+    connectivity : NDArray[int64]
+        Element connectivity, shape ``(E, nodes_per_cell)``.
+    part_ids : NDArray[int64]
+        Part index per element, shape ``(E,)``.
+    part_thickness : dict[int, float]
+        Mapping from actual part ID to thickness.
+    actual_part_ids : NDArray[int64] | None
+        Optional array of actual part IDs for index→ID translation.
+
+    Returns
+    -------
+    NDArray[float64]
+        Per-node thickness, shape ``(max_node+1,)``.
+
+    Note
+    ----
+    This function is accessible via ``_lib.d3plot.compute_node_thickness()``.
+    """
+    ...
+
+def von_mises_from_voigt(
+    stress: npt.NDArray[np.float64],
+    n_total: int,
+) -> npt.NDArray[np.float64]:
+    """Compute von Mises stress from Voigt-notation stress tensor.
+
+    Parameters
+    ----------
+    stress : NDArray[float64]
+        Flattened stress array, length ``n_total * 6``.
+    n_total : int
+        Number of stress entries.
+
+    Returns
+    -------
+    NDArray[float64]
+        Von Mises stress, shape ``(n_total,)``.
+
+    Note
+    ----
+    This function is accessible via ``_lib.d3plot.von_mises_from_voigt()``.
+    """
+    ...

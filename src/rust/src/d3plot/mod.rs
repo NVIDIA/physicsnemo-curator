@@ -14,24 +14,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use pyo3::prelude::*;
+//! LS-DYNA d3plot post-processing utilities.
+//!
+//! Provides Rust-accelerated implementations of three compute-intensive
+//! operations used when reading crash simulation meshes:
+//!
+//! - **K-file parsing** — extracts part→thickness mappings from `.k` files
+//! - **Node thickness** — scatter-accumulates element thickness onto nodes
+//! - **Von Mises stress** — computes von Mises from Voigt-notation tensors
 
-mod d3plot;
-mod lmdb;
-mod vtk;
-
-/// Returns the version of the native Rust library.
-#[pyfunction]
-fn rust_version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
-}
-
-/// The native Rust extension module for physicsnemo.curator.
-#[pymodule]
-fn _lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(rust_version, m)?)?;
-    d3plot::bindings::register_d3plot_module(m)?;
-    vtk::bindings::register_vtk_module(m)?;
-    lmdb::bindings::register_lmdb_module(m)?;
-    Ok(())
-}
+pub mod bindings;
+pub mod kfile;
+pub mod stress;
+pub mod thickness;

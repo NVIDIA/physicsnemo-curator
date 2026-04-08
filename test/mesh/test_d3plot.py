@@ -418,3 +418,171 @@ class TestD3PlotRegistry:
         sources = registry.list_sources("mesh")
         source_names = {s.name for s in sources}
         assert "LS-DYNA D3Plot" in source_names
+
+
+# ---------------------------------------------------------------------------
+# Consistency tests — Rust vs Python backends
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requires("mesh")
+class TestD3PlotRustConsistency:
+    """Verify Rust d3plot backend produces identical results to Python."""
+
+    def test_parse_k_file_consistency(self, tmp_path: pathlib.Path) -> None:
+        """Rust parse_k_file must match Python parse_k_file exactly."""
+        from physicsnemo.curator.mesh.sources.d3plot import (
+            _parse_k_file,
+            _parse_k_file_rust,
+        )
+
+        k_content = """$
+*KEYWORD
+*PART
+Part_1
+       1       1       1
+*PART
+Part_2
+       2       2       2
+*PART
+Part_3
+       3       1       3
+*SECTION_SHELL
+       1
+     2.5     2.5     2.5     2.5
+       2
+     4.0     4.0     4.0     4.0
+*END
+"""
+        k_file = tmp_path / "test.k"
+        k_file.write_text(k_content)
+
+        py_result = _parse_k_file(k_file)
+        rust_result = _parse_k_file_rust(k_file)
+
+        assert set(py_result.keys()) == set(rust_result.keys()), (
+            f"Key mismatch: Python={sorted(py_result.keys())}, Rust={sorted(rust_result.keys())}"
+        )
+        for pid in py_result:
+            assert py_result[pid] == pytest.approx(rust_result[pid], abs=1e-10), (
+                f"Part {pid}: Python={py_result[pid]}, Rust={rust_result[pid]}"
+            )
+
+    def test_compute_node_thickness_consistency(self) -> None:
+        """Rust compute_node_thickness must match Python exactly."""
+        from physicsnemo.curator.mesh.sources.d3plot import (
+            _compute_node_thickness,
+            _compute_node_thickness_rust,
+        )
+
+        rng = np.random.default_rng(42)
+        n_elements = 500
+        n_nodes = 200
+        nodes_per_cell = 4
+
+        connectivity = rng.integers(0, n_nodes, size=(n_elements, nodes_per_cell), dtype=np.int64)
+        part_ids = rng.integers(1, 4, size=n_elements, dtype=np.int64)
+        actual_part_ids = np.array([0, 10, 20, 30], dtype=np.int64)
+        part_thickness_map = {10: 2.5, 20: 4.0, 30: 1.5}
+
+        py_result = _compute_node_thickness(connectivity, part_ids, part_thickness_map, actual_part_ids)
+        rust_result = _compute_node_thickness_rust(connectivity, part_ids, part_thickness_map, actual_part_ids)
+
+        np.testing.assert_allclose(
+            rust_result[: len(py_result)],
+            py_result,
+            atol=1e-10,
+            err_msg="Rust and Python node thickness differ",
+        )
+
+    def test_compute_node_thickness_no_actual_ids(self) -> None:
+        """Consistency when actual_part_ids is None."""
+        from physicsnemo.curator.mesh.sources.d3plot import (
+            _compute_node_thickness,
+            _compute_node_thickness_rust,
+        )
+
+        connectivity = np.array([[0, 1, 2, 3], [1, 2, 4, 5]], dtype=np.int64)
+        part_ids = np.array([1, 2], dtype=np.int64)
+        part_thickness_map = {10: 2.0, 20: 4.0}
+
+        py_result = _compute_node_thickness(connectivity, part_ids, part_thickness_map, None)
+        rust_result = _compute_node_thickness_rust(connectivity, part_ids, part_thickness_map, None)
+
+        np.testing.assert_allclose(
+            rust_result[: len(py_result)],
+            py_result,
+            atol=1e-10,
+            err_msg="Rust and Python node thickness differ (no actual_part_ids)",
+        )
+
+    def test_von_mises_consistency_uniaxial(self) -> None:
+        """Rust von Mises must match Python for uniaxial stress."""
+        from physicsnemo.curator.mesh.sources.d3plot import (
+            _von_mises_from_voigt,
+            _von_mises_from_voigt_rust,
+        )
+
+        sig = np.array([[[100.0, 0.0, 0.0, 0.0, 0.0, 0.0]]])
+        py_result = _von_mises_from_voigt(sig)
+        rust_result = _von_mises_from_voigt_rust(sig)
+
+        np.testing.assert_allclose(rust_result, py_result, atol=1e-10)
+
+    def test_von_mises_consistency_random(self) -> None:
+        """Rust von Mises must match Python for random stress tensors."""
+        from physicsnemo.curator.mesh.sources.d3plot import (
+            _von_mises_from_voigt,
+            _von_mises_from_voigt_rust,
+        )
+
+        rng = np.random.default_rng(123)
+        # Shape (T=5, E=1000, 6) — realistic batch
+        sig = rng.uniform(-200, 200, size=(5, 1000, 6))
+
+        py_result = _von_mises_from_voigt(sig)
+        rust_result = _von_mises_from_voigt_rust(sig)
+
+        np.testing.assert_allclose(rust_result, py_result, rtol=1e-12, atol=1e-10)
+
+    def test_von_mises_consistency_hydrostatic(self) -> None:
+        """Hydrostatic stress should yield ~0 von Mises in both backends."""
+        from physicsnemo.curator.mesh.sources.d3plot import (
+            _von_mises_from_voigt,
+            _von_mises_from_voigt_rust,
+        )
+
+        p = 42.0
+        sig = np.array([[[p, p, p, 0.0, 0.0, 0.0]]])
+        py_result = _von_mises_from_voigt(sig)
+        rust_result = _von_mises_from_voigt_rust(sig)
+
+        np.testing.assert_allclose(rust_result, py_result, atol=1e-10)
+        assert rust_result[0, 0] < 1e-10
+
+    @patch("lasso.dyna.D3plot")
+    @pytest.mark.skipif(not _has_lasso, reason="lasso (lasso-python) not installed")
+    def test_source_backend_param(self, mock_d3plot_cls: MagicMock, tmp_path: pathlib.Path) -> None:
+        """D3PlotSource should accept backend='rust' and backend='python'."""
+        from physicsnemo.curator.mesh.sources.d3plot import D3PlotSource
+
+        mock_root = tmp_path / "sims"
+        _write_mock_d3plot_dir(mock_root, n_runs=1)
+
+        mock_d3plot_cls.return_value = _make_mock_d3plot()
+
+        source_py = D3PlotSource(input_dir=str(mock_root), backend="python")
+        mesh_py = next(source_py[0])
+
+        mock_d3plot_cls.return_value = _make_mock_d3plot()
+
+        source_rust = D3PlotSource(input_dir=str(mock_root), backend="rust")
+        mesh_rust = next(source_rust[0])
+
+        # Both should produce the same thickness values.
+        np.testing.assert_allclose(
+            mesh_rust.point_data["thickness"].numpy(),
+            mesh_py.point_data["thickness"].numpy(),
+            atol=1e-10,
+            err_msg="Rust and Python backends produce different thickness",
+        )

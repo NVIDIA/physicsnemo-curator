@@ -44,7 +44,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 import numpy as np
 import torch
@@ -58,6 +58,84 @@ if TYPE_CHECKING:
     from physicsnemo.mesh import Mesh
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Rust backend helpers
+# ---------------------------------------------------------------------------
+
+_RUST_AVAILABLE: bool = False
+try:
+    from physicsnemo.curator._lib import d3plot as _rust_d3plot  # type: ignore[attr-defined]
+
+    _RUST_AVAILABLE = True
+except ImportError:
+    _rust_d3plot = None  # type: ignore[assignment]
+
+
+def _parse_k_file_rust(k_file_path: Path) -> dict[int, float]:
+    """Parse a ``.k`` file using the Rust backend.
+
+    Parameters
+    ----------
+    k_file_path : Path
+        Path to the ``.k`` file.
+
+    Returns
+    -------
+    dict[int, float]
+        Mapping from part ID to thickness value.
+    """
+    return _rust_d3plot.parse_k_file(str(k_file_path))  # ty: ignore[unresolved-attribute]
+
+
+def _compute_node_thickness_rust(
+    mesh_connectivity: np.ndarray,
+    part_ids: np.ndarray,
+    part_thickness_map: dict[int, float],
+    actual_part_ids: np.ndarray | None = None,
+) -> np.ndarray:
+    """Compute per-node thickness using the Rust backend.
+
+    Parameters
+    ----------
+    mesh_connectivity : np.ndarray
+        Element connectivity, shape ``(E, nodes_per_cell)``.
+    part_ids : np.ndarray
+        Part index per element, shape ``(E,)``.
+    part_thickness_map : dict[int, float]
+        Mapping from actual part ID to thickness.
+    actual_part_ids : np.ndarray | None
+        Actual part IDs array for index-to-ID translation.
+
+    Returns
+    -------
+    np.ndarray
+        Per-node thickness, shape ``(N,)``.
+    """
+    conn = np.ascontiguousarray(mesh_connectivity, dtype=np.int64)
+    pids = np.ascontiguousarray(part_ids, dtype=np.int64)
+    apids = np.ascontiguousarray(actual_part_ids, dtype=np.int64) if actual_part_ids is not None else None
+    return np.asarray(_rust_d3plot.compute_node_thickness(conn, pids, part_thickness_map, apids))  # ty: ignore[unresolved-attribute]
+
+
+def _von_mises_from_voigt_rust(sig: np.ndarray) -> np.ndarray:
+    """Compute von Mises stress from Voigt components using Rust.
+
+    Parameters
+    ----------
+    sig : np.ndarray
+        Shape ``(..., 6)``.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(...)`` — scalar von Mises stress.
+    """
+    original_shape = sig.shape[:-1]
+    n_total = int(np.prod(original_shape)) if original_shape else 1
+    flat = np.ascontiguousarray(sig.reshape(-1), dtype=np.float64)
+    result = np.asarray(_rust_d3plot.von_mises_from_voigt(flat, n_total))  # ty: ignore[unresolved-attribute]
+    return result.reshape(original_shape)
 
 
 def _find_k_file(run_dir: Path) -> Path | None:
@@ -271,6 +349,11 @@ class D3PlotSource(Source["Mesh"]):
     read_k_file : bool
         If ``True``, look for a ``.k`` file in each run directory to extract
         per-node thickness.
+    backend : {"python", "rust"}
+        Computation backend for k-file parsing, node thickness, and von
+        Mises stress.  ``"rust"`` uses the native Rust extension for
+        faster processing of large meshes.  Defaults to ``"rust"`` when
+        available, otherwise ``"python"``.
 
     Examples
     --------
@@ -317,6 +400,12 @@ class D3PlotSource(Source["Mesh"]):
                 type=bool,
                 default=True,
             ),
+            Param(
+                name="backend",
+                description="Computation backend: 'python' or 'rust' (default auto-selects)",
+                type=str,
+                default="rust" if _RUST_AVAILABLE else "python",
+            ),
         ]
 
     def __init__(
@@ -324,10 +413,19 @@ class D3PlotSource(Source["Mesh"]):
         input_dir: str,
         read_stress: bool = False,
         read_k_file: bool = True,
+        backend: Literal["python", "rust"] | None = None,
     ) -> None:
         self._input_dir = Path(input_dir)
         self._read_stress = read_stress
         self._read_k_file = read_k_file
+
+        # Resolve backend.
+        if backend is None:
+            backend = "rust" if _RUST_AVAILABLE else "python"
+        if backend == "rust" and not _RUST_AVAILABLE:
+            logger.warning("Rust d3plot backend not available, falling back to Python")
+            backend = "python"
+        self._backend: Literal["python", "rust"] = backend
 
         if not self._input_dir.is_dir():
             msg = f"input_dir does not exist or is not a directory: {self._input_dir}"
@@ -427,8 +525,16 @@ class D3PlotSource(Source["Mesh"]):
         if self._read_k_file:
             k_file = _find_k_file(run_dir)
             if k_file is not None:
-                part_thickness_map = _parse_k_file(k_file)
-                node_thickness = _compute_node_thickness(connectivity, part_ids, part_thickness_map, actual_part_ids)
+                if self._backend == "rust":
+                    part_thickness_map = _parse_k_file_rust(k_file)
+                    node_thickness = _compute_node_thickness_rust(
+                        connectivity, part_ids, part_thickness_map, actual_part_ids
+                    )
+                else:
+                    part_thickness_map = _parse_k_file(k_file)
+                    node_thickness = _compute_node_thickness(
+                        connectivity, part_ids, part_thickness_map, actual_part_ids
+                    )
                 # Ensure thickness covers all nodes (some may not appear in connectivity).
                 if len(node_thickness) < n_points:
                     padded = np.zeros(n_points, dtype=node_thickness.dtype)
@@ -458,7 +564,10 @@ class D3PlotSource(Source["Mesh"]):
 
             if raw_stress is not None:
                 stress_voigt = _reduce_shell_layers_stress_voigt(raw_stress)  # (T, E, 6)
-                stress_vm = _von_mises_from_voigt(stress_voigt)  # (T, E)
+                if self._backend == "rust":
+                    stress_vm = _von_mises_from_voigt_rust(stress_voigt)  # (T, E)
+                else:
+                    stress_vm = _von_mises_from_voigt(stress_voigt)  # (T, E)
                 for t in range(n_timesteps):
                     cd_dict[f"stress_vm_t{t:03d}"] = torch.from_numpy(stress_vm[t].astype(np.float64))
 
