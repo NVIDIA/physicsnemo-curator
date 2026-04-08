@@ -25,8 +25,8 @@
 
 ## Quality Gates
 
-Every commit is checked by pre-commit hooks. The CI pipeline enforces the
-same checks — passing locally first saves time.
+Every commit is checked by pre-commit hooks. Run `uv run pre-commit run --all-files`
+to validate before pushing. The CI pipeline enforces the same checks.
 
 | Tool | What it checks | Command |
 |---|---|---|
