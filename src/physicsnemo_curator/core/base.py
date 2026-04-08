@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
+    import pathlib
     from collections.abc import Generator, Iterator
 
 # Sentinel for required parameters (no default).
@@ -378,3 +379,56 @@ class Pipeline[T]:
 
         # Feed into the sink.
         return self.sink(stream, index)
+
+    def save(self, path: str | pathlib.Path) -> None:
+        """Save this pipeline's configuration to a YAML or JSON file.
+
+        The file format is determined by the extension:
+        ``.yaml`` / ``.yml`` → YAML, ``.json`` → JSON.
+
+        Parameters
+        ----------
+        path : str | pathlib.Path
+            Destination file path.
+
+        Raises
+        ------
+        ValueError
+            If the file extension is not supported.
+
+        See Also
+        --------
+        Pipeline.load : Restore a pipeline from a saved file.
+        """
+        from physicsnemo_curator.core.serialization import save_pipeline
+
+        save_pipeline(self, path)
+
+    @classmethod
+    def load(cls, path: str | pathlib.Path) -> Pipeline[Any]:
+        """Load a pipeline from a YAML or JSON configuration file.
+
+        Parameters
+        ----------
+        path : str | pathlib.Path
+            Path to the pipeline configuration file.
+
+        Returns
+        -------
+        Pipeline
+            Fully constructed pipeline ready for execution.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the file does not exist.
+        ValueError
+            If the file extension is not supported.
+
+        See Also
+        --------
+        Pipeline.save : Save a pipeline configuration.
+        """
+        from physicsnemo_curator.core.serialization import load_pipeline
+
+        return load_pipeline(path)

@@ -370,3 +370,81 @@ class TestLoadPipeline:
         path.write_text("")
         with pytest.raises(ValueError, match="Unsupported"):
             load_pipeline(path)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline convenience methods
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineConvenienceMethods:
+    """Tests for Pipeline.save() and Pipeline.load()."""
+
+    def test_pipeline_save_method(self, tmp_path: pathlib.Path) -> None:
+        """Pipeline.save() delegates to save_pipeline."""
+        pipeline = _make_pipeline(tmp_path)
+        path = tmp_path / "pipeline.yaml"
+        pipeline.save(path)
+
+        assert path.exists()
+
+    def test_pipeline_load_classmethod(self, tmp_path: pathlib.Path) -> None:
+        """Pipeline.load() restores a functional pipeline."""
+        pipeline = _make_pipeline(tmp_path)
+        path = tmp_path / "pipeline.yaml"
+        pipeline.save(path)
+
+        restored = Pipeline.load(path)
+        assert len(restored) == 3
+        assert restored.sink is not None
+
+    def test_save_load_round_trip(self, tmp_path: pathlib.Path) -> None:
+        """Full Pipeline.save() -> Pipeline.load() -> execute round-trip."""
+        pipeline = _make_pipeline(tmp_path)
+        path = tmp_path / "pipeline.json"
+        pipeline.save(path)
+
+        restored = Pipeline.load(path)
+        result = restored[0]
+        assert len(result) == 1
+        content = pathlib.Path(result[0]).read_text()
+        assert content == "10"
+
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestRegistryIntegration:
+    """Tests that serialization preserves metadata and produces executable pipelines."""
+
+    def test_serialize_includes_name_for_registry_lookup(self, tmp_path: pathlib.Path) -> None:
+        """Serialized config includes 'name' field for registry lookup."""
+        pipeline = _make_pipeline(tmp_path)
+        data = serialize_pipeline(pipeline)
+
+        assert data["source"]["name"] == "IntSource"
+        assert data["filters"][0]["name"] == "Add"
+        assert data["sink"]["name"] == "FileSink"
+
+    def test_version_field_is_present(self, tmp_path: pathlib.Path) -> None:
+        """Version field is present for forward compatibility."""
+        pipeline = _make_pipeline(tmp_path)
+        data = serialize_pipeline(pipeline)
+
+        assert data["version"] == 1
+
+    def test_deserialized_pipeline_is_executable(self, tmp_path: pathlib.Path) -> None:
+        """Deserialized pipeline can process all indices."""
+        pipeline = _make_pipeline(tmp_path)
+        data = serialize_pipeline(pipeline)
+        restored = deserialize_pipeline(data)
+
+        # Execute all 3 indices
+        for i in range(len(restored)):
+            result = restored[i]
+            assert len(result) == 1
+            content = pathlib.Path(result[0]).read_text()
+            # Source yields i, filter adds 10 -> i + 10
+            assert content == str(i + 10)

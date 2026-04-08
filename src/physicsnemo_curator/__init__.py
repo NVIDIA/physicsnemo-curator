@@ -22,6 +22,7 @@ from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
 from physicsnemo_curator.core.checkpoint import CheckpointedPipeline
 from physicsnemo_curator.core.profiling import PipelineMetrics, ProfiledPipeline
 from physicsnemo_curator.core.registry import registry
+from physicsnemo_curator.core.serialization import load_pipeline, save_pipeline
 from physicsnemo_curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 from physicsnemo_curator.run import run_pipeline
 
@@ -49,7 +50,9 @@ __all__ = [
     "Sink",
     "Source",
     "__version__",
+    "load_pipeline",
     "registry",
     "run_pipeline",
     "rust_version",
+    "save_pipeline",
 ]
