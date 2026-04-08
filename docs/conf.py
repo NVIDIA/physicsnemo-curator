@@ -18,7 +18,7 @@
 
 import os
 
-from sphinx_gallery.sorting import ExplicitOrder
+from sphinx_gallery.sorting import ExplicitOrder, FileNameSortKey
 
 project = "physicsnemo-curator"
 copyright = "2025 - 2026, NVIDIA CORPORATION & AFFILIATES"  # noqa: A001
@@ -60,6 +60,7 @@ sphinx_gallery_conf = {
             "../examples/extending",
         ]
     ),
+    "within_subsection_order": FileNameSortKey,
 }
 
 # ---------------------------------------------------------------------------
@@ -125,3 +126,7 @@ source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
 }
+
+# Suppress "cannot cache unpickleable configuration value" for sphinx_gallery_conf
+# (contains class references for sorting which are not pickleable).
+suppress_warnings = ["config.cache"]

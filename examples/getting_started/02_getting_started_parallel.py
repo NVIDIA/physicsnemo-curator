@@ -22,7 +22,7 @@ This example demonstrates :func:`~physicsnemo_curator.run.run_pipeline`
 to execute a pipeline across multiple source indices using parallel
 workers.
 
-Building on the :doc:`Creating a Pipeline </auto_examples/getting_started/getting_started_pipeline>`
+Building on the :doc:`Creating a Pipeline </auto_examples/getting_started/01_getting_started_pipeline>`
 example, we process multiple DrivAerML CFD meshes concurrently with a
 ``process_pool`` backend and then merge per-worker statistics using
 :func:`~physicsnemo_curator.run.gather_pipeline`.
