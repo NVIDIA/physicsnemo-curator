@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "NVIDIA PhysicsNeMo Curator: An accelerated ETL toolkit for AI-ready scientific datasets"
+date-released: "2025-04-15"
+authors:
+  - name: "PhysicsNeMo Curator Contributors"
+repository-code: "https://github.com/NVIDIA/physicsnemo-curator"
+license: Apache-2.0
