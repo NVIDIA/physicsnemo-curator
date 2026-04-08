@@ -71,6 +71,7 @@ atm = [
     "ase>=3.26.0",
     "ase-db-backends>=0.10.0",
     "torch",
+    "pyarrow",
 ]
 
 [project.scripts]

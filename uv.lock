@@ -3675,6 +3675,7 @@ atm = [
     { name = "ase" },
     { name = "ase-db-backends" },
     { name = "nvalchemi-toolkit" },
+    { name = "pyarrow" },
     { name = "torch" },
 ]
 cli = [
@@ -3757,6 +3758,7 @@ requires-dist = [
     { name = "nvalchemi-toolkit", marker = "extra == 'atm'", git = "https://github.com/NVIDIA/nvalchemi-toolkit" },
     { name = "nvidia-physicsnemo", marker = "extra == 'mesh'", git = "https://github.com/NVIDIA/physicsnemo" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.0" },
+    { name = "pyarrow", marker = "extra == 'atm'" },
     { name = "pyarrow", marker = "extra == 'mesh'" },
     { name = "pyvista", marker = "extra == 'mesh'" },
     { name = "questionary", marker = "extra == 'cli'", specifier = ">=2.0" },
