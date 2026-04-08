@@ -2,15 +2,16 @@
 
 <!-- markdownlint-disable MD013 MD033 -->
 
-[![Project Status: Active](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![Lint](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml)
-[![Build & Install](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/build.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/build.yml)
-[![Docs](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml)
-[![License](https://img.shields.io/github/license/NVIDIA/physicsnemo-curator)](https://github.com/NVIDIA/physicsnemo-curator/blob/main/LICENSE.txt)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://www.python.org/)
+[![License](https://img.shields.io/github/license/NVIDIA/physicsnemo-curator)](https://github.com/NVIDIA/physicsnemo-curator/blob/main/LICENSE.txt)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![ty](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json)](https://github.com/astral-sh/ty)
+
+[![Lint](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/lint.yml)
+[![Build & Install](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/build.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/build.yml)
+[![Docs](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml/badge.svg)](https://github.com/NVIDIA/physicsnemo-curator/actions/workflows/docs.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/nvidia/physicsnemo-curator?style=flat-square&logo=codecov)](/test)
 
 <!-- markdownlint-enable MD013 MD033 -->
 
