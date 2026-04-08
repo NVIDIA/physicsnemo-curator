@@ -23,7 +23,7 @@ missing the required headers.
 
 Usage
 -----
-    python tests/ci_tests/header_check.py [--all-files]
+    python .github/scripts/header_check.py [--all-files]
 
 By default, only files tracked by git are checked.  Pass ``--all-files``
 to check every matching file on disk regardless of git status.

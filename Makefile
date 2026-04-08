@@ -172,7 +172,7 @@ docs-rust:
 
 ## Check license headers
 license:
-	python tests/ci_tests/header_check.py --all-files
+	python .github/scripts/header_check.py --all-files
 
 # ---------------------------------------------------------------------------
 # Aggregate checks

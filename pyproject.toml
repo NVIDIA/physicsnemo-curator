@@ -117,10 +117,23 @@ version = "0.1.0"
 requires-dist = []
 
 # nvalchemi-toolkit is a private NVIDIA package not on PyPI.
+# Declare its actual dependencies so uv resolves them correctly.
 [[tool.uv.dependency-metadata]]
 name = "nvalchemi-toolkit"
 version = "0.1.0"
-requires-dist = []
+requires-dist = [
+    "ase>=3.27.0",
+    "torch>=2.5.1",
+    "loguru",
+    "numpy",
+    "jaxtyping>=0.3.2",
+    "tensordict>=0.11.0",
+    "pydantic>=2.11.7",
+    "dm-tree>=0.1.8",
+    "plum-dispatch>=2.5.7",
+    "zarr>=3",
+    "periodictable==2.0.2",
+]
 
 [tool.uv.sources]
 nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo" }

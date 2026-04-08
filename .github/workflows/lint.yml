@@ -186,4 +186,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check SPDX license headers
-        run: python tests/ci_tests/header_check.py
+        run: python .github/scripts/header_check.py

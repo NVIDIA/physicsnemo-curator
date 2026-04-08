@@ -197,9 +197,6 @@ jobs:
       - name: Install dependencies (dev + atm extras)
         run: uv sync --group dev --extra atm
 
-      - name: Install missing transitive deps
-        run: uv pip install periodictable pydantic
-
       - name: Build native extension
         run: uv run maturin develop
 
