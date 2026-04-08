@@ -346,7 +346,7 @@ class NetCDF4Sink(Sink["xr.DataArray"]):
         dict[str, dict[str, Any]]
             Encoding dict for ``xr.Dataset.to_netcdf()``.
         """
-        chunk_tuple = tuple(self._chunks.get(str(d), da.sizes[d]) for d in da.dims)
+        chunk_tuple = tuple(min(self._chunks.get(str(d), da.sizes[d]), da.sizes[d]) for d in da.dims)
 
         enc: dict[str, Any] = {"chunksizes": chunk_tuple}
         if self._compression_level > 0:

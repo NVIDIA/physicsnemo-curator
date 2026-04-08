@@ -21,9 +21,12 @@ permissions:
 # Unit + integration tests with coverage, uploaded to Codecov.
 #
 # Each domain (core, mesh, da, atm) runs in its own job with an isolated
-# venv containing only the dependencies needed for that domain.
+# venv containing only the dependencies needed for that domain. Coverage
+# fail_under is disabled per-job (--cov-fail-under=0) because each job
+# only covers a subset of the codebase. The merged coverage is enforced
+# by Codecov after all jobs complete.
+#
 # Rust tests run separately via cargo-nextest.
-# Coverage from all jobs is merged and uploaded to Codecov.
 # ---------------------------------------------------------------------------
 
 jobs:
@@ -57,7 +60,7 @@ jobs:
         run: >
           uv run pytest test/
           -m "not requires"
-          --cov
+          --cov --cov-fail-under=0
           --cov-report=xml:coverage-core.xml
           --cov-report=term-missing
           -v --tb=short
@@ -96,10 +99,17 @@ jobs:
       - name: Build native extension
         run: uv run maturin develop
 
+      - name: Verify mesh deps available
+        run: >
+          uv run python -c
+          "import pyvista; import torch; import pyarrow;
+          from physicsnemo.mesh import Mesh;
+          print('mesh deps OK')"
+
       - name: Run mesh tests with coverage
         run: >
           uv run pytest test/mesh/
-          --cov
+          --cov --cov-fail-under=0
           --cov-report=xml:coverage-mesh.xml
           --cov-report=term-missing
           -v --tb=short
@@ -138,10 +148,16 @@ jobs:
       - name: Build native extension
         run: uv run maturin develop
 
+      - name: Verify da deps available
+        run: >
+          uv run python -c
+          "import xarray; import zarr;
+          print('da deps OK')"
+
       - name: Run da tests with coverage
         run: >
           uv run pytest test/da/
-          --cov
+          --cov --cov-fail-under=0
           --cov-report=xml:coverage-da.xml
           --cov-report=term-missing
           -v --tb=short
@@ -180,10 +196,16 @@ jobs:
       - name: Build native extension
         run: uv run maturin develop
 
+      - name: Verify atm deps available
+        run: >
+          uv run python -c
+          "import nvalchemi.data; import ase; import torch;
+          print('atm deps OK')"
+
       - name: Run atm tests with coverage
         run: >
           uv run pytest test/atm/
-          --cov
+          --cov --cov-fail-under=0
           --cov-report=xml:coverage-atm.xml
           --cov-report=term-missing
           -v --tb=short

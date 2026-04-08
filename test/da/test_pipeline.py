@@ -1617,7 +1617,7 @@ class TestERA5EndToEnd:
         )
         sink = ZarrSink(
             output_path=str(tmp_path / "output.zarr"),
-            chunks={"time": 1, "lat": 181, "lon": 360},
+            chunks={"time": 1, "lat": 103, "lon": 360},
             shards={"time": 1, "lat": 721, "lon": 1440},
         )
 
