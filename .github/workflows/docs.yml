@@ -43,6 +43,7 @@ jobs:
         run: uv run --group docs sphinx-build docs docs/_build/html -W --keep-going
 
       - name: Download benchmark dashboard
+        continue-on-error: true
         uses: dawidd6/action-download-artifact@v6
         with:
           name: benchmark-dashboard
