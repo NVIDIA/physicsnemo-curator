@@ -61,13 +61,9 @@ All commits must follow
 
 ## License Headers
 
-All source files must include SPDX headers:
-
-```python
-# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES.
-# SPDX-FileCopyrightText: All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-```
+All source files (`.py`, `.rs`) must include SPDX headers. The CI lint
+job enforces this via
+[`.github/scripts/header_check.py`](.github/scripts/header_check.py).
 
 ## Sign Your Work
 
