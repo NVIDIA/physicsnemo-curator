@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Integration tests for ProfiledPipeline with execution backends."""
+"""Integration tests for Pipeline metrics with execution backends."""
 
 from __future__ import annotations
 
@@ -25,8 +25,7 @@ if TYPE_CHECKING:
 
 import pytest
 
-from physicsnemo_curator.core.base import Filter, Param, Sink, Source
-from physicsnemo_curator.core.profiling import ProfiledPipeline
+from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
 from physicsnemo_curator.run import run_pipeline
 
 pytestmark = pytest.mark.integration
@@ -98,11 +97,15 @@ class _ProfListSink(Sink[int]):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def profiled_pipeline() -> ProfiledPipeline[int]:
-    """A 5-item profiled pipeline: source -> double -> list sink."""
-    pipeline = _ProfNumberSource(5).filter(_ProfDoubleFilter()).write(_ProfListSink())
-    return ProfiledPipeline(pipeline)
+def _make_profiled_pipeline(tmp_path, count: int = 5) -> Pipeline[int]:
+    """Create a profiled pipeline with metrics enabled."""
+    return Pipeline(
+        source=_ProfNumberSource(count),
+        filters=[_ProfDoubleFilter()],  # ty: ignore[invalid-argument-type]
+        sink=_ProfListSink(),
+        track_metrics=True,
+        db_dir=tmp_path / ".pnc",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -111,36 +114,38 @@ def profiled_pipeline() -> ProfiledPipeline[int]:
 
 
 class TestSequentialProfiling:
-    """ProfiledPipeline with sequential backend."""
+    """Pipeline with metrics and sequential backend."""
 
-    def test_results_match(self, profiled_pipeline):
+    def test_results_match(self, tmp_path):
         """Profiled results should match non-profiled results."""
-        raw_pipeline = _ProfNumberSource(5).filter(_ProfDoubleFilter()).write(_ProfListSink())
+        raw_pipeline = Pipeline(
+            source=_ProfNumberSource(5),
+            filters=[_ProfDoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_ProfListSink(),
+            track_metrics=False,
+        )
+        profiled = _make_profiled_pipeline(tmp_path)
         raw_results = run_pipeline(raw_pipeline, backend="sequential", progress=False)
-        profiled_results = run_pipeline(profiled_pipeline, backend="sequential", progress=False)
+        profiled_results = run_pipeline(profiled, backend="sequential", progress=False)
         assert profiled_results == raw_results
 
-    def test_metrics_collected(self, profiled_pipeline):
+    def test_metrics_collected(self, tmp_path):
         """Metrics should be collected for all indices."""
-        run_pipeline(profiled_pipeline, backend="sequential", progress=False)
-        metrics = profiled_pipeline.collect_metrics()
+        profiled = _make_profiled_pipeline(tmp_path)
+        run_pipeline(profiled, backend="sequential", progress=False)
+        metrics = profiled.metrics
         assert len(metrics.indices) == 5
 
-    def test_per_stage_present(self, profiled_pipeline):
+    def test_per_stage_present(self, tmp_path):
         """Each index should have source, filter, sink stages."""
-        run_pipeline(profiled_pipeline, backend="sequential", progress=False)
-        metrics = profiled_pipeline.collect_metrics()
+        profiled = _make_profiled_pipeline(tmp_path)
+        run_pipeline(profiled, backend="sequential", progress=False)
+        metrics = profiled.metrics
         for idx_m in metrics.indices:
             names = [s.name for s in idx_m.stages]
             assert "source" in names
             assert "ProfDouble" in names
             assert "sink" in names
-
-    def test_cleanup(self, profiled_pipeline):
-        """cleanup() removes temp files after run."""
-        run_pipeline(profiled_pipeline, backend="sequential", progress=False)
-        profiled_pipeline.cleanup()
-        assert not profiled_pipeline._metrics_dir.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -149,25 +154,28 @@ class TestSequentialProfiling:
 
 
 class TestThreadPoolProfiling:
-    """ProfiledPipeline with thread_pool backend."""
+    """Pipeline with metrics and thread_pool backend."""
 
-    def test_results_match(self):
+    def test_results_match(self, tmp_path):
         """Thread pool profiled results match raw results."""
-        raw_pipeline = _ProfNumberSource(5).filter(_ProfDoubleFilter()).write(_ProfListSink())
-        profiled = ProfiledPipeline(raw_pipeline)
+        raw_pipeline = Pipeline(
+            source=_ProfNumberSource(5),
+            filters=[_ProfDoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_ProfListSink(),
+            track_metrics=False,
+        )
+        profiled = _make_profiled_pipeline(tmp_path)
 
         raw_results = run_pipeline(raw_pipeline, n_jobs=2, backend="thread_pool", progress=False)
         profiled_results = run_pipeline(profiled, n_jobs=2, backend="thread_pool", progress=False)
         assert profiled_results == raw_results
 
-    def test_metrics_collected(self):
+    def test_metrics_collected(self, tmp_path):
         """Thread pool collects metrics for all indices."""
-        pipeline = _ProfNumberSource(8).filter(_ProfDoubleFilter()).write(_ProfListSink())
-        profiled = ProfiledPipeline(pipeline)
+        profiled = _make_profiled_pipeline(tmp_path, count=8)
         run_pipeline(profiled, n_jobs=3, backend="thread_pool", progress=False)
-        metrics = profiled.collect_metrics()
+        metrics = profiled.metrics
         assert len(metrics.indices) == 8
-        profiled.cleanup()
 
 
 # ---------------------------------------------------------------------------
@@ -176,36 +184,37 @@ class TestThreadPoolProfiling:
 
 
 class TestProcessPoolProfiling:
-    """ProfiledPipeline with process_pool backend."""
+    """Pipeline with metrics and process_pool backend."""
 
-    def test_results_match(self):
+    def test_results_match(self, tmp_path):
         """Process pool profiled results match raw results."""
-        raw_pipeline = _ProfNumberSource(5).filter(_ProfDoubleFilter()).write(_ProfListSink())
-        profiled = ProfiledPipeline(raw_pipeline)
+        raw_pipeline = Pipeline(
+            source=_ProfNumberSource(5),
+            filters=[_ProfDoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_ProfListSink(),
+            track_metrics=False,
+        )
+        profiled = _make_profiled_pipeline(tmp_path)
 
         raw_results = run_pipeline(raw_pipeline, n_jobs=2, backend="process_pool", progress=False)
         profiled_results = run_pipeline(profiled, n_jobs=2, backend="process_pool", progress=False)
         assert profiled_results == raw_results
 
-    def test_metrics_collected_across_processes(self):
-        """Temp-file metrics survive process boundaries."""
-        pipeline = _ProfNumberSource(6).filter(_ProfDoubleFilter()).write(_ProfListSink())
-        profiled = ProfiledPipeline(pipeline)
+    def test_metrics_collected_across_processes(self, tmp_path):
+        """Metrics survive process boundaries via shared SQLite DB."""
+        profiled = _make_profiled_pipeline(tmp_path, count=6)
         run_pipeline(profiled, n_jobs=2, backend="process_pool", progress=False)
-        metrics = profiled.collect_metrics()
-        # All 6 indices should have metrics via temp files
+        metrics = profiled.metrics
+        # All 6 indices should have metrics via SQLite WAL
         assert len(metrics.indices) == 6
         collected_indices = {m.index for m in metrics.indices}
         assert collected_indices == {0, 1, 2, 3, 4, 5}
-        profiled.cleanup()
 
-    def test_subset_indices(self):
+    def test_subset_indices(self, tmp_path):
         """Process pool with subset indices collects correct metrics."""
-        pipeline = _ProfNumberSource(10).filter(_ProfDoubleFilter()).write(_ProfListSink())
-        profiled = ProfiledPipeline(pipeline)
+        profiled = _make_profiled_pipeline(tmp_path, count=10)
         run_pipeline(profiled, n_jobs=2, backend="process_pool", indices=[1, 3, 7], progress=False)
-        metrics = profiled.collect_metrics()
+        metrics = profiled.metrics
         assert len(metrics.indices) == 3
         collected_indices = {m.index for m in metrics.indices}
         assert collected_indices == {1, 3, 7}
-        profiled.cleanup()
