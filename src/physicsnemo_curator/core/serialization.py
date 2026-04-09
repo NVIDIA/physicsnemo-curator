@@ -39,7 +39,7 @@ import pathlib
 from typing import TYPE_CHECKING, Any
 
 from physicsnemo_curator.core.base import Pipeline
-from physicsnemo_curator.core.checkpoint import _pipeline_config
+from physicsnemo_curator.core.pipeline_store import _pipeline_config
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Filter, Sink, Source
@@ -233,7 +233,7 @@ def deserialize_pipeline(data: dict[str, Any]) -> Pipeline[Any]:
     if data.get("sink") is not None:
         sink = _reconstruct_component(data["sink"])
 
-    return Pipeline(source=source, filters=filters, sink=sink)  # ty: ignore[invalid-argument-type]
+    return Pipeline(source=source, filters=filters, sink=sink, track_metrics=True)  # ty: ignore[invalid-argument-type]
 
 
 def load_pipeline(path: str | pathlib.Path) -> Pipeline[Any]:

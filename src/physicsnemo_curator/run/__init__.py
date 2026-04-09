@@ -75,12 +75,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from physicsnemo_curator.core.base import Pipeline
-    from physicsnemo_curator.core.checkpoint import CheckpointedPipeline
-    from physicsnemo_curator.core.profiling import ProfiledPipeline
-
-    #: Type alias for objects accepted by :func:`run_pipeline`.
-    #: ``Pipeline``, ``ProfiledPipeline``, and ``CheckpointedPipeline`` are supported.
-    PipelineLike = Pipeline[Any] | ProfiledPipeline[Any] | CheckpointedPipeline[Any]
 
 # ---------------------------------------------------------------------------
 # Backend Registry
@@ -196,7 +190,7 @@ register_backend(PrefectBackend)
 
 
 def run_pipeline(
-    pipeline: PipelineLike,
+    pipeline: Pipeline[Any],
     *,
     n_jobs: int = 1,
     backend: str = "auto",
@@ -211,7 +205,7 @@ def run_pipeline(
 
     Parameters
     ----------
-    pipeline : Pipeline | ProfiledPipeline
+    pipeline : Pipeline
         A fully-configured pipeline (source + filters + sink).
     n_jobs : int
         Number of parallel workers. ``1`` forces sequential execution.
@@ -316,10 +310,10 @@ def run_pipeline(
 
     # Execute
     runner = backend_cls()
-    return runner.run(pipeline, config)  # ty: ignore[invalid-argument-type]  # ProfiledPipeline duck-types Pipeline
+    return runner.run(pipeline, config)
 
 
-def gather_pipeline(pipeline: PipelineLike) -> list[str]:
+def gather_pipeline(pipeline: Pipeline[Any]) -> list[str]:
     """Merge per-index shard files produced by stateful filters.
 
     When :func:`run_pipeline` runs with a parallel backend, each worker
@@ -332,7 +326,7 @@ def gather_pipeline(pipeline: PipelineLike) -> list[str]:
 
     Parameters
     ----------
-    pipeline : Pipeline | ProfiledPipeline
+    pipeline : Pipeline
         The same pipeline that was passed to :func:`run_pipeline`.
 
     Returns

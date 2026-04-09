@@ -19,8 +19,7 @@
 from __future__ import annotations
 
 from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
-from physicsnemo_curator.core.checkpoint import CheckpointedPipeline
-from physicsnemo_curator.core.profiling import PipelineMetrics, ProfiledPipeline
+from physicsnemo_curator.core.pipeline_store import PipelineMetrics
 from physicsnemo_curator.core.registry import registry
 from physicsnemo_curator.core.serialization import load_pipeline, save_pipeline
 from physicsnemo_curator.core.store import FileStore, FsspecFileStore, LocalFileStore
@@ -38,7 +37,6 @@ except ImportError:
 
 
 __all__ = [
-    "CheckpointedPipeline",
     "FileStore",
     "Filter",
     "FsspecFileStore",
@@ -46,7 +44,6 @@ __all__ = [
     "Param",
     "Pipeline",
     "PipelineMetrics",
-    "ProfiledPipeline",
     "Sink",
     "Source",
     "__version__",
