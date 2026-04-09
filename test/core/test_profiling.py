@@ -14,28 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the pipeline profiling utility."""
+"""Tests for Pipeline profiling and metrics (track_metrics=True)."""
 
 from __future__ import annotations
 
 import concurrent.futures
 import json
 import pickle
-import sys
 import time
 from typing import TYPE_CHECKING, ClassVar
-from unittest.mock import MagicMock, patch
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
 import pytest
 
-from physicsnemo_curator.core.base import Filter, Param, Sink, Source
-from physicsnemo_curator.core.profiling import (
+from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
+from physicsnemo_curator.core.pipeline_store import (
     IndexMetrics,
     PipelineMetrics,
-    ProfiledPipeline,
     StageMetrics,
     _TimedGenerator,
 )
@@ -299,35 +296,44 @@ class TestTimedGenerator:
         assert tg.elapsed_ns >= 0
 
 
+# ---------------------------------------------------------------------------
+# Tests for Pipeline with track_metrics=True
+# ---------------------------------------------------------------------------
+
+
 class TestProfiledPipeline:
-    """Tests for ProfiledPipeline wrapper."""
+    """Tests for Pipeline with track_metrics=True (profiling behavior)."""
 
-    def test_duck_type_compatibility(self):
-        """ProfiledPipeline exposes source, filters, sink, __len__."""
-
-        pipeline = _TimedSource(3).filter(_DoubleFilter()).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-        assert profiled.source is pipeline.source
-        assert profiled.filters is pipeline.filters
-        assert profiled.sink is pipeline.sink
-        assert len(profiled) == 3
-
-    def test_getitem_returns_correct_results(self):
-        """ProfiledPipeline.__getitem__ returns same results as Pipeline."""
-
-        pipeline = _TimedSource(3, delay=0.0).filter(_DoubleFilter()).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
+    def test_getitem_returns_correct_results(self, tmp_path):
+        """Pipeline with metrics returns same results as without."""
+        pipeline_metrics = Pipeline(
+            source=_TimedSource(3, delay=0.0),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
+        pipeline_plain = Pipeline(
+            source=_TimedSource(3, delay=0.0),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_CollectSink(),
+            track_metrics=False,
+        )
 
         for i in range(3):
-            assert profiled[i] == pipeline[i]
+            assert pipeline_metrics[i] == pipeline_plain[i]
 
-    def test_basic_metrics_collection(self):
+    def test_basic_metrics_collection(self, tmp_path):
         """Single index produces IndexMetrics with correct stage count."""
-
-        pipeline = _TimedSource(2, delay=0.001).filter(_SlowFilter(delay=0.001)).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-        profiled[0]
-        metrics = profiled.collect_metrics()
+        pipeline = Pipeline(
+            source=_TimedSource(2, delay=0.001),
+            filters=[_SlowFilter(delay=0.001)],  # ty: ignore[invalid-argument-type]
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
+        pipeline[0]
+        metrics = pipeline.metrics
 
         assert len(metrics.indices) == 1
         idx_m = metrics.indices[0]
@@ -338,24 +344,32 @@ class TestProfiledPipeline:
         assert idx_m.stages[1].name == "SlowFilter"
         assert idx_m.stages[2].name == "sink"
 
-    def test_per_stage_timing_positive(self):
+    def test_per_stage_timing_positive(self, tmp_path):
         """Each stage has positive wall time."""
-
-        pipeline = _TimedSource(1, delay=0.005).filter(_SlowFilter(delay=0.005)).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-        profiled[0]
-        metrics = profiled.collect_metrics()
+        pipeline = Pipeline(
+            source=_TimedSource(1, delay=0.005),
+            filters=[_SlowFilter(delay=0.005)],  # ty: ignore[invalid-argument-type]
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
+        pipeline[0]
+        metrics = pipeline.metrics
 
         for stage in metrics.indices[0].stages:
             assert stage.wall_time_ns > 0, f"Stage {stage.name} has non-positive time"
 
-    def test_stage_times_approximate_total(self):
+    def test_stage_times_approximate_total(self, tmp_path):
         """Sum of stage times should approximate total index time."""
-
-        pipeline = _TimedSource(1, delay=0.01).filter(_SlowFilter(delay=0.01)).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-        profiled[0]
-        metrics = profiled.collect_metrics()
+        pipeline = Pipeline(
+            source=_TimedSource(1, delay=0.01),
+            filters=[_SlowFilter(delay=0.01)],  # ty: ignore[invalid-argument-type]
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
+        pipeline[0]
+        metrics = pipeline.metrics
 
         idx_m = metrics.indices[0]
         stage_sum = sum(s.wall_time_ns for s in idx_m.stages)
@@ -363,103 +377,103 @@ class TestProfiledPipeline:
         assert stage_sum <= idx_m.wall_time_ns * 1.5
         assert stage_sum >= idx_m.wall_time_ns * 0.3
 
-    def test_memory_tracking(self):
+    def test_memory_tracking(self, tmp_path):
         """Peak memory is non-trivial for source that allocates."""
-
-        pipeline = _AllocSource(1, alloc_bytes=500_000).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-        profiled[0]
-        metrics = profiled.collect_metrics()
+        pipeline = Pipeline(
+            source=_AllocSource(1, alloc_bytes=500_000),
+            sink=_CollectSink(),
+            track_metrics=True,
+            track_memory=True,
+            db_dir=tmp_path / ".pnc",
+        )
+        pipeline[0]
+        metrics = pipeline.metrics
         # Should detect at least some memory (tracemalloc not perfectly precise)
         assert metrics.indices[0].peak_memory_bytes > 0
 
-    def test_gpu_tracking_disabled_by_default(self):
-        """GPU memory is None when track_gpu=False."""
+    def test_memory_tracking_disabled(self, tmp_path):
+        """Peak memory is 0 when track_memory=False."""
+        pipeline = Pipeline(
+            source=_AllocSource(1, alloc_bytes=500_000),
+            sink=_CollectSink(),
+            track_metrics=True,
+            track_memory=False,
+            db_dir=tmp_path / ".pnc",
+        )
+        pipeline[0]
+        metrics = pipeline.metrics
+        assert metrics.indices[0].peak_memory_bytes == 0
 
-        pipeline = _TimedSource(1, delay=0.0).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-        profiled[0]
-        metrics = profiled.collect_metrics()
+    def test_gpu_tracking_disabled_by_default(self, tmp_path):
+        """GPU memory is None when track_gpu=False."""
+        pipeline = Pipeline(
+            source=_TimedSource(1, delay=0.0),
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
+        pipeline[0]
+        metrics = pipeline.metrics
         assert metrics.indices[0].gpu_memory_bytes is None
 
-    def test_gpu_tracking_mocked(self):
-        """GPU tracking works with mocked torch.cuda."""
-
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = True
-        mock_torch.cuda.memory_allocated.return_value = 1000
-        mock_torch.cuda.max_memory_allocated.return_value = 5000
-        mock_torch.cuda.reset_peak_memory_stats.return_value = None
-
-        with patch.dict(sys.modules, {"torch": mock_torch}):
-            pipeline = _TimedSource(1, delay=0.0).write(_CollectSink())
-            profiled = ProfiledPipeline(pipeline, track_gpu=True)
-            profiled[0]
-            metrics = profiled.collect_metrics()
-            assert metrics.indices[0].gpu_memory_bytes == 4000  # 5000 - 1000
-
-    def test_multiple_indices(self):
+    def test_multiple_indices(self, tmp_path):
         """Metrics are collected for all indices."""
-
-        pipeline = _TimedSource(5, delay=0.0).filter(_DoubleFilter()).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
+        pipeline = Pipeline(
+            source=_TimedSource(5, delay=0.0),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
         for i in range(5):
-            profiled[i]
-        metrics = profiled.collect_metrics()
+            pipeline[i]
+        metrics = pipeline.metrics
         assert len(metrics.indices) == 5
         collected_indices = {m.index for m in metrics.indices}
         assert collected_indices == {0, 1, 2, 3, 4}
 
-    def test_no_filter_pipeline(self):
+    def test_no_filter_pipeline(self, tmp_path):
         """Pipeline with no filters still profiles source and sink."""
-
-        pipeline = _TimedSource(1, delay=0.001).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-        profiled[0]
-        metrics = profiled.collect_metrics()
+        pipeline = Pipeline(
+            source=_TimedSource(1, delay=0.001),
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
+        pipeline[0]
+        metrics = pipeline.metrics
 
         idx_m = metrics.indices[0]
         assert len(idx_m.stages) == 2  # source, sink
         assert idx_m.stages[0].name == "source"
         assert idx_m.stages[1].name == "sink"
 
-    def test_error_propagation(self):
+    def test_error_propagation(self, tmp_path):
         """Errors in stages propagate without being swallowed."""
-
-        pipeline = _TimedSource(1, delay=0.0).filter(_ErrorFilter()).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
+        pipeline = Pipeline(
+            source=_TimedSource(1, delay=0.0),
+            filters=[_ErrorFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
         with pytest.raises(RuntimeError, match="intentional error"):
-            profiled[0]
+            pipeline[0]
 
-    def test_pickle_roundtrip(self):
-        """ProfiledPipeline survives pickle round-trip."""
+    def test_pickle_roundtrip(self, tmp_path):
+        """Pipeline with track_metrics survives pickle round-trip."""
+        pipeline = Pipeline(
+            source=_TimedSource(3, delay=0.0),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
 
-        pipeline = _TimedSource(3, delay=0.0).filter(_DoubleFilter()).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-
-        data = pickle.dumps(profiled)
+        data = pickle.dumps(pipeline)
         restored = pickle.loads(data)  # noqa: S301
         assert len(restored) == 3
-        assert restored[0] == profiled[0]
-
-    def test_metrics_property(self):
-        """The .metrics property is a shortcut for collect_metrics()."""
-
-        pipeline = _TimedSource(1, delay=0.0).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-        profiled[0]
-        assert profiled.metrics.total_wall_time_ns == profiled.collect_metrics().total_wall_time_ns
-
-    def test_cleanup(self):
-        """cleanup() removes the temp metrics directory."""
-
-        pipeline = _TimedSource(1, delay=0.0).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
-        profiled[0]
-        metrics_dir = profiled._metrics_dir
-        assert metrics_dir.exists()
-        profiled.cleanup()
-        assert not metrics_dir.exists()
+        assert restored._store is None  # noqa: SLF001
 
 
 class TestOutputFormats:
@@ -551,28 +565,27 @@ class TestOutputFormats:
 class TestConcurrentMetrics:
     """Test metrics collection under concurrent access."""
 
-    def test_concurrent_getitem(self):
+    def test_concurrent_getitem(self, tmp_path):
         """Multiple threads calling __getitem__ concurrently."""
-        pipeline = _TimedSource(20, delay=0.0).filter(_DoubleFilter()).write(_CollectSink())
-        profiled = ProfiledPipeline(pipeline)
+        pipeline = Pipeline(
+            source=_TimedSource(20, delay=0.0),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_CollectSink(),
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-            futures = [pool.submit(profiled.__getitem__, i) for i in range(20)]
+            futures = [pool.submit(pipeline.__getitem__, i) for i in range(20)]
             results = [f.result() for f in futures]
 
         assert len(results) == 20
-        metrics = profiled.collect_metrics()
+        metrics = pipeline.metrics
         assert len(metrics.indices) == 20
 
 
 class TestPublicAPI:
     """Test that profiling classes are exported from the package."""
-
-    def test_import_profiled_pipeline(self):
-        """ProfiledPipeline is importable from top-level package."""
-        from physicsnemo_curator import ProfiledPipeline
-
-        assert ProfiledPipeline is not None
 
     def test_import_pipeline_metrics(self):
         """PipelineMetrics is importable from top-level package."""
