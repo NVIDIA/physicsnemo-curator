@@ -602,3 +602,30 @@ class TestRunPipelineIntegration:
         results = run_pipeline(pipeline, n_jobs=2, backend="thread_pool", progress=False)
         assert len(results) == 5
         assert pipeline.completed_indices == {0, 1, 2, 3, 4}
+
+
+class TestWorkerTracking:
+    """Tests for worker progress tracking via Pipeline.__getitem__."""
+
+    pytestmark = pytest.mark.unit
+
+    def test_workers_registered_after_execution(self, tmp_path: pathlib.Path) -> None:
+        """Pipeline execution registers at least one worker."""
+        pipeline = _make_pipeline(tmp_path, count=3)
+        for i in range(3):
+            pipeline[i]
+        workers = pipeline.active_workers
+        assert len(workers) >= 1
+        w = workers[0]
+        assert "worker_id" in w
+        assert "pid" in w
+        assert "hostname" in w
+        assert w["current_index"] is None  # finished
+
+    def test_worker_cleared_after_checkpoint_hit(self, tmp_path: pathlib.Path) -> None:
+        """Worker current_index is cleared even on checkpoint hits."""
+        pipeline = _make_pipeline(tmp_path, count=2)
+        pipeline[0]
+        pipeline[0]  # checkpoint hit
+        workers = pipeline.active_workers
+        assert all(w["current_index"] is None for w in workers)

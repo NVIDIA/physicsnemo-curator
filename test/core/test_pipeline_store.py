@@ -466,3 +466,72 @@ class TestPipelineStore:
         store2 = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=chash)
         assert store2._run_id == run_id_1
         assert store2.is_completed(0) == ["/a"]
+
+
+class TestWorkerTracking:
+    """Tests for PipelineStore worker progress tracking methods."""
+
+    @pytest.fixture()
+    def store(self, tmp_path):
+        """Create a PipelineStore for testing."""
+        pipeline = IntSource(values=[1, 2, 3]).write(CollectSink())
+        config = _pipeline_config(pipeline)
+        chash = _config_hash(config)
+        return PipelineStore(db_path=tmp_path / "workers.db", pipeline_config=config, config_hash=chash)
+
+    def test_register_worker(self, store) -> None:
+        """register_worker inserts a new worker record."""
+        store.register_worker("abc123", 42, "host1")
+        workers = store.active_workers()
+        assert len(workers) == 1
+        assert workers[0]["worker_id"] == "abc123"
+        assert workers[0]["pid"] == 42
+        assert workers[0]["hostname"] == "host1"
+        assert workers[0]["current_index"] is None
+
+    def test_register_worker_idempotent(self, store) -> None:
+        """Calling register_worker twice for the same ID does not duplicate."""
+        store.register_worker("abc123", 42, "host1")
+        store.register_worker("abc123", 42, "host1")
+        workers = store.active_workers()
+        assert len(workers) == 1
+
+    def test_worker_start_index(self, store) -> None:
+        """worker_start_index sets current_index."""
+        store.register_worker("w1", 10, "h1")
+        store.worker_start_index("w1", 7)
+        workers = store.active_workers()
+        assert workers[0]["current_index"] == 7
+
+    def test_worker_finish_index(self, store) -> None:
+        """worker_finish_index clears current_index."""
+        store.register_worker("w1", 10, "h1")
+        store.worker_start_index("w1", 3)
+        store.worker_finish_index("w1")
+        workers = store.active_workers()
+        assert workers[0]["current_index"] is None
+
+    def test_multiple_workers(self, store) -> None:
+        """Multiple workers can be tracked concurrently."""
+        store.register_worker("w1", 10, "h1")
+        store.register_worker("w2", 11, "h2")
+        store.worker_start_index("w1", 0)
+        store.worker_start_index("w2", 1)
+        workers = store.active_workers()
+        assert len(workers) == 2
+        ids = {w["worker_id"] for w in workers}
+        assert ids == {"w1", "w2"}
+
+    def test_summary_includes_worker_count(self, store) -> None:
+        """summary() dict includes a 'workers' key with the count."""
+        store.register_worker("w1", 10, "h1")
+        store.register_worker("w2", 11, "h2")
+        s = store.summary(3)
+        assert s["workers"] == 2
+
+    def test_reset_clears_workers(self, store) -> None:
+        """reset() removes worker records."""
+        store.register_worker("w1", 10, "h1")
+        store.reset()
+        workers = store.active_workers()
+        assert len(workers) == 0

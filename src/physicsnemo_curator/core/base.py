@@ -419,17 +419,29 @@ class Pipeline[T]:
         list[str]
             File paths produced by the sink.
         """
+        import os
+        import socket
         import time
         import tracemalloc
 
-        from physicsnemo_curator.core.pipeline_store import StageMetrics, _TimedGenerator
+        from physicsnemo_curator.core.pipeline_store import (
+            StageMetrics,
+            _get_worker_id,
+            _TimedGenerator,
+        )
 
         store = self._get_store()
+
+        # --- Worker registration ---
+        worker_id = _get_worker_id()
+        store.register_worker(worker_id, os.getpid(), socket.gethostname())
+        store.worker_start_index(worker_id, index)
 
         # Checkpoint hit — return cached paths
         cached = store.is_completed(index)
         if cached is not None:
             logger.debug("Checkpoint hit for index %d — returning cached paths", index)
+            store.worker_finish_index(worker_id)
             return cached
 
         # --- GPU baseline ---
@@ -505,6 +517,7 @@ class Pipeline[T]:
             raise
 
         finally:
+            store.worker_finish_index(worker_id)
             if started_tracemalloc:
                 tracemalloc.stop()
 
@@ -675,6 +688,23 @@ class Pipeline[T]:
             If ``track_metrics`` is ``False``.
         """
         return self._require_metrics().metrics()
+
+    @property
+    def active_workers(self) -> list[dict[str, Any]]:
+        """Return all workers registered for this pipeline run.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of worker dictionaries with keys: ``worker_id``, ``pid``,
+            ``hostname``, ``started_at``, ``last_heartbeat``, ``current_index``.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        return self._require_metrics().active_workers()
 
     def remaining_indices(self) -> list[int]:
         """Return indices not yet completed or failed.

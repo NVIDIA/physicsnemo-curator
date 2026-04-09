@@ -108,8 +108,9 @@ results = run_pipeline(pipeline, n_jobs=4)
 | `pipeline.completed_indices` | `set[int]` | Successfully completed indices |
 | `pipeline.failed_indices` | `dict[int, str]` | Failed indices with error messages |
 | `pipeline.remaining_indices()` | `list[int]` | Indices not yet completed (sorted) |
-| `pipeline.summary()` | `dict` | Total, completed, failed, remaining counts + elapsed time |
+| `pipeline.summary()` | `dict` | Total, completed, failed, remaining counts + elapsed time + worker count |
 | `pipeline.metrics` | `PipelineMetrics` | Full timing and memory metrics |
+| `pipeline.active_workers` | `list[dict]` | Workers registered for this run |
 | `pipeline.reset()` | `None` | Clear all records and start fresh |
 | `pipeline.reset_index(i)` | `None` | Re-run a single index |
 
@@ -132,7 +133,7 @@ per-index timing and memory metrics automatically.  See
 
 The checkpoint uses a SQLite database in WAL (Write-Ahead Logging)
 mode for safe concurrent writes from multiple threads or processes.  The
-database contains three tables:
+database contains four tables:
 
 **`pipeline_runs`** — one row per unique pipeline configuration:
 
@@ -166,6 +167,38 @@ database contains three tables:
 | `stage_order` | INTEGER | 0 = source, 1..N = filters, N+1 = sink |
 | `stage_name` | TEXT | Stage class name |
 | `wall_time_ns` | INTEGER | Wall-clock time in nanoseconds |
+
+**`workers`** — one row per worker thread/process:
+
+| Column | Type | Description |
+|---|---|---|
+| `worker_id` | TEXT | UUID4 hex string (primary key) |
+| `run_id` | INTEGER | Foreign key to `pipeline_runs` |
+| `pid` | INTEGER | OS process ID |
+| `hostname` | TEXT | Machine hostname |
+| `started_at` | TEXT | ISO-8601 timestamp |
+| `last_heartbeat` | TEXT | ISO-8601 timestamp (updated on index start/finish) |
+| `current_index` | INTEGER | Index currently being processed (NULL if idle) |
+
+## Worker Progress Tracking
+
+Pipeline execution automatically registers workers in the database.
+Each thread (or process) gets a stable UUID identifier.  The worker
+record is updated when an index starts and when it finishes.
+
+```python
+# Run a multi-worker pipeline
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
+
+# Check which workers participated
+for w in pipeline.active_workers:
+    print(f"Worker {w['worker_id'][:8]} (PID {w['pid']}) on {w['hostname']}")
+    if w["current_index"] is not None:
+        print(f"  Currently processing index {w['current_index']}")
+```
+
+Worker tracking works with all backends — the instrumentation is in
+`Pipeline.__getitem__`, not in the backends themselves.
 
 ## Full Example
 

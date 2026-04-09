@@ -43,7 +43,9 @@ import json
 import logging
 import pathlib
 import sqlite3
+import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -505,6 +507,32 @@ def _config_hash(config: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Worker identity
+# ---------------------------------------------------------------------------
+
+_worker_id_local = threading.local()
+
+
+def _get_worker_id() -> str:
+    """Return a stable worker ID for the current thread.
+
+    Each thread (and by extension each process in multi-process backends)
+    gets a unique UUID4 identifier that is stable across multiple calls
+    within the same thread.
+
+    Returns
+    -------
+    str
+        UUID4 hex string identifying the current worker thread.
+    """
+    wid: str | None = getattr(_worker_id_local, "worker_id", None)
+    if wid is None:
+        wid = uuid.uuid4().hex
+        _worker_id_local.worker_id = wid
+    return wid
+
+
+# ---------------------------------------------------------------------------
 # SQL schema
 # ---------------------------------------------------------------------------
 
@@ -539,6 +567,17 @@ CREATE TABLE IF NOT EXISTS stage_metrics (
     PRIMARY KEY (idx, run_id, stage_order),
     FOREIGN KEY (idx, run_id) REFERENCES index_results (idx, run_id)
 );
+
+CREATE TABLE IF NOT EXISTS workers (
+    worker_id      TEXT    PRIMARY KEY,
+    run_id         INTEGER NOT NULL,
+    pid            INTEGER NOT NULL,
+    hostname       TEXT    NOT NULL,
+    started_at     TEXT    NOT NULL,
+    last_heartbeat TEXT    NOT NULL,
+    current_index  INTEGER,
+    FOREIGN KEY (run_id) REFERENCES pipeline_runs (run_id)
+);
 """
 
 
@@ -548,12 +587,13 @@ CREATE TABLE IF NOT EXISTS stage_metrics (
 
 
 class PipelineStore:
-    """SQLite-backed store combining checkpoint tracking, metrics, and provenance.
+    """SQLite-backed store combining checkpoint tracking, metrics, provenance, and worker progress.
 
-    Manages a single database with three tables: ``pipeline_runs``,
-    ``index_results``, and ``stage_metrics``.  Supports checkpoint
-    resumption via config hashing, per-index success/error recording,
-    and aggregated metrics queries.
+    Manages a single database with four tables: ``pipeline_runs``,
+    ``index_results``, ``stage_metrics``, and ``workers``.  Supports
+    checkpoint resumption via config hashing, per-index success/error
+    recording, aggregated metrics queries, and live worker progress
+    tracking.
 
     Parameters
     ----------
@@ -813,7 +853,7 @@ class PipelineStore:
         dict[str, Any]
             Dictionary with keys: ``total``, ``completed``, ``failed``,
             ``remaining``, ``config_hash``, ``db_path``,
-            ``total_elapsed_s``.
+            ``total_elapsed_s``, ``workers``.
         """
         conn = self._connect()
         try:
@@ -830,6 +870,10 @@ class PipelineStore:
                 (self._run_id,),
             ).fetchone()
             total_elapsed_ns: int = elapsed_row[0]
+            worker_count = conn.execute(
+                "SELECT COUNT(*) FROM workers WHERE run_id = ?",
+                (self._run_id,),
+            ).fetchone()[0]
         finally:
             conn.close()
 
@@ -841,6 +885,7 @@ class PipelineStore:
             "config_hash": self._config_hash,
             "db_path": str(self._db_path),
             "total_elapsed_s": total_elapsed_ns / 1e9,
+            "workers": worker_count,
         }
 
     def reset(self) -> None:
@@ -854,6 +899,7 @@ class PipelineStore:
         try:
             conn.execute("DELETE FROM stage_metrics WHERE run_id = ?", (self._run_id,))
             conn.execute("DELETE FROM index_results WHERE run_id = ?", (self._run_id,))
+            conn.execute("DELETE FROM workers WHERE run_id = ?", (self._run_id,))
             conn.execute("DELETE FROM pipeline_runs WHERE run_id = ?", (self._run_id,))
             conn.commit()
         finally:
@@ -882,6 +928,107 @@ class PipelineStore:
                 (index, self._run_id),
             )
             conn.commit()
+        finally:
+            conn.close()
+
+    # -- Worker progress tracking ------------------------------------------------
+
+    def register_worker(self, worker_id: str, pid: int, hostname: str) -> None:
+        """Register a worker or update its heartbeat if already known.
+
+        Parameters
+        ----------
+        worker_id : str
+            Unique identifier for this worker (UUID hex).
+        pid : int
+            OS process ID of the worker.
+        hostname : str
+            Hostname of the machine running the worker.
+        """
+        now = datetime.now(tz=UTC).isoformat()
+        conn = self._connect()
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO workers "
+                "(worker_id, run_id, pid, hostname, started_at, last_heartbeat, current_index) "
+                "VALUES (?, ?, ?, ?, ?, ?, NULL)",
+                (worker_id, self._run_id, pid, hostname, now, now),
+            )
+            conn.execute(
+                "UPDATE workers SET last_heartbeat = ? WHERE worker_id = ?",
+                (now, worker_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def worker_start_index(self, worker_id: str, index: int) -> None:
+        """Record that a worker is starting to process an index.
+
+        Parameters
+        ----------
+        worker_id : str
+            Unique identifier for this worker.
+        index : int
+            Source index being processed.
+        """
+        now = datetime.now(tz=UTC).isoformat()
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE workers SET current_index = ?, last_heartbeat = ? WHERE worker_id = ?",
+                (index, now, worker_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def worker_finish_index(self, worker_id: str) -> None:
+        """Record that a worker has finished processing its current index.
+
+        Parameters
+        ----------
+        worker_id : str
+            Unique identifier for this worker.
+        """
+        now = datetime.now(tz=UTC).isoformat()
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE workers SET current_index = NULL, last_heartbeat = ? WHERE worker_id = ?",
+                (now, worker_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def active_workers(self) -> list[dict[str, Any]]:
+        """Return all workers registered for this pipeline run.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            List of worker dictionaries with keys: ``worker_id``, ``pid``,
+            ``hostname``, ``started_at``, ``last_heartbeat``, ``current_index``.
+        """
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT worker_id, pid, hostname, started_at, last_heartbeat, current_index "
+                "FROM workers WHERE run_id = ? ORDER BY started_at",
+                (self._run_id,),
+            ).fetchall()
+            return [
+                {
+                    "worker_id": r[0],
+                    "pid": r[1],
+                    "hostname": r[2],
+                    "started_at": r[3],
+                    "last_heartbeat": r[4],
+                    "current_index": r[5],
+                }
+                for r in rows
+            ]
         finally:
             conn.close()
 
