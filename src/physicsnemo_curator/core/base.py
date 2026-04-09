@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -25,6 +26,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     import pathlib
     from collections.abc import Generator, Iterator
+
+    from physicsnemo_curator.core.pipeline_store import PipelineMetrics, PipelineStore
+
+logger = logging.getLogger(__name__)
 
 # Sentinel for required parameters (no default).
 _REQUIRED = object()
@@ -296,6 +301,11 @@ class Pipeline[T]:
     source: Source[T]
     filters: list[Filter[T]] = field(default_factory=list)
     sink: Sink[T] | None = None
+    track_metrics: bool = True
+    track_memory: bool = True
+    track_gpu: bool = False
+    db_dir: pathlib.Path | None = None
+    _store: PipelineStore | None = field(default=None, init=False, repr=False, compare=False)
 
     def filter(self, f: Filter[T]) -> Pipeline[T]:
         """Return a new pipeline with an additional filter appended.
@@ -314,6 +324,10 @@ class Pipeline[T]:
             source=self.source,
             filters=[*self.filters, f],
             sink=self.sink,
+            track_metrics=self.track_metrics,
+            track_memory=self.track_memory,
+            track_gpu=self.track_gpu,
+            db_dir=self.db_dir,
         )
 
     def write(self, s: Sink[T]) -> Pipeline[T]:
@@ -333,6 +347,10 @@ class Pipeline[T]:
             source=self.source,
             filters=list(self.filters),
             sink=s,
+            track_metrics=self.track_metrics,
+            track_memory=self.track_memory,
+            track_gpu=self.track_gpu,
+            db_dir=self.db_dir,
         )
 
     def __len__(self) -> int:
@@ -341,6 +359,12 @@ class Pipeline[T]:
 
     def __getitem__(self, index: int) -> list[str]:
         """Lazily process the *index*-th source item through the full chain.
+
+        When :attr:`track_metrics` is ``True``, each stage is wrapped with
+        :class:`~physicsnemo_curator.core.pipeline_store._TimedGenerator` for
+        per-stage timing, memory tracking via ``tracemalloc``, and optional
+        GPU memory tracking.  Results and errors are recorded in the
+        :class:`~physicsnemo_curator.core.pipeline_store.PipelineStore`.
 
         Parameters
         ----------
@@ -370,15 +394,333 @@ class Pipeline[T]:
             msg = f"Index {index} out of range for source with {n} items."
             raise IndexError(msg)
 
-        # Start with the source generator for this index.
-        stream: Generator[T] = self.source[index]
+        # Fast path: no instrumentation
+        if not self.track_metrics:
+            stream: Generator[T] = self.source[index]
+            for f in self.filters:
+                stream = f(stream)
+            return self.sink(stream, index)
 
-        # Chain through each filter.
-        for f in self.filters:
-            stream = f(stream)
+        # Instrumented path
+        return self._getitem_instrumented(index)
 
-        # Feed into the sink.
-        return self.sink(stream, index)
+    def _getitem_instrumented(self, index: int) -> list[str]:
+        """Execute index with full metrics instrumentation.
+
+        Parameters
+        ----------
+        index : int
+            Validated, non-negative index into the source.
+
+        Returns
+        -------
+        list[str]
+            File paths produced by the sink.
+        """
+        import time
+        import tracemalloc
+
+        from physicsnemo_curator.core.pipeline_store import StageMetrics, _TimedGenerator
+
+        store = self._get_store()
+
+        # Checkpoint hit — return cached paths
+        cached = store.is_completed(index)
+        if cached is not None:
+            logger.debug("Checkpoint hit for index %d — returning cached paths", index)
+            return cached
+
+        # --- GPU baseline ---
+        gpu_baseline: int | None = None
+        if self.track_gpu:
+            gpu_baseline = Pipeline._gpu_setup()
+
+        # --- Memory tracking ---
+        was_tracing = tracemalloc.is_tracing()
+        if self.track_memory:
+            if not was_tracing:
+                tracemalloc.start()
+            tracemalloc.reset_peak()
+
+        overall_start = time.perf_counter_ns()
+        started_tracemalloc = self.track_memory and not was_tracing
+
+        try:
+            # 1. Wrap source generator with timing
+            source_gen = self.source[index]
+            timed_source: _TimedGenerator[T] = _TimedGenerator(source_gen)
+
+            # 2. Chain through filters, wrapping each output
+            filter_wrappers: list[_TimedGenerator[T]] = []
+            current_stream: _TimedGenerator[T] = timed_source
+
+            for f in self.filters:
+                raw_output = f(current_stream)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+                wrapped: _TimedGenerator[T] = _TimedGenerator(raw_output)
+                filter_wrappers.append(wrapped)
+                current_stream = wrapped
+
+            # 3. Run the sink (forces full chain evaluation)
+            assert self.sink is not None  # guaranteed by caller
+            result = self.sink(current_stream, index)
+
+            overall_elapsed = time.perf_counter_ns() - overall_start
+
+            # 4. Compute per-stage times using chain subtraction
+            stage_metrics: list[StageMetrics] = []
+            source_time = timed_source.elapsed_ns
+            stage_metrics.append(StageMetrics(name="source", wall_time_ns=source_time))
+
+            prev_elapsed = source_time
+            for i_f, fw in enumerate(filter_wrappers):
+                filter_own_time = max(0, fw.elapsed_ns - prev_elapsed)
+                fname = type(self.filters[i_f]).name
+                stage_metrics.append(StageMetrics(name=fname, wall_time_ns=filter_own_time))
+                prev_elapsed = fw.elapsed_ns
+
+            last_elapsed = filter_wrappers[-1].elapsed_ns if filter_wrappers else source_time
+            sink_own_time = max(0, overall_elapsed - last_elapsed)
+            stage_metrics.append(StageMetrics(name="sink", wall_time_ns=sink_own_time))
+
+            # 5. Memory measurement
+            peak_memory: int = 0
+            if self.track_memory:
+                _, peak_memory = tracemalloc.get_traced_memory()
+
+            # 6. GPU measurement
+            gpu_delta: int | None = None
+            if self.track_gpu and gpu_baseline is not None:
+                gpu_delta = Pipeline._gpu_measure(gpu_baseline)
+
+            # 7. Record success
+            store.record_success(index, result, overall_elapsed, peak_memory, gpu_delta, stage_metrics)
+
+            return result
+
+        except Exception as exc:
+            elapsed = time.perf_counter_ns() - overall_start
+            store.record_error(index, str(exc), elapsed)
+            raise
+
+        finally:
+            if started_tracemalloc:
+                tracemalloc.stop()
+
+    def _get_store(self) -> PipelineStore:
+        """Lazily create and return the pipeline store.
+
+        Returns
+        -------
+        PipelineStore
+            The SQLite-backed pipeline store for this pipeline.
+        """
+        if self._store is not None:
+            return self._store
+
+        import pathlib
+
+        from physicsnemo_curator.core.pipeline_store import (
+            PipelineStore,
+            _config_hash,
+            _pipeline_config,
+        )
+
+        config = _pipeline_config(self)
+        hash_ = _config_hash(config)
+
+        if self.db_dir is not None:
+            db_path = pathlib.Path(self.db_dir) / f"{hash_[:16]}.db"
+        else:
+            db_path = pathlib.Path.cwd() / ".pnc" / f"{hash_[:16]}.db"
+
+        self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_)
+        return self._store
+
+    @staticmethod
+    def _gpu_setup() -> int | None:
+        """Reset GPU peak stats and return baseline memory.
+
+        Returns
+        -------
+        int | None
+            Baseline GPU memory in bytes, or ``None`` if unavailable.
+        """
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
+                return torch.cuda.memory_allocated()
+        except ImportError:
+            pass
+        return None
+
+    @staticmethod
+    def _gpu_measure(baseline: int) -> int:
+        """Measure peak GPU memory delta from baseline.
+
+        Parameters
+        ----------
+        baseline : int
+            GPU memory at start of ``__getitem__``.
+
+        Returns
+        -------
+        int
+            Peak GPU memory minus baseline (bytes).
+        """
+        import torch
+
+        return torch.cuda.max_memory_allocated() - baseline
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Return picklable state, dropping the non-serializable store.
+
+        Returns
+        -------
+        dict[str, Any]
+            Instance state with ``_store`` set to ``None``.
+        """
+        state = self.__dict__.copy()
+        state["_store"] = None
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore state from pickle, ensuring ``_store`` is ``None``.
+
+        Parameters
+        ----------
+        state : dict[str, Any]
+            Pickled state dictionary.
+        """
+        state["_store"] = None
+        self.__dict__.update(state)
+
+    # -- Query API (delegates to store) ----------------------------------------
+
+    def _require_metrics(self) -> PipelineStore:
+        """Return the store or raise if metrics are disabled.
+
+        Returns
+        -------
+        PipelineStore
+            The pipeline store.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        if not self.track_metrics:
+            msg = "Pipeline metrics are disabled (track_metrics=False)"
+            raise RuntimeError(msg)
+        return self._get_store()
+
+    @property
+    def completed_indices(self) -> set[int]:
+        """Return the set of successfully completed indices.
+
+        Returns
+        -------
+        set[int]
+            Indices with recorded successful completions.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        return self._require_metrics().completed_indices()
+
+    @property
+    def failed_indices(self) -> dict[int, str]:
+        """Return indices that failed with their error messages.
+
+        Returns
+        -------
+        dict[int, str]
+            Mapping from index to error message string.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        return self._require_metrics().failed_indices()
+
+    @property
+    def metrics(self) -> PipelineMetrics:
+        """Return aggregated metrics from the store.
+
+        Returns
+        -------
+        PipelineMetrics
+            Aggregated metrics across all completed indices.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        return self._require_metrics().metrics()
+
+    def remaining_indices(self) -> list[int]:
+        """Return indices not yet completed or failed.
+
+        Returns
+        -------
+        list[int]
+            Sorted list of indices still needing processing.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        store = self._require_metrics()
+        return store.remaining_indices(len(self.source))
+
+    def summary(self) -> dict[str, Any]:
+        """Return a summary of the store state.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary with ``total``, ``completed``, ``failed``,
+            ``remaining``, ``config_hash``, ``db_path``, ``total_elapsed_s``.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        store = self._require_metrics()
+        return store.summary(len(self.source))
+
+    def reset(self) -> None:
+        """Clear all records for this pipeline run.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        self._require_metrics().reset()
+
+    def reset_index(self, index: int) -> None:
+        """Remove records for a single index.
+
+        Parameters
+        ----------
+        index : int
+            Source index to remove.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        self._require_metrics().reset_index(index)
 
     def save(self, path: str | pathlib.Path) -> None:
         """Save this pipeline's configuration to a YAML or JSON file.

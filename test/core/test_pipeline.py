@@ -183,6 +183,7 @@ class TestPipeline:
         source = IntSource(values=[5, 10, 15])
         sink = CollectSink()
         pipeline = source.filter(DoubleFilter()).write(sink)
+        pipeline.track_metrics = False
 
         result = pipeline[0]
         assert result == ["10"]
@@ -194,6 +195,7 @@ class TestPipeline:
         source = IntSource(values=[3])
         sink = CollectSink()
         pipeline = source.filter(DoubleFilter()).filter(DoubleFilter()).write(sink)
+        pipeline.track_metrics = False
 
         result = pipeline[0]
         assert result == ["12"]  # 3 * 2 * 2
@@ -202,6 +204,7 @@ class TestPipeline:
         source = IntSource(values=[5])
         sink = CollectSink()
         pipeline = source.filter(ExpandFilter()).write(sink)
+        pipeline.track_metrics = False
 
         result = pipeline[0]
         assert result == ["5", "105"]
@@ -211,6 +214,7 @@ class TestPipeline:
         sink = CollectSink()
         # Expand → Drop: 5 and 105 → only 105 passes threshold of 50
         pipeline = source.filter(ExpandFilter()).filter(DropFilter(threshold=50)).write(sink)
+        pipeline.track_metrics = False
 
         result = pipeline[0]
         assert result == ["105"]
@@ -223,12 +227,14 @@ class TestPipeline:
     def test_no_sink_raises(self):
         source = IntSource(values=[1])
         pipeline = source.filter(DoubleFilter())
+        pipeline.track_metrics = False
         with pytest.raises(RuntimeError, match="no sink"):
             pipeline[0]
 
     def test_index_out_of_range(self):
         source = IntSource(values=[1, 2])
         pipeline = source.filter(DoubleFilter()).write(CollectSink())
+        pipeline.track_metrics = False
         with pytest.raises(IndexError):
             pipeline[5]
 
@@ -236,6 +242,7 @@ class TestPipeline:
         source = IntSource(values=[10, 20, 30])
         sink = CollectSink()
         pipeline = source.filter(DoubleFilter()).write(sink)
+        pipeline.track_metrics = False
 
         result = pipeline[-1]
         assert result == ["60"]  # 30 * 2
@@ -253,6 +260,7 @@ class TestPipeline:
         source = IntSource(values=[10, 20])
         sink = CollectSink()
         pipeline = source.write(sink)
+        pipeline.track_metrics = False
 
         pipeline[0]
         pipeline[1]
@@ -377,3 +385,134 @@ class TestRegistry:
         reg = Registry()
         with pytest.raises(KeyError, match="not registered"):
             reg.register_store("nope", "Dummy", DummyStore)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline metrics fields tests
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineMetricsFields:
+    """Tests for the new metrics-related fields on Pipeline."""
+
+    def test_default_fields(self):
+        """Pipeline has track_metrics=True, track_memory=True, track_gpu=False, db_dir=None."""
+        source = IntSource(values=[1])
+        pipeline = Pipeline(source=source)
+        assert pipeline.track_metrics is True
+        assert pipeline.track_memory is True
+        assert pipeline.track_gpu is False
+        assert pipeline.db_dir is None
+
+    def test_explicit_fields(self):
+        """Pipeline accepts explicit metrics fields."""
+        import pathlib
+
+        source = IntSource(values=[1])
+        pipeline = Pipeline(
+            source=source,
+            track_metrics=False,
+            track_memory=False,
+            track_gpu=True,
+            db_dir=pathlib.Path("/tmp/test_db"),
+        )
+        assert pipeline.track_metrics is False
+        assert pipeline.track_memory is False
+        assert pipeline.track_gpu is True
+        assert pipeline.db_dir == pathlib.Path("/tmp/test_db")
+
+    def test_filter_propagates_fields(self):
+        """Pipeline.filter() propagates metrics fields."""
+        import pathlib
+
+        source = IntSource(values=[1])
+        p1 = Pipeline(
+            source=source,
+            track_metrics=False,
+            track_memory=False,
+            track_gpu=True,
+            db_dir=pathlib.Path("/tmp/custom"),
+        )
+        p2 = p1.filter(DoubleFilter())
+        assert p2.track_metrics is False
+        assert p2.track_memory is False
+        assert p2.track_gpu is True
+        assert p2.db_dir == pathlib.Path("/tmp/custom")
+
+    def test_write_propagates_fields(self):
+        """Pipeline.write() propagates metrics fields."""
+        import pathlib
+
+        source = IntSource(values=[1])
+        p1 = Pipeline(
+            source=source,
+            track_metrics=False,
+            track_memory=False,
+            track_gpu=True,
+            db_dir=pathlib.Path("/tmp/custom"),
+        )
+        p2 = p1.write(CollectSink())
+        assert p2.track_metrics is False
+        assert p2.track_memory is False
+        assert p2.track_gpu is True
+        assert p2.db_dir == pathlib.Path("/tmp/custom")
+
+    def test_source_filter_propagates_defaults(self):
+        """Source.filter() creates Pipeline with default metrics fields."""
+        source = IntSource(values=[1])
+        pipeline = source.filter(DoubleFilter())
+        assert pipeline.track_metrics is True
+        assert pipeline.track_memory is True
+        assert pipeline.track_gpu is False
+        assert pipeline.db_dir is None
+
+    def test_source_write_propagates_defaults(self):
+        """Source.write() creates Pipeline with default metrics fields."""
+        source = IntSource(values=[1])
+        pipeline = source.write(CollectSink())
+        assert pipeline.track_metrics is True
+        assert pipeline.track_memory is True
+        assert pipeline.track_gpu is False
+        assert pipeline.db_dir is None
+
+
+# ---------------------------------------------------------------------------
+# Pipeline pickle tests
+# ---------------------------------------------------------------------------
+
+
+class TestPipelinePickle:
+    """Tests for Pipeline pickle support."""
+
+    def test_pickle_roundtrip_no_metrics(self):
+        """Pipeline with track_metrics=False survives pickle roundtrip."""
+        import pickle
+
+        source = IntSource(values=[5, 10])
+        sink = CollectSink()
+        filters: list[Filter[int]] = [DoubleFilter()]
+        pipeline = Pipeline(source=source, filters=filters, sink=sink, track_metrics=False)
+
+        data = pickle.dumps(pipeline)
+        restored = pickle.loads(data)  # noqa: S301
+
+        assert restored.track_metrics is False
+        assert restored.source is not None
+        assert len(restored.filters) == 1
+        assert restored.sink is not None
+
+    def test_pickle_drops_store(self):
+        """Pickling a Pipeline drops the _store field."""
+        import pickle
+
+        source = IntSource(values=[5])
+        pipeline = Pipeline(source=source, track_metrics=True)
+
+        # Force store creation by accessing _get_store indirectly
+        # We set a sentinel value to verify it gets dropped
+        pipeline._store = object()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+
+        data = pickle.dumps(pipeline)
+        restored = pickle.loads(data)  # noqa: S301
+
+        assert restored._store is None
