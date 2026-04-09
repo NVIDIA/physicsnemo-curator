@@ -578,6 +578,15 @@ CREATE TABLE IF NOT EXISTS workers (
     current_index  INTEGER,
     FOREIGN KEY (run_id) REFERENCES pipeline_runs (run_id)
 );
+
+CREATE TABLE IF NOT EXISTS output_files (
+    path    TEXT    NOT NULL,
+    idx     INTEGER NOT NULL,
+    run_id  INTEGER NOT NULL,
+    seq     INTEGER NOT NULL,
+    PRIMARY KEY (path, run_id),
+    FOREIGN KEY (idx, run_id) REFERENCES index_results (idx, run_id)
+);
 """
 
 
@@ -589,8 +598,9 @@ CREATE TABLE IF NOT EXISTS workers (
 class PipelineStore:
     """SQLite-backed store combining checkpoint tracking, metrics, provenance, and worker progress.
 
-    Manages a single database with four tables: ``pipeline_runs``,
-    ``index_results``, ``stage_metrics``, and ``workers``.  Supports
+    Manages a single database with five tables: ``pipeline_runs``,
+    ``index_results``, ``stage_metrics``, ``output_files``, and
+    ``workers``.  Supports
     checkpoint resumption via config hashing, per-index success/error
     recording, aggregated metrics queries, and live worker progress
     tracking.
@@ -758,6 +768,17 @@ class PipelineStore:
                     (index, self._run_id, order, stage.name, stage.wall_time_ns),
                 )
 
+            # Populate the normalized output_files table for reverse lookup
+            conn.execute(
+                "DELETE FROM output_files WHERE idx = ? AND run_id = ?",
+                (index, self._run_id),
+            )
+            for seq, path in enumerate(output_paths):
+                conn.execute(
+                    "INSERT OR REPLACE INTO output_files (path, idx, run_id, seq) VALUES (?, ?, ?, ?)",
+                    (path, index, self._run_id, seq),
+                )
+
             conn.commit()
         finally:
             conn.close()
@@ -897,6 +918,7 @@ class PipelineStore:
         """
         conn = self._connect()
         try:
+            conn.execute("DELETE FROM output_files WHERE run_id = ?", (self._run_id,))
             conn.execute("DELETE FROM stage_metrics WHERE run_id = ?", (self._run_id,))
             conn.execute("DELETE FROM index_results WHERE run_id = ?", (self._run_id,))
             conn.execute("DELETE FROM workers WHERE run_id = ?", (self._run_id,))
@@ -920,6 +942,10 @@ class PipelineStore:
         conn = self._connect()
         try:
             conn.execute(
+                "DELETE FROM output_files WHERE idx = ? AND run_id = ?",
+                (index, self._run_id),
+            )
+            conn.execute(
                 "DELETE FROM stage_metrics WHERE idx = ? AND run_id = ?",
                 (index, self._run_id),
             )
@@ -928,6 +954,54 @@ class PipelineStore:
                 (index, self._run_id),
             )
             conn.commit()
+        finally:
+            conn.close()
+
+    # -- Output file lookup ------------------------------------------------------
+
+    def index_for_path(self, path: str) -> int | None:
+        """Find which source index produced a given output file.
+
+        Parameters
+        ----------
+        path : str
+            Output file path to look up.
+
+        Returns
+        -------
+        int | None
+            Source index that produced the file, or ``None`` if not found.
+        """
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT idx FROM output_files WHERE path = ? AND run_id = ?",
+                (path, self._run_id),
+            ).fetchone()
+            return row[0] if row is not None else None
+        finally:
+            conn.close()
+
+    def output_paths_for_index(self, index: int) -> list[str]:
+        """Return the output file paths produced by a given source index.
+
+        Parameters
+        ----------
+        index : int
+            Source index to query.
+
+        Returns
+        -------
+        list[str]
+            Output file paths ordered by sequence, or empty list if none.
+        """
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT path FROM output_files WHERE idx = ? AND run_id = ? ORDER BY seq",
+                (index, self._run_id),
+            ).fetchall()
+            return [r[0] for r in rows]
         finally:
             conn.close()
 

@@ -535,3 +535,63 @@ class TestWorkerTracking:
         store.reset()
         workers = store.active_workers()
         assert len(workers) == 0
+
+
+class TestOutputFileLookup:
+    """Tests for output_files table and reverse-lookup methods."""
+
+    @pytest.fixture()
+    def store(self, tmp_path):
+        """Create a PipelineStore for testing."""
+        pipeline = IntSource(values=[1, 2, 3]).write(CollectSink())
+        config = _pipeline_config(pipeline)
+        chash = _config_hash(config)
+        return PipelineStore(db_path=tmp_path / "output.db", pipeline_config=config, config_hash=chash)
+
+    def test_record_success_populates_output_files(self, store) -> None:
+        """record_success writes to both index_results and output_files."""
+        store.record_success(0, ["/a.nc", "/b.nc"], 100, 50, None, [])
+        paths = store.output_paths_for_index(0)
+        assert paths == ["/a.nc", "/b.nc"]
+
+    def test_index_for_path_found(self, store) -> None:
+        """index_for_path returns the correct source index."""
+        store.record_success(5, ["/data/mesh_0005"], 100, 50, None, [])
+        assert store.index_for_path("/data/mesh_0005") == 5
+
+    def test_index_for_path_not_found(self, store) -> None:
+        """index_for_path returns None for unknown paths."""
+        assert store.index_for_path("/nonexistent") is None
+
+    def test_output_paths_for_index_empty(self, store) -> None:
+        """output_paths_for_index returns empty list for unknown index."""
+        assert store.output_paths_for_index(999) == []
+
+    def test_output_paths_preserves_order(self, store) -> None:
+        """output_paths_for_index returns paths in insertion order."""
+        paths = ["/c.nc", "/a.nc", "/b.nc"]
+        store.record_success(0, paths, 100, 50, None, [])
+        assert store.output_paths_for_index(0) == paths
+
+    def test_multiple_indices(self, store) -> None:
+        """Each index maps to its own output files."""
+        store.record_success(0, ["/idx0_a", "/idx0_b"], 100, 50, None, [])
+        store.record_success(1, ["/idx1_a"], 200, 60, None, [])
+        assert store.index_for_path("/idx0_a") == 0
+        assert store.index_for_path("/idx0_b") == 0
+        assert store.index_for_path("/idx1_a") == 1
+
+    def test_reset_clears_output_files(self, store) -> None:
+        """reset() removes output_files records."""
+        store.record_success(0, ["/a"], 100, 50, None, [])
+        store.reset()
+        assert store.output_paths_for_index(0) == []
+        assert store.index_for_path("/a") is None
+
+    def test_reset_index_clears_output_files(self, store) -> None:
+        """reset_index() removes output_files for that index only."""
+        store.record_success(0, ["/a"], 100, 50, None, [])
+        store.record_success(1, ["/b"], 200, 60, None, [])
+        store.reset_index(0)
+        assert store.index_for_path("/a") is None
+        assert store.index_for_path("/b") == 1

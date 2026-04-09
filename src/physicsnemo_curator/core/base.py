@@ -773,6 +773,46 @@ class Pipeline[T]:
         """
         self._require_metrics().reset_index(index)
 
+    def index_for_path(self, path: str) -> int | None:
+        """Find which source index produced a given output file.
+
+        Parameters
+        ----------
+        path : str
+            Output file path to look up.
+
+        Returns
+        -------
+        int | None
+            Source index that produced the file, or ``None`` if not found.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        return self._require_metrics().index_for_path(path)
+
+    def output_paths_for_index(self, index: int) -> list[str]:
+        """Return the output file paths produced by a given source index.
+
+        Parameters
+        ----------
+        index : int
+            Source index to query.
+
+        Returns
+        -------
+        list[str]
+            Output file paths ordered by sequence, or empty list if none.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        return self._require_metrics().output_paths_for_index(index)
+
     def save(self, path: str | pathlib.Path) -> None:
         """Save this pipeline's configuration to a YAML or JSON file.
 
