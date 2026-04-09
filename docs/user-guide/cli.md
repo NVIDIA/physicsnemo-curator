@@ -1,12 +1,12 @@
-# Interactive CLI
+# Pipeline Wizard
 
-PhysicsNeMo Curator includes an interactive command-line tool that guides
+PhysicsNeMo Curator includes an interactive command-line wizard that guides
 you through building and executing a pipeline without writing code.
 
 ## Installation
 
 ```bash
-pip install physicsnemo-curator[cli]
+pip install physicsnemo-curator[wiz]
 ```
 
 This installs the required dependencies:
@@ -23,8 +23,10 @@ You also need the domain submodule installed (e.g. `pip install physicsnemo-cura
 curator
 ```
 
-The CLI displays a styled welcome banner and walks through six steps with
-colored output and progress indicators.
+The wizard displays a styled welcome banner and walks through the pipeline
+configuration with colored output and progress indicators.  You can either
+build a new pipeline interactively or load a previously saved one from YAML
+or JSON.
 
 ### 1. Select Submodule
 
@@ -34,7 +36,7 @@ dependencies installed:
 ```text
 ╭─────────────────────────────────────╮
 │   PhysicsNeMo Curator               │
-│   Interactive ETL Pipeline Builder  │
+│   Interactive ETL Pipeline Wizard   │
 ╰─────────────────────────────────────╯
 
 Step 1/6: Select Submodule

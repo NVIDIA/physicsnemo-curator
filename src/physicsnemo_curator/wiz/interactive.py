@@ -14,10 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Interactive pipeline builder using questionary prompts.
+"""Interactive pipeline wizard using questionary prompts.
 
 Walks the user through selecting a submodule, store, source, filters, and
 sink, then constructs and executes a :class:`~curator.core.base.Pipeline`.
+Optionally loads a saved pipeline or saves the built pipeline to YAML.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ from rich.theme import Theme
 
 from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
 from physicsnemo_curator.core.registry import registry
+from physicsnemo_curator.core.serialization import load_pipeline, save_pipeline
 from physicsnemo_curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 
 # Custom theme with NVIDIA green accent
@@ -71,7 +73,7 @@ def _print_banner() -> None:
     banner_text.append("PhysicsNeMo ", style="nvidia")
     banner_text.append("Curator", style="bold white")
 
-    subtitle = Text("Interactive ETL Pipeline Builder", style="dim")
+    subtitle = Text("Interactive ETL Pipeline Wizard", style="dim")
 
     panel = Panel(
         Text.assemble(banner_text, "\n", subtitle),
@@ -117,7 +119,7 @@ def _ensure_submodules_registered() -> None:
         try:
             importlib.import_module(module_path)
         except ImportError:
-            # Register a placeholder so the CLI can show it as unavailable.
+            # Register a placeholder so the wizard can show it as unavailable.
             dep_map = {"mesh": "physicsnemo.mesh", "da": "xarray", "atm": "nvalchemi.data"}
             desc_map = {
                 "mesh": "Mesh data curation (physicsnemo.mesh.Mesh)",
@@ -265,11 +267,18 @@ def _print_pipeline_summary(source_name: str, filter_names: list[str], sink_name
     console.print(Panel(pipeline_str, title="[bold]Pipeline[/bold]", border_style="blue"))
 
 
-def run_interactive() -> None:
-    """Run the full interactive pipeline builder flow."""
-    _print_banner()
+def _build_pipeline_interactive() -> Pipeline[Any]:  # noqa: C901, PLR0912, PLR0915
+    """Walk through the interactive build steps and return a Pipeline.
 
-    total_steps = 6
+    Steps: submodule selection, store config, source selection, filter
+    selection, and sink selection.
+
+    Returns
+    -------
+    Pipeline[Any]
+        The fully configured pipeline ready for execution or saving.
+    """
+    total_steps = 5
 
     # ------------------------------------------------------------------
     # 1. Discover and register available submodules
@@ -282,9 +291,6 @@ def run_interactive() -> None:
         _print_error("No submodules registered. Install an extra (e.g. curator[mesh]).")
         sys.exit(1)
 
-    # ------------------------------------------------------------------
-    # 2. Select submodule
-    # ------------------------------------------------------------------
     choices = []
     available_names: list[str] = []
     for name, entry in submodules.items():
@@ -313,7 +319,7 @@ def run_interactive() -> None:
     _print_success(f"Selected submodule: [highlight]{submodule_name}[/highlight]")
 
     # ------------------------------------------------------------------
-    # 3. Select and build store (data location)
+    # 2. Select and build store (data location)
     # ------------------------------------------------------------------
     _print_step(2, total_steps, "Configure Data Store")
     stores = registry.stores(submodule_name)
@@ -332,7 +338,7 @@ def run_interactive() -> None:
         _print_success(f"Found [highlight]{len(store_instance)}[/highlight] file(s) in store")
 
     # ------------------------------------------------------------------
-    # 4. Select source
+    # 3. Select source
     # ------------------------------------------------------------------
     _print_step(3, total_steps, "Select Source/Reader")
     sources = registry.sources(submodule_name)
@@ -366,7 +372,7 @@ def run_interactive() -> None:
     _print_success(f"Found [highlight]{len(source_instance)}[/highlight] item(s) in source")
 
     # ------------------------------------------------------------------
-    # 5. Select filters (multi-select)
+    # 4. Select filters (multi-select)
     # ------------------------------------------------------------------
     _print_step(4, total_steps, "Select Filters")
     filters = registry.filters(submodule_name)
@@ -401,7 +407,7 @@ def run_interactive() -> None:
         _print_warning("No filters available for this submodule")
 
     # ------------------------------------------------------------------
-    # 6. Select sink
+    # 5. Select sink
     # ------------------------------------------------------------------
     _print_step(5, total_steps, "Select Sink/Writer")
     sinks = registry.sinks(submodule_name)
@@ -424,17 +430,83 @@ def run_interactive() -> None:
 
     _print_success(f"Configured sink: [highlight]{sink_cls.name}[/highlight]")
 
-    # ------------------------------------------------------------------
-    # 7. Build and show pipeline summary
-    # ------------------------------------------------------------------
-    _print_step(6, total_steps, "Execute Pipeline")
+    pipeline: Pipeline[Any] = Pipeline(source=source_instance, filters=filter_instances, sink=sink_instance)
 
     _print_pipeline_summary(source_cls.name, filter_names, sink_cls.name)
 
-    pipeline: Pipeline[Any] = Pipeline(source=source_instance, filters=filter_instances, sink=sink_instance)
+    return pipeline
+
+
+def run_interactive() -> None:  # noqa: C901, PLR0912, PLR0915
+    """Run the full interactive pipeline wizard flow."""
+    _print_banner()
 
     # ------------------------------------------------------------------
-    # 8. Execute pipeline with progress bar
+    # 0. Load or build?
+    # ------------------------------------------------------------------
+    mode: str | None = questionary.select(
+        "How would you like to start?",
+        choices=[
+            questionary.Choice(title="Build a new pipeline", value="build"),
+            questionary.Choice(title="Load a saved pipeline (YAML/JSON)", value="load"),
+        ],
+    ).ask()
+    if mode is None:
+        _print_error("Aborted.")
+        sys.exit(1)
+
+    pipeline: Pipeline[Any]
+
+    if mode == "load":
+        path: str | None = questionary.text("  Path to pipeline file:").ask()
+        if path is None:
+            _print_error("Aborted.")
+            sys.exit(1)
+
+        try:
+            pipeline = load_pipeline(path)
+        except Exception as exc:  # noqa: BLE001
+            _print_error(f"Failed to load pipeline: {exc}")
+            sys.exit(1)
+
+        _print_success(f"Loaded pipeline from [highlight]{path}[/highlight]")
+        _print_info(f"Source items: [highlight]{len(pipeline)}[/highlight]")
+    else:
+        pipeline = _build_pipeline_interactive()
+
+    # ------------------------------------------------------------------
+    # Save pipeline?
+    # ------------------------------------------------------------------
+    save_answer: str | None = questionary.select(
+        "Save pipeline to file before executing?",
+        choices=[
+            questionary.Choice(title="No, just execute", value="no"),
+            questionary.Choice(title="Yes, save to YAML", value="yaml"),
+            questionary.Choice(title="Yes, save to JSON", value="json"),
+        ],
+    ).ask()
+    if save_answer is None:
+        _print_error("Aborted.")
+        sys.exit(1)
+
+    if save_answer in ("yaml", "json"):
+        default_name = f"pipeline.{save_answer}"
+        save_path: str | None = questionary.text(
+            f"  Save path [{default_name}]:",
+            default=default_name,
+        ).ask()
+        if save_path is None:
+            _print_error("Aborted.")
+            sys.exit(1)
+
+        try:
+            save_pipeline(pipeline, save_path)
+            _print_success(f"Pipeline saved to [highlight]{save_path}[/highlight]")
+        except Exception as exc:  # noqa: BLE001
+            _print_warning(f"Could not save pipeline: {exc}")
+
+    # ------------------------------------------------------------------
+    # Execute pipeline with progress bar
     # ------------------------------------------------------------------
     n = len(pipeline)
     console.print()
@@ -466,9 +538,9 @@ def run_interactive() -> None:
             )
 
     # ------------------------------------------------------------------
-    # 9. Flush any stateful filters (e.g. MeanFilter)
+    # Flush any stateful filters (e.g. MeanFilter)
     # ------------------------------------------------------------------
-    for f in filter_instances:
+    for f in pipeline.filters:
         if hasattr(f, "flush"):
             flush = getattr(f, "flush")  # noqa: B009
             result = flush()

@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""CLI entry point for PhysicsNeMo Curator.
+"""Wizard entry point for PhysicsNeMo Curator.
 
-Run ``curator`` to launch the interactive pipeline builder.  Requires the
-``curator[cli]`` extra (click, questionary, rich).
+Run ``curator`` to launch the interactive pipeline wizard.  Requires the
+``curator[wiz]`` extra (click, questionary, rich).
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from __future__ import annotations
 import click
 from rich.console import Console
 
-from physicsnemo_curator.cli.interactive import run_interactive
+from physicsnemo_curator.wiz.interactive import run_interactive
 
 # Shared console for colored output
 console = Console()
@@ -34,5 +34,5 @@ console = Console()
 @click.command()
 @click.version_option(package_name="physicsnemo-curator")
 def main() -> None:
-    """PhysicsNeMo Curator — interactive ETL pipeline builder."""
+    """PhysicsNeMo Curator — interactive ETL pipeline wizard."""
     run_interactive()

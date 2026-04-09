@@ -115,8 +115,8 @@ pip install physicsnemo-curator[da]
 # LS-DYNA crash simulation support
 pip install physicsnemo-curator[lsdyna]
 
-# Interactive CLI
-pip install physicsnemo-curator[cli]
+# Interactive Wizard
+pip install physicsnemo-curator[wiz]
 
 # Parallel backends
 pip install physicsnemo-curator[loky]    # Loky backend
@@ -124,13 +124,13 @@ pip install physicsnemo-curator[dask]    # Dask backend
 pip install physicsnemo-curator[prefect] # Prefect backend
 ```
 
-## CLI
+## Wizard
 
-PhysicsNeMo Curator includes an interactive pipeline builder that walks you
+PhysicsNeMo Curator includes an interactive pipeline wizard that walks you
 through selecting a source, filters, and sink without writing any code.
 
 ```bash
-pip install 'physicsnemo-curator[cli]'
+pip install 'physicsnemo-curator[wiz]'
 curator
 ```
 

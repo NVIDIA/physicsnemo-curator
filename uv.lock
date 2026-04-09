@@ -3719,6 +3719,11 @@ mesh = [
 prefect = [
     { name = "prefect" },
 ]
+wiz = [
+    { name = "click" },
+    { name = "questionary" },
+    { name = "rich" },
+]
 yaml = [
     { name = "pyyaml" },
 ]
@@ -3756,6 +3761,7 @@ requires-dist = [
     { name = "ase", marker = "extra == 'atm'", specifier = ">=3.26.0" },
     { name = "ase-db-backends", marker = "extra == 'atm'", specifier = ">=0.10.0" },
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.0" },
+    { name = "click", marker = "extra == 'wiz'", specifier = ">=8.0" },
     { name = "dask", marker = "extra == 'dask'", specifier = ">=2024.1" },
     { name = "earth2studio", marker = "extra == 'da'", specifier = ">=0.10" },
     { name = "fsspec", specifier = ">=2023.1.0" },
@@ -3772,7 +3778,9 @@ requires-dist = [
     { name = "pyvista", marker = "extra == 'mesh'" },
     { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0" },
     { name = "questionary", marker = "extra == 'cli'", specifier = ">=2.0" },
+    { name = "questionary", marker = "extra == 'wiz'", specifier = ">=2.0" },
     { name = "rich", marker = "extra == 'cli'", specifier = ">=13.0" },
+    { name = "rich", marker = "extra == 'wiz'", specifier = ">=13.0" },
     { name = "s3fs", marker = "extra == 'mesh'" },
     { name = "tensordict", marker = "extra == 'mesh'" },
     { name = "torch", marker = "extra == 'atm'" },
@@ -3782,7 +3790,7 @@ requires-dist = [
     { name = "xarray", marker = "extra == 'da'", specifier = ">=2024.1" },
     { name = "zarr", marker = "extra == 'da'", specifier = ">=3.0" },
 ]
-provides-extras = ["cli", "loky", "lsdyna", "dask", "prefect", "yaml", "mesh", "da", "atm"]
+provides-extras = ["cli", "wiz", "loky", "lsdyna", "dask", "prefect", "yaml", "mesh", "da", "atm"]
 
 [package.metadata.requires-dev]
 dev = [
