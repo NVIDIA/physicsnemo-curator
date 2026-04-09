@@ -212,6 +212,25 @@ class Filter[T](ABC):
         """
         ...
 
+    def artifacts(self) -> list[str]:
+        """Return paths of files produced by this filter since the last call.
+
+        Stateful filters that write side-effect files (statistics, logs,
+        etc.) should override this to report the paths written during the
+        most recent :meth:`flush` or :meth:`__call__` cycle.  The
+        framework calls this after each index to record filter artifacts
+        in the pipeline store.
+
+        The default implementation returns an empty list, which is
+        correct for stateless (pass-through) filters.
+
+        Returns
+        -------
+        list[str]
+            Paths of files written, or ``[]`` if none.
+        """
+        return []
+
 
 # ---------------------------------------------------------------------------
 # Sink
@@ -812,6 +831,41 @@ class Pipeline[T]:
             If ``track_metrics`` is ``False``.
         """
         return self._require_metrics().output_paths_for_index(index)
+
+    def filter_artifacts_for_index(self, index: int) -> dict[str, list[str]]:
+        """Return filter artifact paths for a given source index.
+
+        Parameters
+        ----------
+        index : int
+            Source index to query.
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Mapping of filter name to list of artifact paths.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        return self._require_metrics().filter_artifacts_for_index(index)
+
+    def all_filter_artifacts(self) -> dict[str, list[str]]:
+        """Return all filter artifact paths grouped by filter name.
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Mapping of filter name to list of all artifact paths.
+
+        Raises
+        ------
+        RuntimeError
+            If ``track_metrics`` is ``False``.
+        """
+        return self._require_metrics().all_filter_artifacts()
 
     def save(self, path: str | pathlib.Path) -> None:
         """Save this pipeline's configuration to a YAML or JSON file.

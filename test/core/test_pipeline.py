@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import pathlib
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
@@ -568,3 +569,108 @@ class TestPsncDbDirEnvVar:
         # DB should be inside explicit_dir, NOT env_dir
         assert len(list(explicit_dir.glob("*.db"))) == 1
         assert len(list(env_dir.glob("*.db"))) == 0
+
+
+# ---------------------------------------------------------------------------
+# Filter artifacts integration tests
+# ---------------------------------------------------------------------------
+
+
+class ArtifactFilter(Filter[int]):
+    """Test filter that writes a file on flush and reports artifacts."""
+
+    name: ClassVar[str] = "Artifact"
+    description: ClassVar[str] = "Writes artifact files for testing"
+
+    @classmethod
+    def params(cls) -> list[Param]:
+        """Return parameter descriptors."""
+        return [Param(name="output", description="Output path", type=str)]
+
+    def __init__(self, output: str) -> None:
+        self._output_path = pathlib.Path(output)
+        self._count = 0
+        self._last_artifacts: list[str] = []
+
+    def __call__(self, items: Generator[int]) -> Generator[int]:
+        """Count items and pass through."""
+        for item in items:
+            self._count += 1
+            yield item
+
+    def flush(self) -> str | None:
+        """Write count to file."""
+        if self._count == 0:
+            return None
+        self._output_path.parent.mkdir(parents=True, exist_ok=True)
+        self._output_path.write_text(str(self._count))
+        path = str(self._output_path)
+        self._count = 0
+        self._last_artifacts = [path]
+        return path
+
+    def artifacts(self) -> list[str]:
+        """Return paths from last flush."""
+        paths = self._last_artifacts
+        self._last_artifacts = []
+        return paths
+
+
+class TestFilterArtifactsIntegration:
+    """Integration tests for filter artifact tracking through the pipeline."""
+
+    def test_flush_filters_records_artifacts(self, tmp_path) -> None:
+        """_flush_filters captures artifacts when track_metrics is on."""
+        from physicsnemo_curator.run.base import _flush_filters
+
+        artifact_path = tmp_path / "stats.txt"
+        filt = ArtifactFilter(output=str(artifact_path))
+        source = IntSource(values=[10, 20])
+        sink = CollectSink()
+        pipeline = Pipeline(
+            source=source,
+            filters=[filt],  # ty: ignore[invalid-argument-type]
+            sink=sink,
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
+
+        # Execute index 0 — forces filter __call__ to run
+        pipeline[0]
+
+        # Now flush — this is what process_single_index calls after pipeline[i]
+        _flush_filters(pipeline, 0)
+
+        # The artifact should be recorded in the store
+        result = pipeline.filter_artifacts_for_index(0)
+        assert "Artifact" in result
+        assert str(artifact_path).replace(str(artifact_path.name), "") in result["Artifact"][0]
+
+    def test_default_artifacts_returns_empty(self) -> None:
+        """Filters without artifacts() override return empty list."""
+        filt = DoubleFilter()
+        assert filt.artifacts() == []
+
+    def test_pipeline_all_filter_artifacts(self, tmp_path) -> None:
+        """Pipeline.all_filter_artifacts aggregates across indices."""
+        from physicsnemo_curator.run.base import _flush_filters
+
+        filt = ArtifactFilter(output=str(tmp_path / "stats.txt"))
+        source = IntSource(values=[10, 20])
+        sink = CollectSink()
+        pipeline = Pipeline(
+            source=source,
+            filters=[filt],  # ty: ignore[invalid-argument-type]
+            sink=sink,
+            track_metrics=True,
+            db_dir=tmp_path / ".pnc",
+        )
+
+        pipeline[0]
+        _flush_filters(pipeline, 0)
+        pipeline[1]
+        _flush_filters(pipeline, 1)
+
+        result = pipeline.all_filter_artifacts()
+        assert "Artifact" in result
+        assert len(result["Artifact"]) == 2

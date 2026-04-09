@@ -320,6 +320,7 @@ class AtomicStatsFilter(Filter["AtomicData"]):
     def __init__(self, output: str) -> None:
         self._output_path = pathlib.Path(output)
         self._rows: list[_StatsRow] = []
+        self._last_artifacts: list[str] = []
 
     def __call__(self, items: Generator[AtomicData]) -> Generator[AtomicData]:
         """Compute statistics for each item and yield it unchanged.
@@ -362,7 +363,20 @@ class AtomicStatsFilter(Filter["AtomicData"]):
         pq.write_table(table, str(self._output_path))
         path = str(self._output_path)
         self._rows.clear()
+        self._last_artifacts = [path]
         return path
+
+    def artifacts(self) -> list[str]:
+        """Return paths written by the last :meth:`flush` call.
+
+        Returns
+        -------
+        list[str]
+            Paths of files written since the last call, or ``[]``.
+        """
+        paths = self._last_artifacts
+        self._last_artifacts = []
+        return paths
 
     @staticmethod
     def merge(parquet_paths: list[str], output: str) -> str:

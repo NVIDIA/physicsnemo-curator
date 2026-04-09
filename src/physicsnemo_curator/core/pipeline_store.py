@@ -587,6 +587,16 @@ CREATE TABLE IF NOT EXISTS output_files (
     PRIMARY KEY (path, run_id),
     FOREIGN KEY (idx, run_id) REFERENCES index_results (idx, run_id)
 );
+
+CREATE TABLE IF NOT EXISTS filter_artifacts (
+    path         TEXT    NOT NULL,
+    idx          INTEGER NOT NULL,
+    run_id       INTEGER NOT NULL,
+    filter_name  TEXT    NOT NULL,
+    filter_order INTEGER NOT NULL,
+    PRIMARY KEY (path, idx, run_id),
+    FOREIGN KEY (idx, run_id) REFERENCES index_results (idx, run_id)
+);
 """
 
 
@@ -598,9 +608,9 @@ CREATE TABLE IF NOT EXISTS output_files (
 class PipelineStore:
     """SQLite-backed store combining checkpoint tracking, metrics, provenance, and worker progress.
 
-    Manages a single database with five tables: ``pipeline_runs``,
-    ``index_results``, ``stage_metrics``, ``output_files``, and
-    ``workers``.  Supports
+    Manages a single database with six tables: ``pipeline_runs``,
+    ``index_results``, ``stage_metrics``, ``output_files``,
+    ``filter_artifacts``, and ``workers``.  Supports
     checkpoint resumption via config hashing, per-index success/error
     recording, aggregated metrics queries, and live worker progress
     tracking.
@@ -918,6 +928,7 @@ class PipelineStore:
         """
         conn = self._connect()
         try:
+            conn.execute("DELETE FROM filter_artifacts WHERE run_id = ?", (self._run_id,))
             conn.execute("DELETE FROM output_files WHERE run_id = ?", (self._run_id,))
             conn.execute("DELETE FROM stage_metrics WHERE run_id = ?", (self._run_id,))
             conn.execute("DELETE FROM index_results WHERE run_id = ?", (self._run_id,))
@@ -941,6 +952,10 @@ class PipelineStore:
         """
         conn = self._connect()
         try:
+            conn.execute(
+                "DELETE FROM filter_artifacts WHERE idx = ? AND run_id = ?",
+                (index, self._run_id),
+            )
             conn.execute(
                 "DELETE FROM output_files WHERE idx = ? AND run_id = ?",
                 (index, self._run_id),
@@ -1002,6 +1017,91 @@ class PipelineStore:
                 (index, self._run_id),
             ).fetchall()
             return [r[0] for r in rows]
+        finally:
+            conn.close()
+
+    # -- Filter artifact tracking ------------------------------------------------
+
+    def record_filter_artifacts(
+        self,
+        index: int,
+        filter_name: str,
+        filter_order: int,
+        paths: list[str],
+    ) -> None:
+        """Record file artifacts produced by a filter for a given index.
+
+        Parameters
+        ----------
+        index : int
+            Source index that was processed.
+        filter_name : str
+            Human-readable name of the filter.
+        filter_order : int
+            Position of the filter in the pipeline (0-indexed).
+        paths : list[str]
+            File paths produced by the filter for this index.
+        """
+        if not paths:
+            return
+        conn = self._connect()
+        try:
+            for path in paths:
+                conn.execute(
+                    "INSERT OR REPLACE INTO filter_artifacts "
+                    "(path, idx, run_id, filter_name, filter_order) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (path, index, self._run_id, filter_name, filter_order),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def filter_artifacts_for_index(self, index: int) -> dict[str, list[str]]:
+        """Return filter artifact paths for a given source index.
+
+        Parameters
+        ----------
+        index : int
+            Source index to query.
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Mapping of filter name to list of artifact paths.
+        """
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT filter_name, path FROM filter_artifacts "
+                "WHERE idx = ? AND run_id = ? ORDER BY filter_order, path",
+                (index, self._run_id),
+            ).fetchall()
+            result: dict[str, list[str]] = {}
+            for name, path in rows:
+                result.setdefault(name, []).append(path)
+            return result
+        finally:
+            conn.close()
+
+    def all_filter_artifacts(self) -> dict[str, list[str]]:
+        """Return all filter artifact paths grouped by filter name.
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Mapping of filter name to list of all artifact paths.
+        """
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT filter_name, path FROM filter_artifacts WHERE run_id = ? ORDER BY filter_order, idx, path",
+                (self._run_id,),
+            ).fetchall()
+            result: dict[str, list[str]] = {}
+            for name, path in rows:
+                result.setdefault(name, []).append(path)
+            return result
         finally:
             conn.close()
 

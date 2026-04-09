@@ -95,6 +95,7 @@ class MomentsFilter(Filter["xr.DataArray"]):
     def __init__(self, output: str, dims: tuple[str, ...] = ("time",)) -> None:
         self._output_path = pathlib.Path(output)
         self._dims = dims
+        self._last_artifacts: list[str] = []
 
         # Welford accumulators keyed by variable name.
         # Each entry stores: count, mean (M1), M2, M3, min, max
@@ -144,7 +145,20 @@ class MomentsFilter(Filter["xr.DataArray"]):
 
         path = str(self._output_path)
         self._accumulators.clear()
+        self._last_artifacts = [path]
         return path
+
+    def artifacts(self) -> list[str]:
+        """Return paths written by the last :meth:`flush` call.
+
+        Returns
+        -------
+        list[str]
+            Paths of files written since the last call, or ``[]``.
+        """
+        paths = self._last_artifacts
+        self._last_artifacts = []
+        return paths
 
     def _update(self, da: xr.DataArray) -> None:
         """Update accumulators with data from a single DataArray.

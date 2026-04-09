@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 import pytest
 
-from physicsnemo_curator.core.base import Filter, Param, Sink, Source
+from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
 from physicsnemo_curator.core.pipeline_store import (
     IndexMetrics,
     PipelineMetrics,
@@ -595,3 +595,68 @@ class TestOutputFileLookup:
         store.reset_index(0)
         assert store.index_for_path("/a") is None
         assert store.index_for_path("/b") == 1
+
+
+class TestFilterArtifacts:
+    """Tests for filter artifact tracking in PipelineStore."""
+
+    @pytest.fixture()
+    def store(self, tmp_path) -> PipelineStore:
+        """Create a fresh PipelineStore for testing."""
+        pipeline = Pipeline(source=IntSource(values=[1, 2, 3]), track_metrics=False)
+        config = _pipeline_config(pipeline)
+        return PipelineStore(
+            db_path=tmp_path / "test.db",
+            pipeline_config=config,
+            config_hash="filtertest",
+        )
+
+    def test_record_and_query_by_index(self, store) -> None:
+        """record_filter_artifacts stores and retrieves by index."""
+        store.record_success(0, [], 100, 0, None, [])
+        store.record_filter_artifacts(0, "StatsFilter", 0, ["/stats_shard_0.parquet"])
+        result = store.filter_artifacts_for_index(0)
+        assert result == {"StatsFilter": ["/stats_shard_0.parquet"]}
+
+    def test_multiple_filters_same_index(self, store) -> None:
+        """Multiple filters recording artifacts for the same index."""
+        store.record_success(0, [], 100, 0, None, [])
+        store.record_filter_artifacts(0, "StatsFilter", 0, ["/stats_0.pq"])
+        store.record_filter_artifacts(0, "MeanFilter", 1, ["/mean_0.pq"])
+        result = store.filter_artifacts_for_index(0)
+        assert "StatsFilter" in result
+        assert "MeanFilter" in result
+        assert result["StatsFilter"] == ["/stats_0.pq"]
+        assert result["MeanFilter"] == ["/mean_0.pq"]
+
+    def test_all_filter_artifacts(self, store) -> None:
+        """all_filter_artifacts returns artifacts across all indices."""
+        store.record_success(0, [], 100, 0, None, [])
+        store.record_success(1, [], 100, 0, None, [])
+        store.record_filter_artifacts(0, "StatsFilter", 0, ["/stats_0.pq"])
+        store.record_filter_artifacts(1, "StatsFilter", 0, ["/stats_1.pq"])
+        result = store.all_filter_artifacts()
+        assert result == {"StatsFilter": ["/stats_0.pq", "/stats_1.pq"]}
+
+    def test_empty_paths_not_recorded(self, store) -> None:
+        """record_filter_artifacts with empty paths is a no-op."""
+        store.record_success(0, [], 100, 0, None, [])
+        store.record_filter_artifacts(0, "StatsFilter", 0, [])
+        assert store.filter_artifacts_for_index(0) == {}
+
+    def test_reset_clears_artifacts(self, store) -> None:
+        """reset() removes filter_artifacts records."""
+        store.record_success(0, [], 100, 0, None, [])
+        store.record_filter_artifacts(0, "StatsFilter", 0, ["/stats.pq"])
+        store.reset()
+        assert store.all_filter_artifacts() == {}
+
+    def test_reset_index_clears_artifacts(self, store) -> None:
+        """reset_index() removes filter_artifacts for that index only."""
+        store.record_success(0, [], 100, 0, None, [])
+        store.record_success(1, [], 100, 0, None, [])
+        store.record_filter_artifacts(0, "StatsFilter", 0, ["/stats_0.pq"])
+        store.record_filter_artifacts(1, "StatsFilter", 0, ["/stats_1.pq"])
+        store.reset_index(0)
+        assert store.filter_artifacts_for_index(0) == {}
+        assert store.filter_artifacts_for_index(1) == {"StatsFilter": ["/stats_1.pq"]}

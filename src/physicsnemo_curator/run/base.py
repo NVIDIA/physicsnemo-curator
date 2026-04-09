@@ -138,6 +138,10 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
     shard-specific path (``{stem}_shard_{index:06d}{suffix}``) before
     flushing, then restores the original path.
 
+    After flushing, any filter artifacts (reported via
+    :meth:`~Filter.artifacts`) are recorded in the pipeline store when
+    metrics tracking is enabled.
+
     Parameters
     ----------
     pipeline : Pipeline
@@ -148,7 +152,7 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
     """
     import pathlib
 
-    for f in pipeline.filters:
+    for i_f, f in enumerate(pipeline.filters):
         if not (hasattr(f, "flush") and hasattr(f, "_output_path")):
             continue
 
@@ -160,6 +164,13 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
             f.flush()  # ty: ignore[call-non-callable]
         finally:
             f._output_path = original  # noqa: SLF001  # ty: ignore[invalid-assignment]
+
+        # Record filter artifacts if metrics tracking is enabled
+        if pipeline.track_metrics:
+            artifact_paths = f.artifacts()
+            if artifact_paths:
+                store = pipeline._get_store()  # noqa: SLF001
+                store.record_filter_artifacts(index, type(f).name, i_f, artifact_paths)
 
 
 def process_single_index(pipeline: Pipeline[Any], index: int) -> list[str]:
