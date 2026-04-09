@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -306,6 +307,7 @@ class Pipeline[T]:
     track_gpu: bool = False
     db_dir: pathlib.Path | None = None
     _store: PipelineStore | None = field(default=None, init=False, repr=False, compare=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
 
     def filter(self, f: Filter[T]) -> Pipeline[T]:
         """Return a new pipeline with an additional filter appended.
@@ -509,6 +511,9 @@ class Pipeline[T]:
     def _get_store(self) -> PipelineStore:
         """Lazily create and return the pipeline store.
 
+        Thread-safe via a lock to prevent multiple stores from being
+        created when threads race on ``_get_store()``.
+
         Returns
         -------
         PipelineStore
@@ -517,24 +522,29 @@ class Pipeline[T]:
         if self._store is not None:
             return self._store
 
-        import pathlib
+        with self._lock:
+            # Double-check after acquiring lock
+            if self._store is not None:
+                return self._store
 
-        from physicsnemo_curator.core.pipeline_store import (
-            PipelineStore,
-            _config_hash,
-            _pipeline_config,
-        )
+            import pathlib
 
-        config = _pipeline_config(self)
-        hash_ = _config_hash(config)
+            from physicsnemo_curator.core.pipeline_store import (
+                PipelineStore,
+                _config_hash,
+                _pipeline_config,
+            )
 
-        if self.db_dir is not None:
-            db_path = pathlib.Path(self.db_dir) / f"{hash_[:16]}.db"
-        else:
-            db_path = pathlib.Path.cwd() / ".pnc" / f"{hash_[:16]}.db"
+            config = _pipeline_config(self)
+            hash_ = _config_hash(config)
 
-        self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_)
-        return self._store
+            if self.db_dir is not None:
+                db_path = pathlib.Path(self.db_dir) / f"{hash_[:16]}.db"
+            else:
+                db_path = pathlib.Path.cwd() / ".pnc" / f"{hash_[:16]}.db"
+
+            self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_)
+            return self._store
 
     @staticmethod
     def _gpu_setup() -> int | None:
@@ -574,15 +584,16 @@ class Pipeline[T]:
         return torch.cuda.max_memory_allocated() - baseline
 
     def __getstate__(self) -> dict[str, Any]:
-        """Return picklable state, dropping the non-serializable store.
+        """Return picklable state, dropping the non-serializable store and lock.
 
         Returns
         -------
         dict[str, Any]
-            Instance state with ``_store`` set to ``None``.
+            Instance state with ``_store`` and ``_lock`` excluded.
         """
         state = self.__dict__.copy()
         state["_store"] = None
+        state.pop("_lock", None)
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -594,6 +605,7 @@ class Pipeline[T]:
             Pickled state dictionary.
         """
         state["_store"] = None
+        state["_lock"] = threading.Lock()
         self.__dict__.update(state)
 
     # -- Query API (delegates to store) ----------------------------------------

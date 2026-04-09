@@ -606,30 +606,33 @@ class PipelineStore:
         return conn
 
     def _init_db(self) -> None:
-        """Create schema and register or resume a pipeline run by config hash."""
+        """Create schema and register or resume a pipeline run by config hash.
+
+        Uses INSERT OR IGNORE to handle concurrent init from multiple
+        threads/processes safely (avoids TOCTOU race on the UNIQUE
+        ``config_hash`` column).
+        """
         conn = self._connect()
         try:
             conn.executescript(_SCHEMA_SQL)
 
-            # Check for existing run with same config hash
+            # Atomically insert if not exists, then SELECT to get run_id.
+            # This avoids the TOCTOU race where two threads both see no
+            # existing row and both try to INSERT.
+            now = datetime.now(tz=UTC).isoformat()
+            conn.execute(
+                "INSERT OR IGNORE INTO pipeline_runs (config_hash, config_json, started_at) VALUES (?, ?, ?)",
+                (self._config_hash, json.dumps(self._pipeline_config, sort_keys=True, default=str), now),
+            )
+
             row = conn.execute(
-                "SELECT run_id, config_json FROM pipeline_runs WHERE config_hash = ?",
+                "SELECT run_id FROM pipeline_runs WHERE config_hash = ?",
                 (self._config_hash,),
             ).fetchone()
-
-            if row is not None:
-                self._run_id: int = row[0]
-                logger.info("Resuming pipeline run_id=%d (config hash %s...)", self._run_id, self._config_hash[:12])
-            else:
-                now = datetime.now(tz=UTC).isoformat()
-                cur = conn.execute(
-                    "INSERT INTO pipeline_runs (config_hash, config_json, started_at) VALUES (?, ?, ?)",
-                    (self._config_hash, json.dumps(self._pipeline_config, sort_keys=True, default=str), now),
-                )
-                self._run_id = cur.lastrowid  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
-                logger.info("New pipeline run_id=%d (config hash %s...)", self._run_id, self._config_hash[:12])
+            self._run_id: int = row[0]
 
             conn.commit()
+            logger.info("Pipeline run_id=%d (config hash %s...)", self._run_id, self._config_hash[:12])
         finally:
             conn.close()
 

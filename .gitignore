@@ -22,6 +22,9 @@ htmlcov/
 .benchmarks/
 .asv/
 
+# Pipeline metrics databases
+.pnc/
+
 # Sphinx docs build
 docs/_build/
 

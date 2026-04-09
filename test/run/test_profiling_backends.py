@@ -101,7 +101,7 @@ def _make_profiled_pipeline(tmp_path, count: int = 5) -> Pipeline[int]:
     """Create a profiled pipeline with metrics enabled."""
     return Pipeline(
         source=_ProfNumberSource(count),
-        filters=[_ProfDoubleFilter()],  # ty: ignore[invalid-argument-type]
+        filters=[_ProfDoubleFilter()],
         sink=_ProfListSink(),
         track_metrics=True,
         db_dir=tmp_path / ".pnc",

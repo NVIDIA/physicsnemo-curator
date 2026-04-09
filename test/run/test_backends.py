@@ -127,13 +127,17 @@ class StatefulSink(Sink[int]):
 @pytest.fixture
 def simple_pipeline() -> Pipeline[int]:
     """A 5-item pipeline: source → triple → list sink."""
-    return NumberSource(5).filter(TripleFilter()).write(ListSink())
+    p = NumberSource(5).filter(TripleFilter()).write(ListSink())
+    p.track_metrics = False
+    return p
 
 
 @pytest.fixture
 def no_filter_pipeline() -> Pipeline[int]:
     """A 3-item pipeline with no filters."""
-    return NumberSource(3).write(ListSink())
+    p = NumberSource(3).write(ListSink())
+    p.track_metrics = False
+    return p
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +184,7 @@ class TestSequentialBackend:
         """Sequential execution should preserve state in sink."""
         sink = StatefulSink()
         pipeline = NumberSource(3).write(sink)
+        pipeline.track_metrics = False
         run_pipeline(pipeline, n_jobs=1, progress=False)
         # Sequential: sink is shared, call_count should increment
         assert sink.call_count == 3
@@ -216,6 +221,7 @@ class TestThreadPoolBackend:
         """Thread pool shares state (same process)."""
         sink = StatefulSink()
         pipeline = NumberSource(4).write(sink)
+        pipeline.track_metrics = False
         run_pipeline(pipeline, n_jobs=2, backend="thread_pool", progress=False)
         # Thread pool: sink is shared within process
         assert sink.call_count == 4
@@ -249,6 +255,7 @@ class TestProcessPoolBackend:
         """Stateful sink in parent is not mutated by child processes."""
         sink = StatefulSink()
         pipeline = NumberSource(4).write(sink)
+        pipeline.track_metrics = False
         results = run_pipeline(pipeline, n_jobs=2, backend="process_pool", progress=False)
         # Results should still be correct
         assert len(results) == 4
@@ -357,6 +364,7 @@ class TestErrorHandling:
     def test_no_sink_raises(self):
         """Pipeline without sink should raise RuntimeError."""
         pipeline = NumberSource(3).filter(TripleFilter())
+        pipeline.track_metrics = False
         with pytest.raises(RuntimeError, match="no sink"):
             run_pipeline(pipeline)
 
@@ -364,6 +372,7 @@ class TestErrorHandling:
         """n_jobs=1 should force sequential even with different backend."""
         sink = StatefulSink()
         pipeline = NumberSource(3).write(sink)
+        pipeline.track_metrics = False
         # Even with backend="process_pool", n_jobs=1 should use sequential
         run_pipeline(pipeline, n_jobs=1, backend="process_pool", progress=False)
         # Sequential preserves state
