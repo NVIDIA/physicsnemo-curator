@@ -1,27 +1,31 @@
 # Profiling Pipelines
 
-`ProfiledPipeline` is a transparent wrapper around `Pipeline` that collects
-wall-clock time, memory, and (optionally) GPU metrics at whole-pipeline,
-per-index, and per-stage granularity — without requiring any changes to
-your pipeline or backend configuration.
+`Pipeline` includes built-in profiling that collects wall-clock time,
+memory, and (optionally) GPU metrics at whole-pipeline, per-index, and
+per-stage granularity — without requiring any wrappers or separate
+configuration.
+
+Profiling is **enabled by default** via the `track_metrics` field
+(which also enables checkpointing).
 
 ## Quick Start
 
 ```python
-from physicsnemo_curator import Pipeline, ProfiledPipeline, run_pipeline
+from physicsnemo_curator import Pipeline, run_pipeline
 
-# Wrap any existing pipeline
-profiled = ProfiledPipeline(pipeline)
+# Pipeline with default profiling (track_metrics=True)
+pipeline = (
+    MySource(data_dir="/data/")
+    .filter(MyFilter())
+    .write(MySink(output_dir="/output/"))
+)
 
 # Run exactly as before — works with all backends
-results = run_pipeline(profiled, n_jobs=4, backend="process_pool")
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 
 # Inspect metrics
-metrics = profiled.metrics
+metrics = pipeline.metrics
 metrics.to_console()
-
-# Clean up temp files when done
-profiled.cleanup()
 ```
 
 ## Metrics Granularity
@@ -37,8 +41,8 @@ Profiling collects data at three levels:
 ### Per-Stage Timing
 
 The pipeline chain `source → filter₁ → filter₂ → … → sink` uses lazy
-generators.  `ProfiledPipeline` wraps each stage's generator with an
-internal timer to attribute time accurately using chain subtraction:
+generators.  Profiling wraps each stage's generator with an internal
+timer to attribute time accurately using chain subtraction:
 
 - **Source time** = time spent yielding items from the source
 - **Filter N time** = time spent in filter N's own logic (excluding upstream)
@@ -51,12 +55,26 @@ Python-level allocations accurately but does not cover C-extension or
 Rust-extension memory. Per-stage memory is not tracked because chained
 lazy generators make per-stage attribution unreliable.
 
-### GPU Memory Tracking
-
-To track GPU memory, pass `track_gpu=True`:
+Disable memory tracking (to avoid `tracemalloc` overhead):
 
 ```python
-profiled = ProfiledPipeline(pipeline, track_gpu=True)
+pipeline = Pipeline(
+    source=MySource(),
+    sink=MySink(),
+    track_memory=False,  # disable tracemalloc
+)
+```
+
+### GPU Memory Tracking
+
+To track GPU memory, set `track_gpu=True`:
+
+```python
+pipeline = Pipeline(
+    source=MySource(),
+    sink=MySink(),
+    track_gpu=True,
+)
 ```
 
 This uses `torch.cuda.max_memory_allocated()` to capture peak GPU memory
@@ -93,7 +111,7 @@ and per-stage timing.
 ### Programmatic Access
 
 ```python
-info = metrics.summary()      # dict
+info = metrics.summary()
 info["total_wall_time_ns"]    # int
 info["mean_index_time_ns"]    # float
 info["indices"][0]["stages"]  # list of stage dicts
@@ -101,33 +119,40 @@ info["indices"][0]["stages"]  # list of stage dicts
 
 ## Using with Parallel Backends
 
-`ProfiledPipeline` works with **all** backends — sequential, thread_pool,
+Profiling works with **all** backends — sequential, thread_pool,
 process_pool, loky, dask, and prefect — without any backend modifications.
 
-For multiprocess backends (`process_pool`, `loky`, `dask`, `prefect`),
-metrics are serialized to a temporary directory as JSON files. Each worker
-process writes its own index metrics to a uniquely-named file. After
-`run_pipeline()` returns, call `profiled.metrics` (or
-`profiled.collect_metrics()`) to read and aggregate all results.
+Metrics are stored in a SQLite database using WAL mode, which supports
+safe concurrent writes from multiple threads and processes.  Each worker
+records its metrics independently and the `pipeline.metrics` property
+aggregates them on demand.
 
 ```python
-profiled = ProfiledPipeline(pipeline)
-results = run_pipeline(profiled, n_jobs=8, backend="process_pool")
+results = run_pipeline(pipeline, n_jobs=8, backend="process_pool")
 
-# Reads all temp files and aggregates
-metrics = profiled.metrics
+# Aggregates metrics from all workers
+metrics = pipeline.metrics
 metrics.to_console()
+```
 
-# Clean up temp directory
-profiled.cleanup()
+## Disabling Profiling
+
+Set `track_metrics=False` to disable all profiling and checkpointing:
+
+```python
+pipeline = Pipeline(
+    source=MySource(),
+    sink=MySink(),
+    track_metrics=False,
+)
 ```
 
 ## Full Example
 
 ```python
-from physicsnemo_curator import Pipeline, ProfiledPipeline, run_pipeline
+from physicsnemo_curator import Pipeline, run_pipeline
 
-# Build a pipeline
+# Build a pipeline (profiling is on by default)
 pipeline = (
     MySource(path="/data/cfd/")
     .filter(NormalizeFilter())
@@ -135,12 +160,14 @@ pipeline = (
     .write(MeshSink(output_dir="/output/"))
 )
 
-# Profile it
-profiled = ProfiledPipeline(pipeline, track_gpu=True)
-results = run_pipeline(profiled, n_jobs=4, backend="process_pool")
+# Enable GPU tracking
+pipeline.track_gpu = True
+
+# Run
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 
 # Analyze
-metrics = profiled.metrics
+metrics = pipeline.metrics
 metrics.to_console()             # Quick visual summary
 metrics.to_json("profile.json")  # Detailed JSON for analysis
 metrics.to_csv("profile.csv")    # CSV for spreadsheet
@@ -150,31 +177,18 @@ summary = metrics.summary()
 print(f"Processed {summary['num_indices']} indices")
 print(f"Total time: {summary['total_wall_time_ns'] / 1e9:.2f}s")
 print(f"Peak memory: {summary['total_peak_memory_bytes'] / 1e6:.1f} MB")
-
-# Clean up
-profiled.cleanup()
 ```
+
+## Pipeline Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `track_metrics` | `bool` | `True` | Enable timing, checkpointing, and metrics |
+| `track_memory` | `bool` | `True` | Enable `tracemalloc` memory tracking |
+| `track_gpu` | `bool` | `False` | Enable GPU memory tracking via PyTorch |
+| `db_dir` | `Path \| None` | `None` | Override database directory (default: `.pnc/`) |
 
 ## API Reference
-
-### `ProfiledPipeline`
-
-```python
-class ProfiledPipeline(Generic[T]):
-    def __init__(self, pipeline: Pipeline[T], *, track_gpu: bool = False) -> None: ...
-
-    # Duck-type compatibility
-    source: Source[T]          # property
-    filters: list[Filter[T]]  # property
-    sink: Sink[T] | None      # property
-    def __len__(self) -> int: ...
-    def __getitem__(self, index: int) -> list[str]: ...
-
-    # Metrics
-    def collect_metrics(self) -> PipelineMetrics: ...
-    metrics: PipelineMetrics   # property (shortcut for collect_metrics)
-    def cleanup(self) -> None: ...
-```
 
 ### `PipelineMetrics`
 

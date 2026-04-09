@@ -90,7 +90,7 @@ patterns (Gamma et al., 1994) reinforce the framework:
 | Pattern | Where used | Purpose |
 |---------|-----------|---------|
 | **Strategy** | `RunBackend` and its six variants | Decouple definition from execution |
-| **Decorator** | `ProfiledPipeline` | Add instrumentation transparently |
+| **Built-in Metrics** | `Pipeline.track_metrics` | Unified checkpointing and profiling |
 | **Plugin** | `Registry` + domain submodules | Domain-agnostic core; register at import |
 | **Protocol** | `FileStore` | Decouple discovery from reading |
 

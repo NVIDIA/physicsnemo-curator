@@ -5,61 +5,84 @@
 
 # Checkpointing Pipelines
 
-`CheckpointedPipeline` is a transparent wrapper around `Pipeline` that
-records completed indices in a SQLite database.  On restart, indices that
-already finished are skipped — their cached output paths are returned
-immediately without re-executing the source, filters, or sink.
+`Pipeline` includes built-in checkpointing that records completed indices
+in a SQLite database.  On restart, indices that already finished are
+skipped — their cached output paths are returned immediately without
+re-executing the source, filters, or sink.
+
+Checkpointing is **enabled by default** via the `track_metrics` field
+(which also enables timing and memory profiling).
 
 ## Quick Start
 
 ```python
-from physicsnemo_curator import Pipeline, CheckpointedPipeline, run_pipeline
+from physicsnemo_curator import Pipeline, run_pipeline
 
-# Wrap any existing pipeline
-cp = CheckpointedPipeline(pipeline, db_path="run.checkpoint.db")
+# Pipeline with default checkpointing (track_metrics=True)
+pipeline = (
+    MySource(data_dir="/data/")
+    .filter(MyFilter())
+    .write(MySink(output_dir="/output/"))
+)
 
-# Run exactly as before — works with all backends
-results = run_pipeline(cp, n_jobs=4, backend="process_pool")
+# Run — works with all backends
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 
 # Interrupt and restart — completed indices are skipped
-results = run_pipeline(cp, n_jobs=4, backend="process_pool")
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 
 # Inspect progress
-print(cp.summary())
+print(pipeline.summary())
 ```
 
 ## How It Works
 
-`CheckpointedPipeline` is duck-type compatible with `Pipeline` — it
-exposes `source`, `filters`, `sink`, `__len__`, and `__getitem__`.  This
-means it works with **all** backends (sequential, thread\_pool,
-process\_pool, loky, dask, prefect) without any modifications.
+When `track_metrics=True` (the default), each `pipeline[index]` call:
 
-On each `__getitem__` call:
+1. **Checks the database** for a prior completion record for this index.
+2. If found, **returns the cached paths** immediately (no computation).
+3. If not found, **runs the pipeline** and records timing, memory, and
+   output paths to SQLite.
+4. If the pipeline **raises an exception**, records the error and re-raises.
 
-1. **Check the database** for a prior completion record for this index.
-2. If found, **return the cached paths** immediately (no computation).
-3. If not found, **run the inner pipeline** and record the result.
-4. If the inner pipeline **raises an exception**, record the error and
-   re-raise.
+## Controlling the Database Location
+
+By default, the database is stored at `.pnc/{config_hash[:16]}.db`
+relative to the current working directory.  Each unique pipeline
+configuration gets its own database file (based on its SHA-256 hash).
+
+Override the directory with `db_dir`:
+
+```python
+from pathlib import Path
+
+pipeline = Pipeline(
+    source=MySource(data_dir="/data/"),
+    filters=[MyFilter()],
+    sink=MySink(output_dir="/output/"),
+    db_dir=Path("/output/checkpoints"),
+)
+```
+
+## Disabling Checkpointing
+
+Set `track_metrics=False` to disable all checkpointing and metrics:
+
+```python
+pipeline = Pipeline(
+    source=MySource(data_dir="/data/"),
+    filters=[MyFilter()],
+    sink=MySink(output_dir="/output/"),
+    track_metrics=False,
+)
+```
 
 ## Provenance Tracking
 
 The checkpoint stores full pipeline provenance — source class, filter
 parameters, sink configuration — as a JSON document with a SHA-256 hash.
-When you resume from a checkpoint with a different pipeline configuration,
-a warning is logged but processing continues:
-
-```text
-WARNING:physicsnemo_curator.core.checkpoint:Pipeline config has changed
-since the original checkpoint (stored hash a1b2c3d4e5f6…, current hash
-9f8e7d6c5b4a…). Resuming anyway — completed indices from prior config
-will be kept.
-```
-
-This **warn-only** strategy avoids blocking restarts for minor config
-changes (e.g. adjusting filter parameters for new indices) while still
-alerting you to potential inconsistencies.
+Each unique configuration gets its own database file, so different
+pipelines never collide.
 
 ## Error Handling
 
@@ -68,63 +91,48 @@ marked as completed.  On the next run they will be retried automatically:
 
 ```python
 # First run — index 42 fails
-results = run_pipeline(cp, n_jobs=4)
+results = run_pipeline(pipeline, n_jobs=4)
 
 # Check what failed
-print(cp.failed_indices)
+print(pipeline.failed_indices)
 # {42: "RuntimeError: corrupt file at /data/sample_42.lmdb"}
 
 # Fix the underlying issue, then retry — only index 42 runs
-results = run_pipeline(cp, n_jobs=4)
+results = run_pipeline(pipeline, n_jobs=4)
 ```
 
 ## Query API
 
 | Property / Method | Returns | Description |
 |---|---|---|
-| `cp.completed_indices` | `set[int]` | Successfully completed indices |
-| `cp.failed_indices` | `dict[int, str]` | Failed indices with error messages |
-| `cp.remaining_indices` | `list[int]` | Indices not yet completed (sorted) |
-| `cp.summary()` | `dict` | Total, completed, failed, remaining counts + elapsed time |
-| `cp.db_path` | `pathlib.Path` | Path to the SQLite database file |
-| `cp.config_hash` | `str` | SHA-256 hash of the current pipeline config |
-| `cp.reset()` | `None` | Clear all records and start fresh |
+| `pipeline.completed_indices` | `set[int]` | Successfully completed indices |
+| `pipeline.failed_indices` | `dict[int, str]` | Failed indices with error messages |
+| `pipeline.remaining_indices()` | `list[int]` | Indices not yet completed (sorted) |
+| `pipeline.summary()` | `dict` | Total, completed, failed, remaining counts + elapsed time |
+| `pipeline.metrics` | `PipelineMetrics` | Full timing and memory metrics |
+| `pipeline.reset()` | `None` | Clear all records and start fresh |
+| `pipeline.reset_index(i)` | `None` | Re-run a single index |
 
 ### Summary Example
 
 ```python
->>> cp.summary()
+>>> pipeline.summary()
 {'total': 80, 'completed': 65, 'failed': 2, 'remaining': 13,
- 'config_hash': 'a1b2c3...', 'db_path': 'run.checkpoint.db',
- 'total_elapsed_s': 3847.5}
+ 'errors': 2, 'avg_time_ms': 48.2}
 ```
 
-## Composing with ProfiledPipeline
+## Combining with Profiling
 
-`CheckpointedPipeline` and `ProfiledPipeline` can be composed.  Wrap the
-profiled pipeline with the checkpoint to get both profiling and
-resumability:
-
-```python
-from physicsnemo_curator import ProfiledPipeline, CheckpointedPipeline
-
-profiled = ProfiledPipeline(pipeline, track_gpu=True)
-cp = CheckpointedPipeline(profiled, db_path="run.checkpoint.db")
-
-results = run_pipeline(cp, n_jobs=4)
-
-# Profiling metrics (only for indices that actually ran)
-profiled.metrics.to_console()
-
-# Checkpoint progress
-print(cp.summary())
-```
+Checkpointing and profiling are unified — both are controlled by
+`track_metrics`.  When enabled, you get both checkpoint/resume and
+per-index timing and memory metrics automatically.  See
+[Profiling](profiling.md) for details on accessing metrics.
 
 ## SQLite Database
 
-The checkpoint uses a single SQLite database in WAL (Write-Ahead Logging)
+The checkpoint uses a SQLite database in WAL (Write-Ahead Logging)
 mode for safe concurrent writes from multiple threads or processes.  The
-database contains two tables:
+database contains three tables:
 
 **`pipeline_runs`** — one row per unique pipeline configuration:
 
@@ -135,72 +143,56 @@ database contains two tables:
 | `config_json` | TEXT | Full pipeline configuration |
 | `started_at` | TEXT | ISO-8601 timestamp |
 
-**`completed_indices`** — one row per processed index:
+**`index_results`** — one row per processed index:
 
 | Column | Type | Description |
 |---|---|---|
-| `idx` | INTEGER | Source index (primary key) |
+| `idx` | INTEGER | Source index |
 | `run_id` | INTEGER | Foreign key to `pipeline_runs` |
+| `status` | TEXT | `completed` or `error` |
 | `output_paths` | TEXT | JSON array of output file paths |
 | `completed_at` | TEXT | ISO-8601 timestamp |
-| `elapsed_ns` | INTEGER | Wall-clock time in nanoseconds |
+| `wall_time_ns` | INTEGER | Wall-clock time in nanoseconds |
+| `peak_memory_bytes` | INTEGER | Peak Python memory (bytes) |
+| `gpu_memory_bytes` | INTEGER | Peak GPU memory (bytes, or NULL) |
 | `error` | TEXT | Error message (NULL for success) |
+
+**`stage_metrics`** — per-stage timing for each index:
+
+| Column | Type | Description |
+|---|---|---|
+| `idx` | INTEGER | Source index |
+| `run_id` | INTEGER | Foreign key |
+| `stage_order` | INTEGER | 0 = source, 1..N = filters, N+1 = sink |
+| `stage_name` | TEXT | Stage class name |
+| `wall_time_ns` | INTEGER | Wall-clock time in nanoseconds |
 
 ## Full Example
 
 ```python
-from physicsnemo_curator import CheckpointedPipeline, run_pipeline
+from pathlib import Path
+from physicsnemo_curator import Pipeline, run_pipeline
 from physicsnemo_curator.atm import ASELMDBSource, AtomicDataZarrSink
 
-# Build pipeline
+# Build pipeline — checkpointing is on by default
 pipeline = (
     ASELMDBSource(data_dir="/data/val/")
     .write(AtomicDataZarrSink(output_path="/output/dataset.zarr"))
 )
 
-# Wrap with checkpointing
-cp = CheckpointedPipeline(pipeline, db_path="/output/etl.checkpoint.db")
+# Optionally control DB location
+pipeline.db_dir = Path("/output/checkpoints")
 
 # Run — can be interrupted and resumed
-results = run_pipeline(cp, n_jobs=8, backend="process_pool")
+results = run_pipeline(pipeline, n_jobs=8, backend="process_pool")
 
 # Check progress
-s = cp.summary()
-print(f"Completed: {s['completed']}/{s['total']} "
-      f"({s['total_elapsed_s']:.1f}s elapsed)")
+s = pipeline.summary()
+print(f"Completed: {s['completed']}/{s['total']}")
 
 if s['failed'] > 0:
-    print(f"Failed indices: {list(cp.failed_indices.keys())}")
+    print(f"Failed indices: {list(pipeline.failed_indices.keys())}")
 
 # Start fresh if needed
-# cp.reset()
-```
-
-## API Reference
-
-### `CheckpointedPipeline`
-
-```python
-class CheckpointedPipeline(Generic[T]):
-    def __init__(
-        self,
-        pipeline: Pipeline[T] | ProfiledPipeline[T] | Any,
-        db_path: str | pathlib.Path,
-    ) -> None: ...
-
-    # Duck-type compatibility
-    source: Source[T]          # property
-    filters: list[Filter[T]]  # property
-    sink: Sink[T] | None      # property
-    def __len__(self) -> int: ...
-    def __getitem__(self, index: int) -> list[str]: ...
-
-    # Query API
-    completed_indices: set[int]       # property
-    failed_indices: dict[int, str]    # property
-    remaining_indices: list[int]      # property
-    db_path: pathlib.Path             # property
-    config_hash: str                  # property
-    def summary(self) -> dict: ...
-    def reset(self) -> None: ...
+# pipeline.reset()
 ```
