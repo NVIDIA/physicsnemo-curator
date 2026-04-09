@@ -527,6 +527,12 @@ class Pipeline[T]:
         Thread-safe via a lock to prevent multiple stores from being
         created when threads race on ``_get_store()``.
 
+        The database path is resolved in priority order:
+
+        1. ``db_dir`` field (explicit per-pipeline override)
+        2. ``PSNC_DB_DIR`` environment variable
+        3. ``{cwd}/.pnc/`` (default fallback)
+
         Returns
         -------
         PipelineStore
@@ -540,6 +546,7 @@ class Pipeline[T]:
             if self._store is not None:
                 return self._store
 
+            import os
             import pathlib
 
             from physicsnemo_curator.core.pipeline_store import (
@@ -553,6 +560,8 @@ class Pipeline[T]:
 
             if self.db_dir is not None:
                 db_path = pathlib.Path(self.db_dir) / f"{hash_[:16]}.db"
+            elif (env_dir := os.environ.get("PSNC_DB_DIR")) is not None:
+                db_path = pathlib.Path(env_dir) / f"{hash_[:16]}.db"
             else:
                 db_path = pathlib.Path.cwd() / ".pnc" / f"{hash_[:16]}.db"
 

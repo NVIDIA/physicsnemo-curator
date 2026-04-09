@@ -516,3 +516,55 @@ class TestPipelinePickle:
         restored = pickle.loads(data)  # noqa: S301
 
         assert restored._store is None
+
+
+# ---------------------------------------------------------------------------
+# PSNC_DB_DIR environment variable tests
+# ---------------------------------------------------------------------------
+
+
+class TestPsncDbDirEnvVar:
+    """Tests for PSNC_DB_DIR environment variable support."""
+
+    def test_env_var_sets_db_dir(self, tmp_path, monkeypatch):
+        """PSNC_DB_DIR env var is used when db_dir is None."""
+        env_dir = tmp_path / "env_db"
+        env_dir.mkdir()
+        monkeypatch.setenv("PSNC_DB_DIR", str(env_dir))
+
+        source = IntSource(values=[1, 2])
+        sink = CollectSink()
+        pipeline = Pipeline(
+            source=source,
+            filters=[DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=sink,
+            track_metrics=True,
+        )
+        pipeline[0]
+
+        # DB should be inside env_dir, not CWD/.pnc/
+        db_files = list(env_dir.glob("*.db"))
+        assert len(db_files) == 1
+
+    def test_explicit_db_dir_overrides_env_var(self, tmp_path, monkeypatch):
+        """Explicit db_dir takes precedence over PSNC_DB_DIR."""
+        env_dir = tmp_path / "env_db"
+        env_dir.mkdir()
+        explicit_dir = tmp_path / "explicit_db"
+        explicit_dir.mkdir()
+        monkeypatch.setenv("PSNC_DB_DIR", str(env_dir))
+
+        source = IntSource(values=[1, 2])
+        sink = CollectSink()
+        pipeline = Pipeline(
+            source=source,
+            filters=[DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=sink,
+            track_metrics=True,
+            db_dir=explicit_dir,
+        )
+        pipeline[0]
+
+        # DB should be inside explicit_dir, NOT env_dir
+        assert len(list(explicit_dir.glob("*.db"))) == 1
+        assert len(list(env_dir.glob("*.db"))) == 0
