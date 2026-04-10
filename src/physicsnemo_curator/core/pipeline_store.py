@@ -652,6 +652,53 @@ class PipelineStore:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
+    @classmethod
+    def from_db(cls, db_path: str | pathlib.Path) -> PipelineStore:
+        """Open an existing pipeline database in read-only mode.
+
+        This is the entry point for the dashboard and post-hoc analysis
+        tools.  It reads the ``pipeline_runs`` table to recover
+        ``config_hash`` and ``pipeline_config``, so the caller does not
+        need to know them.
+
+        Parameters
+        ----------
+        db_path : str or pathlib.Path
+            Path to an existing ``.db`` file produced by a pipeline run.
+
+        Returns
+        -------
+        PipelineStore
+            A store instance backed by the existing database.
+
+        Raises
+        ------
+        FileNotFoundError
+            If *db_path* does not exist.
+        ValueError
+            If the database contains no pipeline run records.
+        """
+        db_path = pathlib.Path(db_path)
+        if not db_path.exists():
+            msg = f"Database file not found: {db_path}"
+            raise FileNotFoundError(msg)
+
+        conn = sqlite3.connect(str(db_path), timeout=30)
+        try:
+            row = conn.execute(
+                "SELECT config_hash, config_json FROM pipeline_runs ORDER BY run_id DESC LIMIT 1",
+            ).fetchone()
+        finally:
+            conn.close()
+
+        if row is None:
+            msg = f"No pipeline run records found in {db_path}"
+            raise ValueError(msg)
+
+        config_hash, config_json = row
+        pipeline_config = json.loads(config_json)
+        return cls(db_path, pipeline_config, config_hash)
+
     def _connect(self) -> sqlite3.Connection:
         """Open a WAL-mode connection to the database.
 

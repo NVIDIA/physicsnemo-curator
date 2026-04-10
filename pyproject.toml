@@ -81,6 +81,13 @@ atm = [
     "torch",
     "pyarrow",
 ]
+dashboard = [
+    "panel>=1.3",
+    "holoviews>=1.18",
+    "bokeh>=3.3",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+]
 
 [project.scripts]
 curator = "physicsnemo_curator.wiz:main"

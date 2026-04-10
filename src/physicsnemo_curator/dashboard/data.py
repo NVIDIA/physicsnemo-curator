@@ -1,0 +1,258 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Data layer wrapping PipelineStore for the dashboard.
+
+:class:`DashboardStore` is a ``param.Parameterized`` adapter that
+queries the SQLite database and exposes results as pandas DataFrames
+suitable for Panel reactive updates.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pandas as pd
+import param
+
+from physicsnemo_curator.core.pipeline_store import PipelineStore
+
+
+class DashboardStore(param.Parameterized):
+    """Reactive wrapper around :class:`PipelineStore`.
+
+    Provides pandas DataFrame views of pipeline metrics and supports
+    auto-refresh for live monitoring of running pipelines.
+
+    Parameters
+    ----------
+    db_path : str
+        Path to the PipelineStore SQLite database.
+    """
+
+    refresh = param.Event(doc="Trigger a data refresh from the database.")
+    refresh_interval = param.Integer(
+        default=5,
+        bounds=(1, 60),
+        doc="Auto-refresh interval in seconds.",
+    )
+    selected_index = param.Integer(
+        default=-1,
+        allow_None=True,
+        doc="Currently selected pipeline index (-1 = none).",
+    )
+
+    def __init__(self, db_path: str, **kwargs: Any) -> None:
+        """Initialize the dashboard store.
+
+        Parameters
+        ----------
+        db_path : str
+            Path to an existing PipelineStore SQLite database.
+        **kwargs : Any
+            Additional param keyword arguments.
+        """
+        super().__init__(**kwargs)
+        self._store = PipelineStore.from_db(db_path)
+        self._cache: dict[str, Any] = {}
+
+    def _invalidate(self) -> None:
+        """Clear cached DataFrames so the next access re-queries."""
+        self._cache.clear()
+
+    @param.depends("refresh", watch=True)
+    def _on_refresh(self) -> None:
+        """Invalidate cache when refresh is triggered."""
+        self._invalidate()
+
+    @property
+    def pipeline_config(self) -> dict:
+        """Return the pipeline configuration dictionary.
+
+        Returns
+        -------
+        dict
+            Pipeline configuration as stored in the database.
+        """
+        return self._store._pipeline_config  # noqa: SLF001
+
+    @property
+    def index_df(self) -> pd.DataFrame:
+        """DataFrame of per-index results.
+
+        Columns: ``index``, ``status``, ``wall_time_s``,
+        ``peak_memory_mb``, ``gpu_memory_mb``, ``error``.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per processed index.
+        """
+        if "index_df" not in self._cache:
+            metrics = self._store.metrics()
+            completed = self._store.completed_indices()
+            failed = self._store.failed_indices()
+
+            rows = []
+            for im in metrics.indices:
+                rows.append(
+                    {
+                        "index": im.index,
+                        "status": "completed" if im.index in completed else "error",
+                        "wall_time_s": im.wall_time_ns / 1e9,
+                        "peak_memory_mb": im.peak_memory_bytes / (1024 * 1024),
+                        "gpu_memory_mb": (im.gpu_memory_bytes or 0) / (1024 * 1024),
+                        "error": failed.get(im.index, ""),
+                    }
+                )
+
+            # Add failed indices not already in metrics
+            for idx, err in failed.items():
+                if not any(r["index"] == idx for r in rows):
+                    rows.append(
+                        {
+                            "index": idx,
+                            "status": "error",
+                            "wall_time_s": 0.0,
+                            "peak_memory_mb": 0.0,
+                            "gpu_memory_mb": 0.0,
+                            "error": err,
+                        }
+                    )
+
+            df = (
+                pd.DataFrame(rows)
+                if rows
+                else pd.DataFrame(
+                    columns=["index", "status", "wall_time_s", "peak_memory_mb", "gpu_memory_mb", "error"]  # ty: ignore[invalid-argument-type]
+                )
+            )
+            self._cache["index_df"] = df.sort_values("index").reset_index(drop=True)
+        return self._cache["index_df"]
+
+    @property
+    def stage_df(self) -> pd.DataFrame:
+        """DataFrame of per-stage timing for all indices.
+
+        Columns: ``index``, ``stage_name``, ``stage_order``, ``wall_time_s``.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per (index, stage) combination.
+        """
+        if "stage_df" not in self._cache:
+            metrics = self._store.metrics()
+            rows = []
+            for im in metrics.indices:
+                for order, sm in enumerate(im.stages):
+                    rows.append(
+                        {
+                            "index": im.index,
+                            "stage_name": sm.name,
+                            "stage_order": order,
+                            "wall_time_s": sm.wall_time_ns / 1e9,
+                        }
+                    )
+            df = (
+                pd.DataFrame(rows)
+                if rows
+                else pd.DataFrame(columns=["index", "stage_name", "stage_order", "wall_time_s"])  # ty: ignore[invalid-argument-type]
+            )
+            self._cache["stage_df"] = df
+        return self._cache["stage_df"]
+
+    @property
+    def summary(self) -> dict[str, Any]:
+        """Summary of the pipeline run state.
+
+        Returns
+        -------
+        dict[str, Any]
+            Keys: ``total``, ``completed``, ``failed``, ``remaining``,
+            ``elapsed_s``, ``config_hash``, ``db_path``, ``workers``.
+        """
+        if "summary" not in self._cache:
+            # Use source length from config if available, fall back to metrics
+            total = len(self._store.completed_indices()) + len(self._store.failed_indices())
+            remaining = self._store.remaining_indices(total)
+            total += len(remaining)
+            self._cache["summary"] = self._store.summary(total)
+        return self._cache["summary"]
+
+    @property
+    def workers_df(self) -> pd.DataFrame:
+        """DataFrame of registered workers.
+
+        Columns: ``worker_id``, ``pid``, ``hostname``, ``started_at``,
+        ``last_heartbeat``, ``current_index``.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per worker.
+        """
+        if "workers_df" not in self._cache:
+            workers = self._store.active_workers()
+            df = (
+                pd.DataFrame(workers)
+                if workers
+                else pd.DataFrame(
+                    columns=["worker_id", "pid", "hostname", "started_at", "last_heartbeat", "current_index"]  # ty: ignore[invalid-argument-type]
+                )
+            )
+            self._cache["workers_df"] = df
+        return self._cache["workers_df"]
+
+    def output_paths(self, index: int) -> list[str]:
+        """Return output file paths for a given index.
+
+        Parameters
+        ----------
+        index : int
+            Pipeline source index.
+
+        Returns
+        -------
+        list[str]
+            Ordered list of output file paths.
+        """
+        return self._store.output_paths_for_index(index)
+
+    def artifacts(self, index: int) -> dict[str, list[str]]:
+        """Return filter artifacts for a given index.
+
+        Parameters
+        ----------
+        index : int
+            Pipeline source index.
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Mapping of filter name to list of artifact paths.
+        """
+        return self._store.filter_artifacts_for_index(index)
+
+    def all_artifacts(self) -> dict[str, list[str]]:
+        """Return all filter artifacts across all indices.
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Mapping of filter name to list of all artifact paths.
+        """
+        return self._store.all_filter_artifacts()

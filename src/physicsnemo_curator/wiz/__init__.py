@@ -14,10 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Wizard entry point for PhysicsNeMo Curator.
+"""CLI entry point for PhysicsNeMo Curator.
 
-Run ``curator`` to launch the interactive pipeline wizard.  Requires the
-``curator[wiz]`` extra (click, questionary, rich).
+Run ``curator`` to launch the interactive pipeline wizard (default).
+Run ``curator dashboard <db_path>`` to open the metrics dashboard.
+
+Requires the ``curator[wiz]`` extra (click, questionary, rich).
 """
 
 from __future__ import annotations
@@ -31,8 +33,27 @@ from physicsnemo_curator.wiz.interactive import run_interactive
 console = Console()
 
 
-@click.command()
+@click.group(invoke_without_command=True)
 @click.version_option(package_name="physicsnemo-curator")
-def main() -> None:
-    """PhysicsNeMo Curator — interactive ETL pipeline wizard."""
+@click.pass_context
+def main(ctx: click.Context) -> None:
+    """PhysicsNeMo Curator — interactive ETL pipeline toolkit."""
+    if ctx.invoked_subcommand is None:
+        run_interactive()
+
+
+@main.command("wizard")
+def wizard_cmd() -> None:
+    """Launch the interactive pipeline wizard."""
     run_interactive()
+
+
+# Lazily register the dashboard subcommand so that importing
+# physicsnemo_curator.dashboard (which requires panel) is deferred
+# until the user actually invokes the command.
+try:
+    from physicsnemo_curator.dashboard._cli import dashboard_cmd
+
+    main.add_command(dashboard_cmd)
+except ImportError:
+    pass
