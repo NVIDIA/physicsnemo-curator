@@ -41,11 +41,20 @@ dashboard
 cli
 ```
 
+## Extending / Customization
+
+```{toctree}
+:maxdepth: 2
+
+../extending/index
+```
+
 ## Developer Guide
 
 ```{toctree}
 :maxdepth: 1
 
-../developer-guide/extending
+../developer-guide/style
 ../developer-guide/benchmarking
+../developer-guide/agents
 ```
