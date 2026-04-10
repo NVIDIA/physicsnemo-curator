@@ -35,6 +35,9 @@ from physicsnemo_curator.mesh.filters.quality import (  # noqa: E402
     MeshQualityFilter,
     _aspect_ratios,
     _equiangle_skewness,
+    _scaled_jacobian,
+    _tet_aspect_ratios,
+    _tetrahedron_dihedral_angles,
     _triangle_angles,
 )
 
@@ -142,6 +145,84 @@ def _gen_meshes(*meshes: Mesh) -> Generator[Mesh]:
         Each mesh in order.
     """
     yield from meshes
+
+
+def _make_regular_tet_mesh() -> Mesh:
+    """Create a mesh with a single regular tetrahedron.
+
+    Vertices are alternating corners of a unit cube, ordered so that the
+    scalar triple product is positive (right-handed orientation).
+
+    Returns
+    -------
+    Mesh
+        A mesh with one regular tetrahedron inscribed in a cube.
+    """
+    from physicsnemo.mesh import Mesh
+
+    # Regular tetrahedron: alternating vertices of a unit cube,
+    # reordered for positive orientation (det > 0).
+    pts = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 1.0],
+        ],
+        dtype=torch.float32,
+    )
+    cells = torch.tensor([[0, 1, 2, 3]], dtype=torch.int64)
+    return Mesh(points=pts, cells=cells)
+
+
+def _make_degenerate_tet_mesh() -> Mesh:
+    """Create a mesh with a degenerate (coplanar) tetrahedron.
+
+    Returns
+    -------
+    Mesh
+        A mesh with one degenerate tetrahedron (all points in the XY-plane).
+    """
+    from physicsnemo.mesh import Mesh
+
+    pts = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.5, 0.5, 0.0],  # Coplanar with the other three
+        ],
+        dtype=torch.float32,
+    )
+    cells = torch.tensor([[0, 1, 2, 3]], dtype=torch.int64)
+    return Mesh(points=pts, cells=cells)
+
+
+def _make_inverted_tet_mesh() -> Mesh:
+    """Create a mesh with one inverted tetrahedron.
+
+    Swapping two vertices flips the orientation, giving a negative
+    signed volume and thus a negative scaled Jacobian.
+
+    Returns
+    -------
+    Mesh
+        A mesh with one inverted tetrahedron.
+    """
+    from physicsnemo.mesh import Mesh
+
+    # Same regular tet but v1/v2 swapped → negative orientation
+    pts = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],  # was v2
+            [1.0, 0.0, 1.0],  # was v1
+            [0.0, 1.0, 1.0],
+        ],
+        dtype=torch.float32,
+    )
+    cells = torch.tensor([[0, 1, 2, 3]], dtype=torch.int64)
+    return Mesh(points=pts, cells=cells)
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +425,8 @@ class TestMeshQualityFilterGeometry:
             output=str(tmp_path / "q.parquet"),
             check_nan=False,
             check_geometry=False,
+            check_volume=False,
+            check_jacobian=False,
         )
         list(filt(_gen_meshes(mesh)))
         path = filt.flush()
@@ -428,8 +511,403 @@ class TestMeshQualityFilterParams:
     """Test parameter descriptors."""
 
     def test_params_list(self) -> None:
-        """Params should return three parameters."""
+        """Params should return five parameters."""
         params = MeshQualityFilter.params()
-        assert len(params) == 3
+        assert len(params) == 5
         names = {p.name for p in params}
-        assert names == {"output", "check_nan", "check_geometry"}
+        assert names == {"output", "check_nan", "check_geometry", "check_volume", "check_jacobian"}
+
+
+# ---------------------------------------------------------------------------
+# Tests: Tetrahedron geometry helpers
+# ---------------------------------------------------------------------------
+
+
+class TestTetrahedronDihedralAngles:
+    """Tests for the _tetrahedron_dihedral_angles helper function."""
+
+    def test_regular_tet_dihedral_angles(self) -> None:
+        """Regular tetrahedron should have six equal dihedral angles of arccos(1/3)."""
+        # Regular tet: alternating cube vertices, positive orientation
+        pts = torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 1.0],
+            ],
+            dtype=torch.float64,
+        )
+        cells = torch.tensor([[0, 1, 2, 3]])
+        angles = _tetrahedron_dihedral_angles(pts, cells)
+        expected = math.acos(1.0 / 3.0)  # ~70.53°
+        assert angles.shape == (1, 6)
+        for i in range(6):
+            assert abs(angles[0, i].item() - expected) < 1e-4
+
+    def test_degenerate_tet_has_extreme_angles(self) -> None:
+        """Degenerate (coplanar) tet should have very high skewness."""
+        pts = torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.5, 0.5, 0.0],
+            ],
+            dtype=torch.float64,
+        )
+        cells = torch.tensor([[0, 1, 2, 3]])
+        angles = _tetrahedron_dihedral_angles(pts, cells)
+        # Coplanar tet: dihedral angles become meaningless. The key
+        # indicator is equiangle skewness being very high.
+        ideal = math.acos(1.0 / 3.0)
+        skew = _equiangle_skewness(angles, ideal)
+        assert skew[0].item() > 0.1  # significantly distorted vs ideal 0.0
+
+
+class TestTetAspectRatios:
+    """Tests for the _tet_aspect_ratios helper function."""
+
+    def test_regular_tet_has_ratio_one(self) -> None:
+        """Regular tetrahedron has aspect ratio 1.0 (all edges equal)."""
+        pts = torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 1.0],
+            ],
+        )
+        cells = torch.tensor([[0, 1, 2, 3]])
+        ratios = _tet_aspect_ratios(pts, cells)
+        assert abs(ratios[0].item() - 1.0) < 1e-5
+
+    def test_elongated_tet_has_high_ratio(self) -> None:
+        """Elongated tetrahedron should have high aspect ratio."""
+        pts = torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [10.0, 0.0, 0.0],
+                [0.0, 0.01, 0.0],
+                [0.0, 0.0, 0.01],
+            ],
+        )
+        cells = torch.tensor([[0, 1, 2, 3]])
+        ratios = _tet_aspect_ratios(pts, cells)
+        assert ratios[0].item() > 100.0
+
+
+# ---------------------------------------------------------------------------
+# Tests: Tetrahedron geometry in MeshQualityFilter
+# ---------------------------------------------------------------------------
+
+
+class TestMeshQualityFilterTetGeometry:
+    """Test that the filter handles tetrahedral cells correctly."""
+
+    def test_regular_tet_good_quality(self, tmp_path: pathlib.Path) -> None:
+        """Regular tetrahedron should have good quality metrics."""
+        mesh = _make_regular_tet_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_volume=False,
+            check_jacobian=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        assert abs(table["geom_mean_aspect_ratio"][0].as_py() - 1.0) < 0.01
+        assert table["geom_mean_skewness"][0].as_py() < 0.01
+        assert table["geom_n_degenerate_cells"][0].as_py() == 0
+
+    def test_degenerate_tet_flagged(self, tmp_path: pathlib.Path) -> None:
+        """Degenerate (coplanar) tet should be detected via zero volume and poor Jacobian."""
+        mesh = _make_degenerate_tet_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        # Degenerate tet has zero volume
+        assert table["vol_n_zero"][0].as_py() == 1
+        # Degenerate tet has near-zero Jacobian (poor quality)
+        assert table["jac_n_poor"][0].as_py() == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: Cell volume
+# ---------------------------------------------------------------------------
+
+
+class TestMeshQualityFilterVolume:
+    """Test cell volume/area statistics in MeshQualityFilter."""
+
+    def test_equilateral_triangle_area(self, tmp_path: pathlib.Path) -> None:
+        """Equilateral triangle with side 1 has area sqrt(3)/4."""
+        mesh = _make_equilateral_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_jacobian=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        expected_area = math.sqrt(3.0) / 4.0
+        assert abs(table["vol_mean"][0].as_py() - expected_area) < 1e-4
+        assert table["vol_n_zero"][0].as_py() == 0
+
+    def test_degenerate_triangle_zero_volume(self, tmp_path: pathlib.Path) -> None:
+        """Degenerate (collinear) triangle should have zero area."""
+        mesh = _make_degenerate_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_jacobian=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        assert table["vol_n_zero"][0].as_py() == 1
+        assert table["vol_min"][0].as_py() < 1e-10
+
+    def test_regular_tet_volume(self, tmp_path: pathlib.Path) -> None:
+        """Regular tet from alternating cube vertices has known volume."""
+        mesh = _make_regular_tet_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_jacobian=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        # Regular tet inscribed in unit cube: edge length = sqrt(2),
+        # volume = edge^3 / (6*sqrt(2)) = 2*sqrt(2)/(6*sqrt(2)) = 1/3
+        expected_vol = 1.0 / 3.0
+        assert abs(table["vol_mean"][0].as_py() - expected_vol) < 1e-4
+        assert table["vol_n_zero"][0].as_py() == 0
+
+    def test_volume_ratio(self, tmp_path: pathlib.Path) -> None:
+        """Volume ratio should be max/min for multi-cell mesh."""
+        mesh = _make_triangle_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_jacobian=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        vol_min = table["vol_min"][0].as_py()
+        vol_max = table["vol_max"][0].as_py()
+        vol_ratio = table["vol_ratio"][0].as_py()
+        # Ratio should approximately equal max/min
+        assert abs(vol_ratio - vol_max / (vol_min + 1e-30)) < 1e-3
+
+    def test_check_volume_disabled(self, tmp_path: pathlib.Path) -> None:
+        """When check_volume=False, volume metrics should be absent."""
+        mesh = _make_equilateral_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_volume=False,
+            check_jacobian=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        assert table["vol_min"][0].as_py() is None
+
+
+# ---------------------------------------------------------------------------
+# Tests: Scaled Jacobian
+# ---------------------------------------------------------------------------
+
+
+class TestScaledJacobian:
+    """Tests for the _scaled_jacobian helper function."""
+
+    def test_equilateral_triangle_3d(self) -> None:
+        """Equilateral triangle in 3-D should have Jacobian = sqrt(3)/2."""
+        pts = torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.5, math.sqrt(3.0) / 2.0, 0.0],
+            ],
+            dtype=torch.float64,
+        )
+        cells = torch.tensor([[0, 1, 2]])
+        jac = _scaled_jacobian(pts, cells)
+        expected = math.sqrt(3.0) / 2.0  # ~0.866
+        assert abs(jac[0].item() - expected) < 1e-5
+
+    def test_right_triangle_3d(self) -> None:
+        """Right triangle in 3-D: Jacobian = sin(90°) = 1.0 at the right-angle vertex."""
+        # The scaled Jacobian uses edges from vertex 0, so place the
+        # right angle at vertex 0.
+        pts = torch.tensor(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            dtype=torch.float64,
+        )
+        cells = torch.tensor([[0, 1, 2]])
+        jac = _scaled_jacobian(pts, cells)
+        # Cross product magnitude / (1*1) = 1.0
+        assert abs(jac[0].item() - 1.0) < 1e-5
+
+    def test_degenerate_triangle_zero(self) -> None:
+        """Degenerate (collinear) triangle should have Jacobian near 0."""
+        pts = torch.tensor(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+            dtype=torch.float64,
+        )
+        cells = torch.tensor([[0, 1, 2]])
+        jac = _scaled_jacobian(pts, cells)
+        assert abs(jac[0].item()) < 1e-10
+
+    def test_regular_tet(self) -> None:
+        """Regular tetrahedron should have positive Jacobian."""
+        pts = torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 1.0],
+            ],
+            dtype=torch.float64,
+        )
+        cells = torch.tensor([[0, 1, 2, 3]])
+        jac = _scaled_jacobian(pts, cells)
+        # Regular tet: det([e1,e2,e3]) = 2, each edge norm = sqrt(2)
+        # scaled_jac = 2 / (sqrt(2))^3 = 2 / (2*sqrt(2)) = 1/sqrt(2) ≈ 0.707
+        expected = 1.0 / math.sqrt(2.0)
+        assert abs(jac[0].item() - expected) < 1e-4
+
+    def test_inverted_tet_negative(self) -> None:
+        """Inverted tetrahedron should have negative Jacobian."""
+        pts = torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],  # swapped
+                [1.0, 0.0, 1.0],  # swapped
+                [0.0, 1.0, 1.0],
+            ],
+            dtype=torch.float64,
+        )
+        cells = torch.tensor([[0, 1, 2, 3]])
+        jac = _scaled_jacobian(pts, cells)
+        assert jac[0].item() < 0.0
+
+    def test_triangle_2d(self) -> None:
+        """Triangle in 2-D: signed Jacobian using 2-D cross product."""
+        pts = torch.tensor(
+            [[0.0, 0.0], [1.0, 0.0], [0.5, math.sqrt(3.0) / 2.0]],
+            dtype=torch.float64,
+        )
+        cells = torch.tensor([[0, 1, 2]])
+        jac = _scaled_jacobian(pts, cells)
+        expected = math.sqrt(3.0) / 2.0
+        assert abs(jac[0].item() - expected) < 1e-5
+
+
+class TestMeshQualityFilterJacobian:
+    """Test scaled Jacobian integration in MeshQualityFilter."""
+
+    def test_equilateral_triangle_jacobian(self, tmp_path: pathlib.Path) -> None:
+        """Equilateral triangle should report good Jacobian."""
+        mesh = _make_equilateral_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_volume=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        jac_mean = table["jac_mean"][0].as_py()
+        assert jac_mean > 0.8  # sqrt(3)/2 ≈ 0.866
+        assert table["jac_n_inverted"][0].as_py() == 0
+        assert table["jac_n_poor"][0].as_py() == 0
+
+    def test_degenerate_triangle_poor(self, tmp_path: pathlib.Path) -> None:
+        """Degenerate triangle should have near-zero Jacobian flagged as poor."""
+        mesh = _make_degenerate_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_volume=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        assert table["jac_n_poor"][0].as_py() == 1
+
+    def test_regular_tet_jacobian(self, tmp_path: pathlib.Path) -> None:
+        """Regular tet should have positive Jacobian and no poor cells."""
+        mesh = _make_regular_tet_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_volume=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        assert table["jac_mean"][0].as_py() > 0.5
+        assert table["jac_n_inverted"][0].as_py() == 0
+        assert table["jac_n_poor"][0].as_py() == 0
+
+    def test_inverted_tet_jacobian(self, tmp_path: pathlib.Path) -> None:
+        """Inverted tet should have negative Jacobian flagged as inverted."""
+        mesh = _make_inverted_tet_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_volume=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        assert table["jac_n_inverted"][0].as_py() == 1
+        assert table["jac_min"][0].as_py() < 0.0
+
+    def test_check_jacobian_disabled(self, tmp_path: pathlib.Path) -> None:
+        """When check_jacobian=False, Jacobian metrics should be absent."""
+        mesh = _make_equilateral_mesh()
+        filt = MeshQualityFilter(
+            output=str(tmp_path / "q.parquet"),
+            check_nan=False,
+            check_geometry=False,
+            check_volume=False,
+            check_jacobian=False,
+        )
+        list(filt(_gen_meshes(mesh)))
+        path = filt.flush()
+
+        table = pq.read_table(path)
+        assert table["jac_min"][0].as_py() is None
