@@ -702,14 +702,33 @@ class PipelineStore:
     def _connect(self) -> sqlite3.Connection:
         """Open a WAL-mode connection to the database.
 
+        Retries the ``PRAGMA journal_mode=WAL`` statement with exponential
+        backoff to handle concurrent process initialization on Windows, where
+        the WAL mode switch requires a brief exclusive lock that ``busy_timeout``
+        alone does not reliably cover.
+
         Returns
         -------
         sqlite3.Connection
             Database connection with WAL journal mode and busy timeout.
         """
+        import time
+
         conn = sqlite3.connect(str(self._db_path), timeout=30)
         conn.execute("PRAGMA busy_timeout=30000")
-        conn.execute("PRAGMA journal_mode=WAL")
+
+        max_retries = 10
+        delay = 0.05  # 50 ms initial backoff
+        for attempt in range(max_retries):
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError:
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 2.0)
+
         return conn
 
     def _init_db(self) -> None:
