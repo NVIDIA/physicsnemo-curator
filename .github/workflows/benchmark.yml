@@ -47,7 +47,7 @@ jobs:
           rustup default stable
 
       - name: Install dependencies
-        run: uv sync --group dev --extra mesh --extra atm
+        run: uv sync --group dev --extra mesh --extra atm --extra da --extra loky
 
       - name: Build native extension
         run: uv run maturin develop --release
