@@ -37,8 +37,6 @@ pipeline components for users to create their own data processing pipelines.
   expression, then execute in parallel
 - **Lazy generator semantics** — sources and filters yield items lazily;
   `pipeline[i]` processes only the *i*-th item
-- **Rust-accelerated core** — native extension for I/O-bound and
-  compute-heavy operations via PyO3
 - **Multiple domains** — first-class support for unstructured meshes
   (`physicsnemo.mesh.Mesh`), gridded data arrays (`xarray.DataArray`),
   and atomic/molecular data (`nvalchemi.data.AtomicData`)
