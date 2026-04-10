@@ -132,3 +132,6 @@ source_suffix = {
 # Suppress "cannot cache unpickleable configuration value" for sphinx_gallery_conf
 # (contains class references for sorting which are not pickleable).
 suppress_warnings = ["config.cache"]
+
+# Exclude internal working documents from the Sphinx build.
+exclude_patterns = ["superpowers/**"]

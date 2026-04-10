@@ -32,11 +32,6 @@ class DashboardApp:
 
     Creates a 3-tab Panel application (Overview, Pipeline, Performance)
     backed by a :class:`DashboardStore` and auto-refreshes on a timer.
-
-    Parameters
-    ----------
-    db_path : str
-        Path to the PipelineStore SQLite database.
     """
 
     def __init__(self, db_path: str) -> None:

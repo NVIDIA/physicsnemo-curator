@@ -188,7 +188,7 @@ class LocalFileStore:
         abs_path = self._files[index]
         if self._root.is_file():
             return abs_path.name
-        return str(abs_path.relative_to(self._root))
+        return abs_path.relative_to(self._root).as_posix()
 
     def __repr__(self) -> str:
         """Return a string representation of the store."""

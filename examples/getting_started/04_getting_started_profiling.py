@@ -39,6 +39,7 @@ regular pipeline.
 # -------
 
 from physicsnemo_curator.core.profiling import ProfiledPipeline
+
 from physicsnemo_curator.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink

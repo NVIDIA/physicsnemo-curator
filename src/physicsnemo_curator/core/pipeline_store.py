@@ -708,8 +708,8 @@ class PipelineStore:
             Database connection with WAL journal mode and busy timeout.
         """
         conn = sqlite3.connect(str(self._db_path), timeout=30)
-        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
     def _init_db(self) -> None:

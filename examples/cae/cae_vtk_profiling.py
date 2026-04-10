@@ -48,6 +48,7 @@ per-stage timing breakdown so you can see exactly where time is spent.
 # :class:`~physicsnemo_curator.core.profiling.ProfiledPipeline` wrapper.
 
 from physicsnemo_curator.core.profiling import ProfiledPipeline
+
 from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.mesh.sources.vtk import VTKSource

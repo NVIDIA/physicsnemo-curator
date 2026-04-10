@@ -16,16 +16,6 @@ profiling utilities.
 /autoapi/physicsnemo_curator/core/index
 ```
 
-## CLI
-
-Interactive command-line interface for guided pipeline construction.
-
-```{toctree}
-:maxdepth: 2
-
-/autoapi/physicsnemo_curator/cli/index
-```
-
 ## Dashboard
 
 Interactive web dashboard for pipeline metrics inspection.
@@ -34,6 +24,16 @@ Interactive web dashboard for pipeline metrics inspection.
 :maxdepth: 2
 
 /autoapi/physicsnemo_curator/dashboard/index
+```
+
+## Wiz
+
+Interactive wizard for guided pipeline construction.
+
+```{toctree}
+:maxdepth: 2
+
+/autoapi/physicsnemo_curator/wiz/index
 ```
 
 ## Run

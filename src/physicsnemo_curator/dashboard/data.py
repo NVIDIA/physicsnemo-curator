@@ -36,11 +36,6 @@ class DashboardStore(param.Parameterized):
 
     Provides pandas DataFrame views of pipeline metrics and supports
     auto-refresh for live monitoring of running pipelines.
-
-    Parameters
-    ----------
-    db_path : str
-        Path to the PipelineStore SQLite database.
     """
 
     refresh = param.Event(doc="Trigger a data refresh from the database.")
