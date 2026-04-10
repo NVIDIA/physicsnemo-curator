@@ -31,6 +31,7 @@ from physicsnemo_curator.core.store import FsspecFileStore, LocalFileStore, RunI
 from physicsnemo_curator.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.mesh.filters.quality import MeshQualityFilter
 from physicsnemo_curator.mesh.filters.stats import StatsFilter, merge_welford_stats
 from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
@@ -58,6 +59,7 @@ registry.register_source("mesh", WindTunnelSource)
 registry.register_source("mesh", NavierStokesCylinderSource)
 registry.register_filter("mesh", MeanFilter)
 registry.register_filter("mesh", MeshInfoFilter)
+registry.register_filter("mesh", MeshQualityFilter)
 registry.register_filter("mesh", StatsFilter)
 registry.register_filter("mesh", PrecisionFilter)
 registry.register_filter("mesh", WallNodeFilter)
@@ -70,6 +72,7 @@ __all__ = [
     "DrivAerMLSource",
     "MeanFilter",
     "MeshInfoFilter",
+    "MeshQualityFilter",
     "MeshSink",
     "NavierStokesCylinderSource",
     "PrecisionFilter",
