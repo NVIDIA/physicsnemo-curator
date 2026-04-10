@@ -25,6 +25,7 @@ pipeline components for users to create their own data processing pipelines.
 [**Docs**](https://nvidia.github.io/physicsnemo-curator/)
 | [**Getting Started**](#getting-started)
 | [**Domains**](https://nvidia.github.io/physicsnemo-curator/domains/index.html)
+| [**Extending**](https://nvidia.github.io/physicsnemo-curator/extending/index.html)
 | [**Examples**](https://nvidia.github.io/physicsnemo-curator/auto_examples/index.html)
 | [**Contributing**](#contributing-to-physicsnemo-curator)
 
@@ -34,15 +35,21 @@ pipeline components for users to create their own data processing pipelines.
 
 - **Fluent pipeline API** — chain `Source → Filter → Sink` with a single
   expression, then execute in parallel
+- **Lazy generator semantics** — sources and filters yield items lazily;
+  `pipeline[i]` processes only the *i*-th item
 - **Rust-accelerated core** — native extension for I/O-bound and
   compute-heavy operations via PyO3
 - **Multiple domains** — first-class support for unstructured meshes
   (`physicsnemo.mesh.Mesh`), gridded data arrays (`xarray.DataArray`),
   and atomic/molecular data (`nvalchemi.data.AtomicData`)
+- **FileStore abstraction** — decouple file discovery from reading; local
+  directories, S3, HuggingFace Hub, or custom backends
 - **Pluggable execution** — sequential, thread pool, process pool, Loky,
   Dask, or Prefect backends
 - **Registry & CLI** — all sources, filters, and sinks are discoverable
   via a global registry and optional interactive CLI
+- **Extensible** — write custom sources, filters, and sinks with minimal
+  boilerplate ([guide](https://nvidia.github.io/physicsnemo-curator/extending/index.html))
 
 ## Getting Started
 
@@ -112,11 +119,17 @@ pip install physicsnemo-curator[mesh]
 # DataArray domain (weather/climate)
 pip install physicsnemo-curator[da]
 
+# Atomic domain (molecular dynamics)
+pip install physicsnemo-curator[atm]
+
 # LS-DYNA crash simulation support
 pip install physicsnemo-curator[lsdyna]
 
 # Interactive Wizard
 pip install physicsnemo-curator[wiz]
+
+# Dashboard (Panel/Bokeh visualization)
+pip install physicsnemo-curator[dashboard]
 
 # Parallel backends
 pip install physicsnemo-curator[loky]    # Loky backend
@@ -150,6 +163,12 @@ community contributions. Thank you for contributing so others can build on
 your work.
 
 For guidance, please refer to the [contributing guidelines](CONTRIBUTING.md).
+See also:
+
+- [Extending / Customization](https://nvidia.github.io/physicsnemo-curator/extending/index.html) —
+  how to write custom sources, filters, and sinks
+- [Developer Guide](https://nvidia.github.io/physicsnemo-curator/developer-guide/index.html) —
+  style conventions, benchmarking, and AI-assisted development
 
 ## Ecosystem
 
