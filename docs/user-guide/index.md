@@ -52,9 +52,7 @@ cli
 ## Developer Guide
 
 ```{toctree}
-:maxdepth: 1
+:maxdepth: 2
 
-../developer-guide/style
-../developer-guide/benchmarking
-../developer-guide/agents
+../developer-guide/index
 ```
