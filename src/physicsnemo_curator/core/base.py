@@ -151,6 +151,10 @@ class Source[T](ABC):
     def write(self, s: Sink[T]) -> Pipeline[T]:
         """Create a :class:`Pipeline` with this source and a sink (no filters).
 
+        If the sink exposes a ``set_source`` method, the source is
+        automatically injected so the sink can resolve naming
+        placeholders (e.g. ``{relpath}``, ``{stem}``) from the source.
+
         Parameters
         ----------
         s : Sink[T]
@@ -161,6 +165,8 @@ class Source[T](ABC):
         Pipeline[T]
             A new pipeline containing this source and the given sink.
         """
+        if hasattr(s, "set_source"):
+            s.set_source(self)  # ty: ignore[call-non-callable]
         return Pipeline(source=self, sink=s)
 
 
@@ -354,6 +360,10 @@ class Pipeline[T]:
     def write(self, s: Sink[T]) -> Pipeline[T]:
         """Return a new pipeline with the given sink attached.
 
+        If the sink exposes a ``set_source`` method, the pipeline's
+        source is automatically injected so the sink can resolve
+        naming placeholders (e.g. ``{relpath}``, ``{stem}``).
+
         Parameters
         ----------
         s : Sink[T]
@@ -364,6 +374,8 @@ class Pipeline[T]:
         Pipeline[T]
             A new pipeline instance (the original is unchanged).
         """
+        if hasattr(s, "set_source"):
+            s.set_source(self.source)  # ty: ignore[call-non-callable]
         return Pipeline(
             source=self.source,
             filters=list(self.filters),

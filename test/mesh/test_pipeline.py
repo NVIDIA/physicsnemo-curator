@@ -31,6 +31,7 @@ import pyarrow.parquet as pq  # noqa: E402
 import pyvista as pv  # noqa: E402
 from physicsnemo.mesh import Mesh  # noqa: E402
 
+from physicsnemo_curator.core.store import FsspecFileStore  # noqa: E402
 from physicsnemo_curator.mesh.filters.mean import MeanFilter  # noqa: E402
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink  # noqa: E402
 from physicsnemo_curator.mesh.sources.vtk import VTKSource  # noqa: E402
@@ -100,42 +101,42 @@ def _create_vtk_file(directory: pathlib.Path, name: str = "test.vtu") -> pathlib
 class TestVTKSource:
     def test_discover_single_file(self, tmp_path):
         vtk_file = _create_vtk_file(tmp_path)
-        source = VTKSource.from_path(str(vtk_file))
+        source = VTKSource(str(vtk_file))
         assert len(source) == 1
 
     def test_discover_directory(self, tmp_path):
         _create_vtk_file(tmp_path, "a.vtu")
         _create_vtk_file(tmp_path, "b.vtu")
         _create_vtk_file(tmp_path, "c.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         assert len(source) == 3
 
     def test_yields_mesh(self, tmp_path):
         _create_vtk_file(tmp_path, "test.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         meshes = list(source[0])
         assert len(meshes) == 1
         assert isinstance(meshes[0], Mesh)
 
     def test_mesh_has_data(self, tmp_path):
         _create_vtk_file(tmp_path, "test.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         mesh = next(source[0])
         assert mesh.n_points == 4
         assert mesh.n_cells == 2
 
     def test_empty_directory_raises(self, tmp_path):
-        with pytest.raises(ValueError, match="No matching files"):
-            VTKSource.from_path(str(tmp_path))
+        with pytest.raises(ValueError, match="No VTK files found"):
+            VTKSource(str(tmp_path))
 
     def test_nonexistent_path_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
-            VTKSource.from_path(str(tmp_path / "nonexistent"))
+            VTKSource(str(tmp_path / "nonexistent"))
 
     def test_non_vtk_file_raises(self, tmp_path):
         (tmp_path / "data.csv").write_text("a,b\n1,2\n")
-        with pytest.raises(ValueError, match="does not match allowed extensions"):
-            VTKSource.from_path(str(tmp_path / "data.csv"))
+        with pytest.raises(ValueError, match="does not have a recognised VTK extension"):
+            VTKSource(str(tmp_path / "data.csv"))
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +148,7 @@ class TestVTKSource:
 class TestMeanFilter:
     def test_yields_mesh_unchanged(self, tmp_path):
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh_before = next(source[0])
 
         filt = MeanFilter(output=str(tmp_path / "stats.parquet"))
@@ -163,7 +164,7 @@ class TestMeanFilter:
     def test_accumulates_rows(self, tmp_path):
         _create_vtk_file(tmp_path / "vtk", "a.vtu")
         _create_vtk_file(tmp_path / "vtk", "b.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         filt = MeanFilter(output=str(tmp_path / "stats.parquet"))
 
@@ -175,7 +176,7 @@ class TestMeanFilter:
 
     def test_flush_writes_parquet(self, tmp_path):
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = MeanFilter(output=str(parquet_path))
@@ -197,7 +198,7 @@ class TestMeanFilter:
 
     def test_mean_values_correct(self, tmp_path):
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = MeanFilter(output=str(parquet_path))
@@ -219,7 +220,7 @@ class TestMeanFilter:
 class TestMeshSink:
     def test_saves_mesh(self, tmp_path):
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         output_dir = tmp_path / "output"
         sink = MeshSink(output_dir=str(output_dir))
@@ -232,7 +233,7 @@ class TestMeshSink:
     def test_saves_multiple_meshes(self, tmp_path):
         _create_vtk_file(tmp_path / "vtk", "a.vtu")
         _create_vtk_file(tmp_path / "vtk", "b.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         output_dir = tmp_path / "output"
         sink = MeshSink(output_dir=str(output_dir))
@@ -247,7 +248,7 @@ class TestMeshSink:
 
     def test_creates_output_dir(self, tmp_path):
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         output_dir = tmp_path / "deep" / "nested" / "output"
         sink = MeshSink(output_dir=str(output_dir))
@@ -259,7 +260,7 @@ class TestMeshSink:
     def test_custom_naming_template(self, tmp_path):
         """Custom naming_template controls the output directory name."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         output_dir = tmp_path / "output"
         sink = MeshSink(
@@ -277,7 +278,7 @@ class TestMeshSink:
         vtk_dir = tmp_path / "vtk"
         _create_vtk_file(vtk_dir, "a.vtu")
         _create_vtk_file(vtk_dir, "b.vtu")
-        source = VTKSource.from_path(str(vtk_dir))
+        source = VTKSource(str(vtk_dir))
 
         output_dir = tmp_path / "output"
         sink = MeshSink(
@@ -295,7 +296,7 @@ class TestMeshSink:
     def test_naming_template_none_uses_default(self, tmp_path):
         """naming_template=None preserves the original mesh_XXXX_Y pattern."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         output_dir = tmp_path / "output"
         sink = MeshSink(output_dir=str(output_dir), naming_template=None)
@@ -335,7 +336,7 @@ class TestMeshPipeline:
         mean_filter = MeanFilter(output=str(stats_path))
 
         # Build pipeline using the fluent API.
-        pipeline = VTKSource.from_path(str(vtk_dir)).filter(mean_filter).write(MeshSink(output_dir=str(output_dir)))
+        pipeline = VTKSource(str(vtk_dir)).filter(mean_filter).write(MeshSink(output_dir=str(output_dir)))
 
         assert len(pipeline) == 2
 
@@ -359,7 +360,7 @@ class TestMeshPipeline:
         _create_vtk_file(vtk_dir, "a.vtu")
         _create_vtk_file(vtk_dir, "b.vtu")
 
-        pipeline = VTKSource.from_path(str(vtk_dir)).write(MeshSink(output_dir=str(tmp_path / "out")))
+        pipeline = VTKSource(str(vtk_dir)).write(MeshSink(output_dir=str(tmp_path / "out")))
 
         paths = pipeline[-1]
         assert len(paths) == 1
@@ -509,7 +510,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_manifold_dim_auto_default(self, tmp_path):
         """Default manifold_dim='auto' should detect surface mesh as dim=2."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
         # Our test mesh has triangles so auto should detect dim=2.
         assert mesh.n_manifold_dims == 2
@@ -518,7 +519,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_manifold_dim_0_point_cloud(self, tmp_path):
         """manifold_dim=0 should produce a point cloud with no cells."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"), manifold_dim=0)
+        source = VTKSource(str(tmp_path / "vtk"), manifold_dim=0)
         mesh = next(source[0])
         assert mesh.n_manifold_dims == 0
         assert mesh.n_cells == 0
@@ -527,7 +528,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_manifold_dim_1_edges(self, tmp_path):
         """manifold_dim=1 should extract edge connectivity from a surface mesh."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"), manifold_dim=1)
+        source = VTKSource(str(tmp_path / "vtk"), manifold_dim=1)
         mesh = next(source[0])
         assert mesh.n_manifold_dims == 1
         assert mesh.n_cells > 0  # Should have edges
@@ -538,7 +539,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_manifold_dim_2_triangulation(self, tmp_path):
         """manifold_dim=2 should ensure triangulated surface."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"), manifold_dim=2)
+        source = VTKSource(str(tmp_path / "vtk"), manifold_dim=2)
         mesh = next(source[0])
         assert mesh.n_manifold_dims == 2
         # Triangle cells have 3 vertices each.
@@ -547,7 +548,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_manifold_dim_3_tetrahedralization(self, tmp_path):
         """manifold_dim=3 should read volume mesh with tetrahedral cells."""
         _create_vtk_volume(tmp_path / "vtk", "volume.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"), manifold_dim=3)
+        source = VTKSource(str(tmp_path / "vtk"), manifold_dim=3)
         mesh = next(source[0])
         assert mesh.n_manifold_dims == 3
         assert mesh.n_cells == 2
@@ -557,7 +558,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_point_source_vertices_preserves_point_data(self, tmp_path):
         """point_source='vertices' (default) should preserve point_data."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"), point_source="vertices")
+        source = VTKSource(str(tmp_path / "vtk"), point_source="vertices")
         mesh = next(source[0])
         assert mesh.n_points == 4
         keys = list(mesh.point_data.keys())
@@ -566,7 +567,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_point_source_cell_centroids(self, tmp_path):
         """point_source='cell_centroids' should use cell centroids as points."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(
+        source = VTKSource(
             str(tmp_path / "vtk"),
             point_source="cell_centroids",
             warn_on_lost_data=False,
@@ -583,7 +584,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_warn_on_lost_data_emits_warning(self, tmp_path):
         """warn_on_lost_data=True should emit warning for discarded point_data."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(
+        source = VTKSource(
             str(tmp_path / "vtk"),
             point_source="cell_centroids",
             warn_on_lost_data=True,
@@ -600,7 +601,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_warn_on_lost_data_suppressed(self, tmp_path):
         """warn_on_lost_data=False should suppress data-loss warnings."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(
+        source = VTKSource(
             str(tmp_path / "vtk"),
             point_source="cell_centroids",
             warn_on_lost_data=False,
@@ -616,7 +617,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_line_mesh_manifold_dim_auto(self, tmp_path):
         """Line mesh with manifold_dim='auto' should detect dim=1."""
         _create_vtk_line_mesh(tmp_path / "vtk", "lines.vtp")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
         assert mesh.n_manifold_dims == 1
         assert mesh.cells.shape[1] == 2
@@ -624,7 +625,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_volume_mesh_point_data_preserved(self, tmp_path):
         """Volume mesh point_data should survive conversion."""
         _create_vtk_volume(tmp_path / "vtk", "volume.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"), manifold_dim=3)
+        source = VTKSource(str(tmp_path / "vtk"), manifold_dim=3)
         mesh = next(source[0])
         keys = list(mesh.point_data.keys())
         assert "density" in keys
@@ -634,7 +635,7 @@ class TestVTKSourceFromPyvistaParams:
     def test_volume_mesh_cell_centroids_mode(self, tmp_path):
         """Volume mesh with cell_centroids should create 2-point cloud."""
         _create_vtk_volume(tmp_path / "vtk", "volume.vtu")
-        source = VTKSource.from_path(
+        source = VTKSource(
             str(tmp_path / "vtk"),
             point_source="cell_centroids",
             warn_on_lost_data=False,
@@ -665,13 +666,13 @@ class TestVTKSourceExtended:
         _create_vtk_file(vtk_dir, "sim_002.vtu")
         _create_vtk_file(vtk_dir, "other_001.vtu")
 
-        source = VTKSource.from_path(str(vtk_dir), file_pattern="sim_*")
+        source = VTKSource(str(vtk_dir), file_pattern="sim_*")
         assert len(source) == 2
 
     def test_reads_vtp_polydata(self, tmp_path):
         """VTKSource should read .vtp (PolyData) files correctly."""
         _create_vtk_polydata(tmp_path / "vtk", "surface.vtp")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
         assert isinstance(mesh, Mesh)
         assert mesh.n_points > 0
@@ -680,7 +681,7 @@ class TestVTKSourceExtended:
     def test_reads_vtk_legacy(self, tmp_path):
         """VTKSource should read legacy .vtk files correctly."""
         _create_vtk_legacy(tmp_path / "vtk", "legacy.vtk")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
         assert isinstance(mesh, Mesh)
         assert mesh.n_points == 3
@@ -689,7 +690,7 @@ class TestVTKSourceExtended:
     def test_single_file_path(self, tmp_path):
         """VTKSource should accept a direct file path (not just directory)."""
         vtk_file = _create_vtk_file(tmp_path, "direct.vtu")
-        source = VTKSource.from_path(str(vtk_file))
+        source = VTKSource(str(vtk_file))
         assert len(source) == 1
         mesh = next(source[0])
         assert isinstance(mesh, Mesh)
@@ -703,7 +704,7 @@ class TestVTKSourceExtended:
         # Also add a non-VTK file that should be ignored.
         (vtk_dir / "readme.txt").write_text("not a mesh")
 
-        source = VTKSource.from_path(str(vtk_dir))
+        source = VTKSource(str(vtk_dir))
         assert len(source) == 3
 
     def test_sorted_file_order(self, tmp_path):
@@ -713,22 +714,22 @@ class TestVTKSourceExtended:
         _create_vtk_file(vtk_dir, "a.vtu")
         _create_vtk_file(vtk_dir, "b.vtu")
 
-        source = VTKSource.from_path(str(vtk_dir))
+        source = VTKSource(str(vtk_dir))
         # Access internal _files to verify sorted order.
-        names = [pathlib.Path(source._store[i]).name for i in range(len(source))]
+        names = [pathlib.Path(source._files[i]).name for i in range(len(source))]
         assert names == ["a.vtu", "b.vtu", "c.vtu"]
 
     def test_source_getitem_out_of_range(self, tmp_path):
         """Indexing beyond available files should raise IndexError."""
         _create_vtk_file(tmp_path, "only.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         with pytest.raises(IndexError):
             next(source[5])
 
     def test_mesh_point_data_preserved(self, tmp_path):
         """Point data from VTK should be available on the Mesh."""
         _create_vtk_file(tmp_path, "test.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         mesh = next(source[0])
         assert mesh.point_data is not None
         keys = list(mesh.point_data.keys())
@@ -738,7 +739,7 @@ class TestVTKSourceExtended:
     def test_mesh_cell_data_preserved(self, tmp_path):
         """Cell data from VTK should be available on the Mesh."""
         _create_vtk_file(tmp_path, "test.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         mesh = next(source[0])
         assert mesh.cell_data is not None
         keys = list(mesh.cell_data.keys())
@@ -752,7 +753,7 @@ class TestMeanFilterExtended:
     def test_cell_data_means_correct(self, tmp_path):
         """MeanFilter should correctly compute cell_data field means."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = MeanFilter(output=str(parquet_path))
@@ -784,7 +785,7 @@ class TestMeanFilterExtended:
         grid_b.point_data["pressure"] = np.array([100.0, 200.0, 300.0])
         grid_b.save(str(vtk_dir / "mesh_b.vtu"))
 
-        source = VTKSource.from_path(str(vtk_dir))
+        source = VTKSource(str(vtk_dir))
         parquet_path = tmp_path / "stats.parquet"
         filt = MeanFilter(output=str(parquet_path))
 
@@ -801,7 +802,7 @@ class TestMeanFilterExtended:
     def test_flush_is_idempotent(self, tmp_path):
         """Calling flush twice without new data should return None the second time."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = MeanFilter(output=str(parquet_path))
@@ -822,7 +823,7 @@ class TestMeanFilterExtended:
         for i in range(5):
             _create_vtk_file(vtk_dir, f"mesh_{i}.vtu")
 
-        source = VTKSource.from_path(str(vtk_dir))
+        source = VTKSource(str(vtk_dir))
         parquet_path = tmp_path / "stats.parquet"
         filt = MeanFilter(output=str(parquet_path))
 
@@ -838,7 +839,7 @@ class TestMeanFilterExtended:
     def test_parquet_creates_parent_dirs(self, tmp_path):
         """MeanFilter should create parent directories for the output path."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "deep" / "nested" / "stats.parquet"
         filt = MeanFilter(output=str(parquet_path))
@@ -855,7 +856,7 @@ class TestMeshSinkExtended:
     def test_saved_mesh_can_be_loaded(self, tmp_path):
         """Meshes saved by MeshSink should be loadable by Mesh.load()."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         output_dir = tmp_path / "output"
         sink = MeshSink(output_dir=str(output_dir))
@@ -873,7 +874,7 @@ class TestMeshSinkExtended:
         for i in range(3):
             _create_vtk_file(vtk_dir, f"m{i}.vtu")
 
-        source = VTKSource.from_path(str(vtk_dir))
+        source = VTKSource(str(vtk_dir))
         output_dir = tmp_path / "output"
         sink = MeshSink(output_dir=str(output_dir))
 
@@ -899,7 +900,7 @@ class TestMeshPipelineExtended:
             _create_vtk_file(vtk_dir, f"mesh_{i}.vtu")
 
         output_dir = tmp_path / "output"
-        pipeline = VTKSource.from_path(str(vtk_dir)).write(MeshSink(output_dir=str(output_dir)))
+        pipeline = VTKSource(str(vtk_dir)).write(MeshSink(output_dir=str(output_dir)))
 
         assert len(pipeline) == 4
 
@@ -925,7 +926,7 @@ class TestMeshPipelineExtended:
         stats_path = tmp_path / "stats.parquet"
         mean_filter = MeanFilter(output=str(stats_path))
 
-        pipeline = VTKSource.from_path(str(vtk_dir)).filter(mean_filter).write(MeshSink(output_dir=str(output_dir)))
+        pipeline = VTKSource(str(vtk_dir)).filter(mean_filter).write(MeshSink(output_dir=str(output_dir)))
 
         assert len(pipeline) == 3
 
@@ -950,7 +951,7 @@ class TestMeshPipelineExtended:
         vtk_dir.mkdir()
         _create_vtk_file(vtk_dir, "only.vtu")
 
-        pipeline = VTKSource.from_path(str(vtk_dir)).write(MeshSink(output_dir=str(tmp_path / "out")))
+        pipeline = VTKSource(str(vtk_dir)).write(MeshSink(output_dir=str(tmp_path / "out")))
 
         with pytest.raises(IndexError):
             pipeline[10]
@@ -961,7 +962,7 @@ class TestMeshPipelineExtended:
         vtk_dir.mkdir()
         _create_vtk_file(vtk_dir, "test.vtu")
 
-        pipeline = VTKSource.from_path(str(vtk_dir)).filter(MeanFilter(output=str(tmp_path / "s.parquet")))
+        pipeline = VTKSource(str(vtk_dir)).filter(MeanFilter(output=str(tmp_path / "s.parquet")))
 
         with pytest.raises(RuntimeError, match="no sink"):
             pipeline[0]
@@ -976,7 +977,7 @@ class TestMeshPipelineExtended:
         stats_path = tmp_path / "stats.parquet"
         mean_filter = MeanFilter(output=str(stats_path))
 
-        pipeline = VTKSource.from_path(str(vtk_dir)).filter(mean_filter).write(MeshSink(output_dir=str(output_dir)))
+        pipeline = VTKSource(str(vtk_dir)).filter(mean_filter).write(MeshSink(output_dir=str(output_dir)))
 
         paths = pipeline[0]
         loaded = Mesh.load(paths[0])
@@ -1016,7 +1017,7 @@ class TestMeshDeviceOps:
     def test_mesh_to_device(self, tmp_path, device):
         """Mesh should be movable to the target device."""
         _create_vtk_file(tmp_path, "test.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         mesh = next(source[0])
         mesh = _mesh_to_device(mesh, device)
 
@@ -1026,7 +1027,7 @@ class TestMeshDeviceOps:
     def test_point_data_on_device(self, tmp_path, device):
         """Point data tensors should reside on the correct device after move."""
         _create_vtk_file(tmp_path, "test.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         mesh = _mesh_to_device(next(source[0]), device)
 
         for key in mesh.point_data.keys():  # noqa: SIM118
@@ -1035,7 +1036,7 @@ class TestMeshDeviceOps:
     def test_cell_data_on_device(self, tmp_path, device):
         """Cell data tensors should reside on the correct device after move."""
         _create_vtk_file(tmp_path, "test.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         mesh = _mesh_to_device(next(source[0]), device)
 
         for key in mesh.cell_data.keys():  # noqa: SIM118
@@ -1044,7 +1045,7 @@ class TestMeshDeviceOps:
     def test_mesh_properties_on_device(self, tmp_path, device):
         """Derived properties (n_points, n_cells) should work on any device."""
         _create_vtk_file(tmp_path, "test.vtu")
-        source = VTKSource.from_path(str(tmp_path))
+        source = VTKSource(str(tmp_path))
         mesh = _mesh_to_device(next(source[0]), device)
 
         assert mesh.n_points == 4
@@ -1055,7 +1056,7 @@ class TestMeshDeviceOps:
     def test_mean_filter_on_device(self, tmp_path, device):
         """MeanFilter should compute correct means from device tensors."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = _mesh_to_device(next(source[0]), device)
 
         parquet_path = tmp_path / "stats.parquet"
@@ -1074,7 +1075,7 @@ class TestMeshDeviceOps:
     def test_sink_from_device_mesh(self, tmp_path, device):
         """MeshSink should handle meshes on any device (saves to CPU)."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = _mesh_to_device(next(source[0]), device)
 
         output_dir = tmp_path / "output"
@@ -1130,18 +1131,23 @@ class TestDrivAerMLRemotePipeline:
 
     @pytest.fixture(autouse=True)
     def _drivaerml_source(self, tmp_path):
-        """Build a VTKSource from the remote HF dataset (cached in tmp_path).
+        """Download DrivAerML slices via FsspecFileStore, then read locally.
 
-        This fixture is shared across all methods in the class so that
-        files are downloaded once and served from the local cache for
-        subsequent tests.
+        Uses FsspecFileStore to download a small subset of slice VTP
+        files, then creates a VTKSource pointing at the local cache.
         """
-        self.source = VTKSource.from_url(
-            _DRIVAERML_URL,
-            file_pattern="xNormal_p6*.vtp",
-            cache_storage=str(tmp_path / "hf_cache"),
-            warn_on_lost_data=False,
+        cache_dir = str(tmp_path / "hf_cache")
+        store = FsspecFileStore(
+            url=_DRIVAERML_URL,
+            pattern="xNormal_p6*",
+            extensions=frozenset({".vtp"}),
+            cache_storage=cache_dir,
         )
+        # Force download by accessing each file
+        for i in range(len(store)):
+            store[i]
+        # Point VTKSource at the cache directory
+        self.source = VTKSource(cache_dir, warn_on_lost_data=False)
         self.tmp_path = tmp_path
 
     # -- Source tests -------------------------------------------------------

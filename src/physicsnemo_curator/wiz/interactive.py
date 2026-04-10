@@ -175,19 +175,21 @@ def _prompt_params(component_cls: Any) -> dict[str, Any]:
     return values
 
 
-def _build_source(source_cls: type, store: FileStore, kwargs: dict[str, Any]) -> Source[Any]:
-    """Construct a source with an already-built :class:`FileStore`.
+def _build_source(source_cls: type, store: FileStore | None, kwargs: dict[str, Any]) -> Source[Any]:
+    """Construct a source, injecting a :class:`FileStore` when supported.
 
-    If *source_cls* accepts a ``store`` init parameter (the recommended
-    pattern), the store is injected directly.  Otherwise the kwargs are
-    passed through to ``__init__``.
+    Sources that accept a ``store`` init parameter (e.g.
+    :class:`DrivAerMLSource`) receive the store via dependency injection.
+    Sources that don't (e.g. :class:`VTKSource`) receive ``input_path``
+    and ``file_pattern`` directly from the collected kwargs.
 
     Parameters
     ----------
     source_cls : type
         The Source subclass.
-    store : FileStore
-        Pre-built file store to inject.
+    store : FileStore or None
+        Pre-built file store to inject (may be ``None`` if the source
+        handles its own file discovery).
     kwargs : dict[str, Any]
         Additional parameter values collected from the user (e.g.
         conversion options such as ``manifold_dim``).
@@ -197,7 +199,12 @@ def _build_source(source_cls: type, store: FileStore, kwargs: dict[str, Any]) ->
     Source[Any]
         Constructed source instance.
     """
-    return source_cls(store=store, **kwargs)
+    import inspect
+
+    sig = inspect.signature(source_cls.__init__)
+    if "store" in sig.parameters and store is not None:
+        return source_cls(store=store, **kwargs)
+    return source_cls(**kwargs)
 
 
 def _build_store(store_cls: type) -> FileStore:
@@ -358,16 +365,20 @@ def _build_pipeline_interactive() -> Pipeline[Any]:  # noqa: C901, PLR0912, PLR0
     console.print(f"\n  [header]Configure {source_cls.name}:[/header]")
     source_kwargs = _prompt_params(source_cls)
 
-    # Remove store-related params that are now handled by the store step.
-    source_kwargs.pop("input_path", None)
-    source_kwargs.pop("url", None)
-    source_kwargs.pop("file_pattern", None)
+    # When a store handles file discovery, remove the store-related params
+    # from the source kwargs (they were already consumed by the store step).
+    # When there is no store, keep them so the source can use them directly.
+    import inspect
 
-    if store_instance is not None:
-        source_instance: Source[Any] = _build_source(source_cls, store_instance, source_kwargs)
-    else:
-        # No stores registered — fall back to passing kwargs directly.
-        source_instance = source_cls(**source_kwargs)
+    sig = inspect.signature(source_cls.__init__)
+    uses_store = "store" in sig.parameters and store_instance is not None
+
+    if uses_store:
+        source_kwargs.pop("input_path", None)
+        source_kwargs.pop("url", None)
+        source_kwargs.pop("file_pattern", None)
+
+    source_instance: Source[Any] = _build_source(source_cls, store_instance, source_kwargs)
 
     _print_success(f"Found [highlight]{len(source_instance)}[/highlight] item(s) in source")
 

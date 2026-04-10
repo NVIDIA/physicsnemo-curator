@@ -114,7 +114,7 @@ class TestMeshInfoFilter:
     def test_yields_mesh_unchanged(self, tmp_path):
         """MeshInfoFilter should yield the mesh without modification."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh_before = next(source[0])
 
         filt = MeshInfoFilter()
@@ -131,7 +131,7 @@ class TestMeshInfoFilter:
         import logging
 
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         filt = MeshInfoFilter(log_level="info")
 
@@ -145,7 +145,7 @@ class TestMeshInfoFilter:
     def test_writes_jsonl_file(self, tmp_path):
         """MeshInfoFilter should write JSON-lines output when path provided."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         jsonl_path = tmp_path / "mesh_info.jsonl"
         filt = MeshInfoFilter(output=str(jsonl_path))
@@ -165,7 +165,7 @@ class TestMeshInfoFilter:
     def test_includes_field_info(self, tmp_path):
         """MeshInfoFilter should include field details when include_fields=True."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         jsonl_path = tmp_path / "mesh_info.jsonl"
         filt = MeshInfoFilter(output=str(jsonl_path), include_fields=True)
@@ -189,7 +189,7 @@ class TestMeshInfoFilter:
     def test_excludes_field_info(self, tmp_path):
         """MeshInfoFilter should exclude field details when include_fields=False."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         jsonl_path = tmp_path / "mesh_info.jsonl"
         filt = MeshInfoFilter(output=str(jsonl_path), include_fields=False)
@@ -208,7 +208,7 @@ class TestMeshInfoFilter:
         """MeshInfoFilter should increment mesh_index for each mesh."""
         _create_vtk_file(tmp_path / "vtk", "a.vtu")
         _create_vtk_file(tmp_path / "vtk", "b.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         jsonl_path = tmp_path / "mesh_info.jsonl"
         filt = MeshInfoFilter(output=str(jsonl_path))
@@ -227,7 +227,7 @@ class TestMeshInfoFilter:
     def test_flush_returns_path(self, tmp_path):
         """MeshInfoFilter.flush() should return the output path."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         jsonl_path = tmp_path / "mesh_info.jsonl"
         filt = MeshInfoFilter(output=str(jsonl_path))
@@ -239,7 +239,7 @@ class TestMeshInfoFilter:
     def test_flush_without_output_returns_none(self, tmp_path):
         """MeshInfoFilter.flush() should return None when no output path."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         filt = MeshInfoFilter()
         list(filt(source[0]))
@@ -258,7 +258,7 @@ class TestStatsFilter:
     def test_yields_mesh_unchanged(self, tmp_path):
         """StatsFilter should yield the mesh without modification."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh_before = next(source[0])
 
         filt = StatsFilter(output=str(tmp_path / "stats.parquet"))
@@ -273,7 +273,7 @@ class TestStatsFilter:
     def test_writes_parquet_with_stats(self, tmp_path):
         """StatsFilter should write Parquet file with comprehensive statistics."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = StatsFilter(output=str(parquet_path))
@@ -306,7 +306,7 @@ class TestStatsFilter:
     def test_mean_values_correct(self, tmp_path):
         """StatsFilter should compute correct mean values."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = StatsFilter(output=str(parquet_path))
@@ -328,7 +328,7 @@ class TestStatsFilter:
     def test_std_values_correct(self, tmp_path):
         """StatsFilter should compute correct standard deviation."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = StatsFilter(output=str(parquet_path))
@@ -349,7 +349,7 @@ class TestStatsFilter:
     def test_min_max_values_correct(self, tmp_path):
         """StatsFilter should compute correct min/max values."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = StatsFilter(output=str(parquet_path))
@@ -369,7 +369,7 @@ class TestStatsFilter:
     def test_vector_field_per_component_stats(self, tmp_path):
         """StatsFilter should compute per-component stats for vector fields."""
         _create_vtk_with_vector_field(tmp_path / "vtk", "vector.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = StatsFilter(output=str(parquet_path), per_component=True)
@@ -396,7 +396,7 @@ class TestStatsFilter:
     def test_scalar_field_component_is_minus_one(self, tmp_path):
         """StatsFilter should mark scalar fields with component=-1."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = StatsFilter(output=str(parquet_path))
@@ -419,7 +419,7 @@ class TestStatsFilter:
     def test_welford_state_stored(self, tmp_path):
         """StatsFilter should store Welford accumulator state for merging."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
         filt = StatsFilter(output=str(parquet_path))
@@ -448,12 +448,12 @@ class TestMergeWelfordStats:
         _create_vtk_file(tmp_path / "vtk2", "b.vtu")
 
         # Create two separate stats files
-        source1 = VTKSource.from_path(str(tmp_path / "vtk1"))
+        source1 = VTKSource(str(tmp_path / "vtk1"))
         filt1 = StatsFilter(output=str(tmp_path / "stats1.parquet"))
         list(filt1(source1[0]))
         filt1.flush()
 
-        source2 = VTKSource.from_path(str(tmp_path / "vtk2"))
+        source2 = VTKSource(str(tmp_path / "vtk2"))
         filt2 = StatsFilter(output=str(tmp_path / "stats2.parquet"))
         list(filt2(source2[0]))
         filt2.flush()
@@ -489,12 +489,12 @@ class TestMeanFilterMerge:
         _create_vtk_file(tmp_path / "vtk2", "b.vtu")
 
         # Simulate two workers writing separate files.
-        source1 = VTKSource.from_path(str(tmp_path / "vtk1"))
+        source1 = VTKSource(str(tmp_path / "vtk1"))
         filt1 = MeanFilter(output=str(tmp_path / "means_0.parquet"))
         list(filt1(source1[0]))
         filt1.flush()
 
-        source2 = VTKSource.from_path(str(tmp_path / "vtk2"))
+        source2 = VTKSource(str(tmp_path / "vtk2"))
         filt2 = MeanFilter(output=str(tmp_path / "means_1.parquet"))
         list(filt2(source2[0]))
         filt2.flush()
@@ -514,7 +514,7 @@ class TestMeanFilterMerge:
         """Merged values should match the originals."""
         _create_vtk_file(tmp_path / "vtk1", "a.vtu")
 
-        source = VTKSource.from_path(str(tmp_path / "vtk1"))
+        source = VTKSource(str(tmp_path / "vtk1"))
         filt = MeanFilter(output=str(tmp_path / "means.parquet"))
         list(filt(source[0]))
         filt.flush()
@@ -537,14 +537,14 @@ class TestMeanFilterMerge:
         """Merge should handle files with different column sets."""
         # File 1: has temperature and pressure columns
         _create_vtk_file(tmp_path / "vtk1", "a.vtu")
-        source1 = VTKSource.from_path(str(tmp_path / "vtk1"))
+        source1 = VTKSource(str(tmp_path / "vtk1"))
         filt1 = MeanFilter(output=str(tmp_path / "means_0.parquet"))
         list(filt1(source1[0]))
         filt1.flush()
 
         # File 2: same structure (both have temperature, pressure, velocity)
         _create_vtk_file(tmp_path / "vtk2", "b.vtu")
-        source2 = VTKSource.from_path(str(tmp_path / "vtk2"))
+        source2 = VTKSource(str(tmp_path / "vtk2"))
         filt2 = MeanFilter(output=str(tmp_path / "means_1.parquet"))
         list(filt2(source2[0]))
         filt2.flush()
@@ -572,12 +572,12 @@ class TestStatsFilterMerge:
         _create_vtk_file(tmp_path / "vtk1", "a.vtu")
         _create_vtk_file(tmp_path / "vtk2", "b.vtu")
 
-        source1 = VTKSource.from_path(str(tmp_path / "vtk1"))
+        source1 = VTKSource(str(tmp_path / "vtk1"))
         filt1 = StatsFilter(output=str(tmp_path / "stats_0.parquet"))
         list(filt1(source1[0]))
         filt1.flush()
 
-        source2 = VTKSource.from_path(str(tmp_path / "vtk2"))
+        source2 = VTKSource(str(tmp_path / "vtk2"))
         filt2 = StatsFilter(output=str(tmp_path / "stats_1.parquet"))
         list(filt2(source2[0]))
         filt2.flush()
@@ -603,7 +603,7 @@ class TestStatsFilterMerge:
     def test_merge_writes_file(self, tmp_path):
         """StatsFilter.merge should write the output file."""
         _create_vtk_file(tmp_path / "vtk", "a.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         filt = StatsFilter(output=str(tmp_path / "stats.parquet"))
         list(filt(source[0]))
         filt.flush()
@@ -629,7 +629,7 @@ class TestPrecisionFilter:
     def test_converts_float64_to_float32(self, tmp_path):
         """PrecisionFilter should convert float64 fields to float32."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
 
         # Verify original dtype is float64
@@ -650,7 +650,7 @@ class TestPrecisionFilter:
     def test_converts_points_tensor(self, tmp_path):
         """PrecisionFilter should convert points tensor."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
 
         filt = PrecisionFilter(target_dtype="float32")
@@ -664,7 +664,7 @@ class TestPrecisionFilter:
     def test_converts_cell_data(self, tmp_path):
         """PrecisionFilter should convert cell_data fields."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
 
         filt = PrecisionFilter(target_dtype="float32")
@@ -678,7 +678,7 @@ class TestPrecisionFilter:
     def test_preserves_values(self, tmp_path):
         """PrecisionFilter should preserve tensor values (within precision)."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
 
         original_temp = mesh.point_data["temperature"].clone()
@@ -697,7 +697,7 @@ class TestPrecisionFilter:
     def test_float16_conversion(self, tmp_path):
         """PrecisionFilter should support float16 conversion."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
 
         filt = PrecisionFilter(target_dtype="float16")
@@ -716,7 +716,7 @@ class TestPrecisionFilter:
     def test_modifies_mesh_in_place(self, tmp_path):
         """PrecisionFilter should modify the mesh in place."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
 
         filt = PrecisionFilter(target_dtype="float32")
@@ -734,7 +734,7 @@ class TestPrecisionFilter:
     def test_skips_non_float_tensors(self, tmp_path):
         """PrecisionFilter should skip non-floating-point tensors."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
-        source = VTKSource.from_path(str(tmp_path / "vtk"))
+        source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
 
         # cells tensor should be integer type
@@ -774,7 +774,7 @@ class TestNewFiltersPipeline:
         stats_filter = StatsFilter(output=str(stats_path))
 
         pipeline = (
-            VTKSource.from_path(str(vtk_dir))
+            VTKSource(str(vtk_dir))
             .filter(info_filter)
             .filter(precision_filter)
             .filter(stats_filter)
@@ -812,13 +812,13 @@ class TestNewFiltersPipeline:
 
         # Save without precision filter
         output_dir_fp64 = tmp_path / "output_fp64"
-        pipeline_fp64 = VTKSource.from_path(str(vtk_dir)).write(MeshSink(output_dir=str(output_dir_fp64)))
+        pipeline_fp64 = VTKSource(str(vtk_dir)).write(MeshSink(output_dir=str(output_dir_fp64)))
         paths_fp64 = pipeline_fp64[0]
 
         # Save with precision filter
         output_dir_fp32 = tmp_path / "output_fp32"
         pipeline_fp32 = (
-            VTKSource.from_path(str(vtk_dir))
+            VTKSource(str(vtk_dir))
             .filter(PrecisionFilter(target_dtype="float32"))
             .write(MeshSink(output_dir=str(output_dir_fp32)))
         )

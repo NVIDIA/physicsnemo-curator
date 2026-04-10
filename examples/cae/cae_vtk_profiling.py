@@ -28,8 +28,9 @@ compares the two VTK reading backends available in
 - **Rust**: native reader built with PyO3 for faster I/O on ASCII
   VTU/VTP files.
 
-We run the same pipeline twice — once per backend — and print the
-per-stage timing breakdown so you can see exactly where time is spent.
+We download DrivAerML boundary files, then run the same pipeline twice
+— once per backend — and print the per-stage timing breakdown so you
+can see exactly where time is spent.
 
 .. note::
 
@@ -43,33 +44,46 @@ per-stage timing breakdown so you can see exactly where time is spent.
 # Imports
 # -------
 #
-# We need :class:`~physicsnemo_curator.mesh.sources.vtk.VTKSource` (which
-# exposes the ``backend`` parameter), a filter, a sink, and the
+# We use :class:`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
+# to download DrivAerML boundary files, then
+# :class:`~physicsnemo_curator.mesh.sources.vtk.VTKSource` (which exposes the
+# ``backend`` parameter) for local VTK reading, a filter, a sink, and the
 # :class:`~physicsnemo_curator.core.profiling.ProfiledPipeline` wrapper.
 
 from physicsnemo_curator.core.profiling import ProfiledPipeline
 
+from physicsnemo_curator.core.store import FsspecFileStore
 from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
 from physicsnemo_curator.run import run_pipeline
 
 # %%
-# Configure the Sources
-# ---------------------
+# Download DrivAerML Files
+# -------------------------
 #
-# We create two :class:`~physicsnemo_curator.mesh.sources.vtk.VTKSource`
-# instances reading the same DrivAerML boundary VTP files from
-# HuggingFace Hub — one using PyVista, the other using the Rust backend.
-#
-# The first call downloads and caches the files locally; subsequent runs
-# read from cache.  We process 3 runs to get meaningful timings while
-# keeping the example fast.
+# We use :class:`~physicsnemo_curator.core.store.FsspecFileStore` to download
+# a small subset of DrivAerML boundary VTP files from HuggingFace Hub
+# to a local cache directory.  Subsequent runs read from cache.
 
 N_RUNS = 3
 N_JOBS = 1  # Sequential for fair comparison (no scheduling noise)
 
 DRIVAERML_URL = "hf://datasets/neashton/drivaerml"
+CACHE_DIR = "outputs/profiling/drivaerml_cache"
+
+store = FsspecFileStore(
+    url=DRIVAERML_URL,
+    pattern="**/boundary*.vtp",
+    extensions=frozenset({".vtp"}),
+    cache_storage=CACHE_DIR,
+)
+
+# Force download of the files we need
+for i in range(min(N_RUNS, len(store))):
+    _ = store[i]
+
+print(f"VTP files cached: {len(store)}")
 
 # %%
 # PyVista Backend
@@ -80,13 +94,9 @@ DRIVAERML_URL = "hf://datasets/neashton/drivaerml"
 # :class:`~physicsnemo.mesh.Mesh` via
 # :func:`~physicsnemo.mesh.io.from_pyvista`.
 
-pyvista_source = VTKSource.from_url(
-    DRIVAERML_URL,
-    file_pattern="**/boundary*.vtp",
-    backend="pyvista",
-)
+pyvista_source = VTKSource(CACHE_DIR, backend="pyvista")
 
-print(f"VTP files discovered: {len(pyvista_source)}")
+print(f"VTK files discovered locally: {len(pyvista_source)}")
 
 pyvista_pipeline = pyvista_source.filter(PrecisionFilter(target_dtype="float32")).write(
     MeshSink(output_dir="outputs/profiling/pyvista_meshes/")
@@ -129,11 +139,7 @@ profiled_pyvista.metrics.to_console()
 #    The Rust backend only supports ASCII VTU/VTP files and does not
 #    apply ``manifold_dim`` or ``point_source`` conversion.
 
-rust_source = VTKSource.from_url(
-    DRIVAERML_URL,
-    file_pattern="**/boundary*.vtp",
-    backend="rust",
-)
+rust_source = VTKSource(CACHE_DIR, backend="rust")
 
 rust_pipeline = rust_source.filter(PrecisionFilter(target_dtype="float32")).write(
     MeshSink(output_dir="outputs/profiling/rust_meshes/")

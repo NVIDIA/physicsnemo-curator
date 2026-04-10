@@ -39,17 +39,13 @@ pip install physicsnemo-curator[wiz]
 
 ```python
 from physicsnemo_curator import run_pipeline
-from physicsnemo_curator.core.store import LocalFileStore
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
 from physicsnemo_curator.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 
-# Create a file store for local VTK data
-store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
-
 # Build the pipeline
 pipeline = (
-    VTKSource(store=store)
+    VTKSource("./cfd_results/")
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )

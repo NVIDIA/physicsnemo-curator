@@ -157,7 +157,6 @@ class TimeBackendWithIO:
     def setup(self, backend, n_workers, n_files):
         """Generate VTU files and build the pipeline."""
         from physicsnemo_curator.core.base import Pipeline
-        from physicsnemo_curator.core.store import LocalFileStore
         from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
         from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
         from physicsnemo_curator.mesh.sources.vtk import VTKSource
@@ -174,8 +173,7 @@ class TimeBackendWithIO:
                 seed=42 + i,
             )
 
-        store = LocalFileStore(self._input_dir, extensions=frozenset({".vtu"}))
-        source = VTKSource(store, backend="pyvista")
+        source = VTKSource(self._input_dir, backend="pyvista")
         precision = PrecisionFilter(target_dtype="float32")
         sink = MeshSink(output_dir=self._output_dir)
 

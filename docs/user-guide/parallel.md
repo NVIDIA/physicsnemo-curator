@@ -123,13 +123,12 @@ for details.
 ### Basic parallel ETL
 
 ```python
-from physicsnemo_curator.core.store import LocalFileStore
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator import run_pipeline
 
 pipeline = (
-    VTKSource.from_path("./cfd_results/")
+    VTKSource("./cfd_results/")
     .write(MeshSink(output_dir="./output/"))
 )
 

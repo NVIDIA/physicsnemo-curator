@@ -18,43 +18,32 @@ dependencies.
 
 ### VTKSource
 
-{class}`~physicsnemo_curator.mesh.sources.vtk.VTKSource` reads VTK files via a
-{class}`~physicsnemo_curator.core.store.FileStore` and converts each to a
+{class}`~physicsnemo_curator.mesh.sources.vtk.VTKSource` reads VTK files from a
+local directory and converts each to a
 {class}`physicsnemo.mesh.Mesh` using {func}`physicsnemo.mesh.io.from_pyvista`.
 
-The primary constructor accepts a `FileStore` directly — this is the
-recommended pattern for programmatic use:
+The constructor takes a path string directly:
 
 ```python
-from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
-# Local directory
-store = LocalFileStore("./data/", extensions=frozenset({".vtk", ".vtu"}))
-source = VTKSource(store=store, manifold_dim=2)
+# Local directory (discovers VTK files automatically)
+source = VTKSource("./data/", manifold_dim=2)
 
-# Remote (HuggingFace Hub, S3, HTTPS, ...)
-store = FsspecFileStore(
-    "hf://datasets/neashton/drivaerml/run_1/slices",
-    extensions=frozenset({".vtp"}),
-)
-source = VTKSource(store=store)
+# With a custom glob pattern
+source = VTKSource("./data/", file_pattern="**", manifold_dim="auto")
 
-# Custom store
-source = VTKSource(store=my_database_store, point_source="cell_centroids")
+# Cell centroid mode for CFD polyhedral meshes
+source = VTKSource("./cfd/", point_source="cell_centroids")
 ```
 
-Convenience classmethods are also available for quick one-liners:
-
-- {meth}`~physicsnemo_curator.mesh.sources.vtk.VTKSource.from_path` — wraps a
-  {class}`~physicsnemo_curator.core.store.LocalFileStore`
-- {meth}`~physicsnemo_curator.mesh.sources.vtk.VTKSource.from_url` — wraps a
-  {class}`~physicsnemo_curator.core.store.FsspecFileStore`
+For remote datasets (HuggingFace Hub), use purpose-built dataset sources
+such as {class}`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`:
 
 ```python
-# One-liner shortcuts
-source = VTKSource.from_path("./data/")
-source = VTKSource.from_url("hf://datasets/neashton/drivaerml/run_1/slices")
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+
+source = DrivAerMLSource(mesh_type="boundary")
 ```
 
 **Supported formats:** `.vtk`, `.vtp`, `.vtu`, `.vts`, `.vtm`
@@ -63,22 +52,11 @@ source = VTKSource.from_url("hf://datasets/neashton/drivaerml/run_1/slices")
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `store` | `FileStore` | *required* | File store providing indexed access to VTK files |
+| `input_path` | `str` | *required* | Path to local directory containing VTK files |
+| `file_pattern` | `str` | `"**"` | Glob pattern for filtering files |
 | `manifold_dim` | `int \| "auto"` | `"auto"` | Target manifold dimension (0–3) |
 | `point_source` | `str` | `"vertices"` | `"vertices"` or `"cell_centroids"` |
 | `warn_on_lost_data` | `bool` | `True` | Warn when data arrays are discarded |
-
-**Convenience classmethod parameters (``from_path`` / ``from_url``):**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `input_path` / `url` | `str` | *required* | Local path or fsspec URL |
-| `file_pattern` | `str` | `"*"` / `"**"` | Glob pattern for filtering files |
-| `storage_options` | `dict` | `None` | fsspec auth/config (``from_url`` only) |
-| `cache_storage` | `str` | `None` | Local cache dir (``from_url`` only) |
-
-All conversion parameters from the constructor table above (``manifold_dim``,
-``point_source``, ``warn_on_lost_data``) are also accepted.
 
 **Manifold dimensions:**
 
@@ -100,47 +78,31 @@ All conversion parameters from the constructor table above (``manifold_dim``,
 **Examples:**
 
 ```python
-from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
-# --- Primary pattern: construct store + inject ---
-
-# Local directory with extension filter
-store = LocalFileStore("./data/", extensions=frozenset({".vtk", ".vtu"}))
-source = VTKSource(store=store)
+# Local directory (auto-discovers VTK files)
+source = VTKSource("./data/")
 
 # Read as volume mesh
-store = LocalFileStore("./volumes/")
-source = VTKSource(store=store, manifold_dim=3)
+source = VTKSource("./volumes/", manifold_dim=3)
 
 # Use cell centroids for CFD polyhedral meshes
-store = LocalFileStore("./cfd/")
 source = VTKSource(
-    store=store,
+    "./cfd/",
     point_source="cell_centroids",
     warn_on_lost_data=False,
 )
 
-# HuggingFace Hub dataset
-store = FsspecFileStore(
-    "hf://datasets/neashton/drivaerml/run_1/slices",
-    extensions=frozenset({".vtp"}),
-)
-source = VTKSource(store=store)
+# Custom glob pattern to select a subset of files
+source = VTKSource("./data/", file_pattern="timestep_*")
+```
 
-# S3 (public bucket)
-store = FsspecFileStore(
-    "s3://my-bucket/cfd-data/",
-    storage_options={"anon": True},
-)
-source = VTKSource(store=store, manifold_dim=2)
+For remote datasets from HuggingFace Hub, use the dedicated dataset sources:
 
-# --- Convenience classmethods (one-liners) ---
+```python
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
 
-source = VTKSource.from_path("./data/")
-source = VTKSource.from_path("./data/", file_pattern="timestep_*")
-source = VTKSource.from_url("hf://datasets/neashton/drivaerml/run_1/slices")
-source = VTKSource.from_url("s3://my-bucket/cfd-data/", storage_options={"anon": True})
+source = DrivAerMLSource(mesh_type="boundary")
 ```
 
 ### MeanFilter
@@ -209,9 +171,17 @@ index and `seq` is the sequence number within that item (for sources that
 yield multiple meshes).
 
 A custom `naming_template` can be provided using Python format-string
-syntax with `{index}` and `{seq}` placeholders.  Standard format specs
-are supported (e.g. `{index:04d}`).  The template is used literally —
-include any file extension you need.
+syntax with the following placeholders:
+
+| Placeholder | Description |
+|-------------|-------------|
+| `{index}` | Source item index |
+| `{seq}` | Sequence number within that item (for multi-mesh sources) |
+| `{relpath}` | Relative path of the source file (from the source directory) |
+| `{stem}` | File stem (name without extension) of the source file |
+
+Standard format specs are supported (e.g. `{index:04d}`).  The template
+is used literally — include any file extension you need.
 
 Saved meshes can be loaded back with:
 
@@ -241,30 +211,21 @@ paths = pipeline[0]  # ['./output/boundary_0.vtp.pmsh']
 ## Full Pipeline Example
 
 ```python
-from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 
-# Local data with explicit store
-store = LocalFileStore("./cfd_results/", extensions=frozenset({".vtk", ".vtu"}))
+# Local data
 pipeline = (
-    VTKSource(store=store, manifold_dim=2)
+    VTKSource("./cfd_results/", manifold_dim=2)
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )
 
-# Or remote data from HuggingFace with explicit store
-store = FsspecFileStore("hf://datasets/neashton/drivaerml/run_1/slices")
+# Remote data from HuggingFace (DrivAerML dataset)
 pipeline = (
-    VTKSource(store=store)
-    .filter(MeanFilter(output="stats.parquet"))
-    .write(MeshSink(output_dir="./output/"))
-)
-
-# Or use convenience classmethods for quick pipelines
-pipeline = (
-    VTKSource.from_path("./cfd_results/", manifold_dim=2)
+    DrivAerMLSource(mesh_type="boundary")
     .filter(MeanFilter(output="stats.parquet"))
     .write(MeshSink(output_dir="./output/"))
 )

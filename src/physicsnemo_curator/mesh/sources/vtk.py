@@ -17,13 +17,11 @@
 """VTK file source for mesh pipelines.
 
 Reads VTK-format files (``.vtk``, ``.vtp``, ``.vtu``, ``.vts``, ``.vtm``)
-via a :class:`~curator.core.store.FileStore` and converts each to a
+from a local directory and converts each to a
 :class:`physicsnemo.mesh.Mesh` using :func:`physicsnemo.mesh.io.from_pyvista`.
 
-File discovery and access is delegated to the injected
-:class:`~curator.core.store.FileStore`, allowing transparent support for
-local directories, S3, HuggingFace Hub, HTTPS, and any other
-``fsspec``-compatible backend.
+File discovery uses :func:`pathlib.Path.glob` with an optional pattern,
+filtering to recognised VTK extensions.
 
 The conversion supports multiple manifold dimensions (point clouds, lines,
 surfaces, volumes) and two point-source modes (vertices or cell centroids).
@@ -32,6 +30,7 @@ See :func:`physicsnemo.mesh.io.from_pyvista` for full details.
 
 from __future__ import annotations
 
+import pathlib
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 import pyvista as pv
@@ -39,7 +38,6 @@ from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.io import from_pyvista
 
 from physicsnemo_curator.core.base import Param, Source
-from physicsnemo_curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -52,18 +50,23 @@ Backend = Literal["pyvista", "rust"]
 
 
 class VTKSource(Source[Mesh]):
-    """Read VTK files and yield :class:`~physicsnemo.mesh.Mesh` objects.
+    """Read local VTK files and yield :class:`~physicsnemo.mesh.Mesh` objects.
 
-    File discovery and caching are handled by the injected
-    :class:`~curator.core.store.FileStore`.  Use the convenience
-    constructors :meth:`from_path` and :meth:`from_url` for the common
-    cases of local directories and remote ``fsspec`` URLs.
+    File discovery uses :func:`pathlib.Path.glob` with an optional
+    *file_pattern*, filtering to recognised VTK extensions.  Only local
+    paths are supported; for remote datasets use a domain-specific source
+    such as :class:`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`.
 
     Parameters
     ----------
-    store : FileStore
-        A :class:`~curator.core.store.FileStore` that maps integer
-        indices to local file paths.
+    input_path : str
+        Path to a local directory containing VTK files, or a single VTK
+        file.
+    file_pattern : str
+        Glob pattern for filtering files inside a directory.  Defaults to
+        ``"**/*"`` which recursively discovers all VTK files.  Use ``"*"``
+        for flat (non-recursive) discovery, or a custom pattern such as
+        ``"timestep_*"`` for selective matching.
     manifold_dim : int or {"auto"}
         Target manifold dimension passed to ``from_pyvista``:
 
@@ -96,25 +99,18 @@ class VTKSource(Source[Mesh]):
     --------
     Local directory:
 
-    >>> source = VTKSource.from_path("./cfd_results/")
+    >>> source = VTKSource("./cfd_results/")
     >>> len(source)
     42
     >>> mesh = next(source[0])
 
-    Remote HuggingFace dataset:
+    Custom glob pattern:
 
-    >>> source = VTKSource.from_url(
-    ...     "hf://datasets/neashton/drivaerml/run_1/slices"
-    ... )
-
-    Custom store (dependency injection):
-
-    >>> store = MyCustomFileStore(...)
-    >>> source = VTKSource(store=store, manifold_dim=2)
+    >>> source = VTKSource("./data/", file_pattern="timestep_*")
 
     Using the fast Rust backend:
 
-    >>> source = VTKSource.from_path("./cfd_results/", backend="rust")
+    >>> source = VTKSource("./cfd_results/", backend="rust")
 
     Note
     ----
@@ -137,8 +133,7 @@ class VTKSource(Source[Mesh]):
         """
         return [
             Param(name="input_path", description="Path to VTK file or directory (local)", type=str),
-            Param(name="url", description="fsspec URL (s3://, hf://, https://)", type=str, default=""),
-            Param(name="file_pattern", description="Glob pattern for filtering files", type=str, default="*"),
+            Param(name="file_pattern", description="Glob pattern for filtering files", type=str, default="**/*"),
             Param(
                 name="manifold_dim",
                 description="Target manifold dimension (auto, 0, 1, 2, 3)",
@@ -168,161 +163,56 @@ class VTKSource(Source[Mesh]):
             ),
         ]
 
-    # -- Constructors --------------------------------------------------------
-
     def __init__(
         self,
-        store: FileStore,
+        input_path: str,
+        file_pattern: str = "**/*",
+        *,
         manifold_dim: int | Literal["auto"] = "auto",
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
         backend: Backend = "pyvista",
     ) -> None:
-        self._store = store
         self._manifold_dim = manifold_dim
         self._point_source = point_source
         self._warn_on_lost_data = warn_on_lost_data
         self._backend: Backend = backend
 
-    @classmethod
-    def from_path(
-        cls,
-        input_path: str,
-        file_pattern: str = "**",
-        *,
-        manifold_dim: int | Literal["auto"] = "auto",
-        point_source: Literal["vertices", "cell_centroids"] = "vertices",
-        warn_on_lost_data: bool = True,
-        backend: Backend = "pyvista",
-    ) -> VTKSource:
-        """Create a :class:`VTKSource` from a local directory or file.
+        root = pathlib.Path(input_path)
 
-        Parameters
-        ----------
-        input_path : str
-            Path to a directory containing VTK files, or a single file.
-        file_pattern : str
-            Glob pattern for filtering files in a directory.  Defaults
-            to ``"**"`` which recursively discovers VTK files in all
-            subdirectories.  Use ``"*"`` for flat (non-recursive) discovery.
-        manifold_dim : int or {"auto"}
-            Target manifold dimension.
-        point_source : {"vertices", "cell_centroids"}
-            Point source mode.
-        warn_on_lost_data : bool
-            Warn when data arrays are discarded.
-        backend : {"pyvista", "rust"}
-            VTK reading backend.
+        # Single file
+        if root.is_file():
+            if root.suffix.lower() not in _VTK_EXTENSIONS:
+                msg = f"File {root} does not have a recognised VTK extension {sorted(_VTK_EXTENSIONS)}."
+                raise ValueError(msg)
+            self._root = root.parent
+            self._files: list[pathlib.Path] = [root.resolve()]
+            return
 
-        Returns
-        -------
-        VTKSource
-            Configured source backed by a :class:`LocalFileStore`.
+        if not root.is_dir():
+            msg = f"Path {root} is not a file or directory."
+            raise FileNotFoundError(msg)
 
-        Examples
-        --------
-        >>> source = VTKSource.from_path("./cfd_results/")
-        >>> source = VTKSource.from_path("./data/", file_pattern="timestep_*")
-        """
-        store = LocalFileStore(input_path, pattern=file_pattern, extensions=_VTK_EXTENSIONS)
-        return cls(
-            store=store,
-            manifold_dim=manifold_dim,
-            point_source=point_source,
-            warn_on_lost_data=warn_on_lost_data,
-            backend=backend,
+        self._root = root.resolve()
+
+        # Glob and filter to VTK extensions, then sort for deterministic order
+        discovered = sorted(
+            p.resolve() for p in root.glob(file_pattern) if p.is_file() and p.suffix.lower() in _VTK_EXTENSIONS
         )
+        if not discovered:
+            msg = (
+                f"No VTK files found in {root} with pattern {file_pattern!r}; "
+                f"expected extensions {sorted(_VTK_EXTENSIONS)}."
+            )
+            raise ValueError(msg)
 
-    @classmethod
-    def from_url(
-        cls,
-        url: str,
-        file_pattern: str = "**",
-        *,
-        storage_options: dict[str, object] | None = None,
-        cache_storage: str | None = None,
-        manifold_dim: int | Literal["auto"] = "auto",
-        point_source: Literal["vertices", "cell_centroids"] = "vertices",
-        warn_on_lost_data: bool = True,
-        backend: Backend = "pyvista",
-    ) -> VTKSource:
-        """Create a :class:`VTKSource` from an ``fsspec``-compatible URL.
-
-        Remote files are transparently cached to a local directory.
-
-        Parameters
-        ----------
-        url : str
-            An ``fsspec`` URL such as ``"hf://datasets/org/repo/path"``,
-            ``"s3://bucket/prefix/"``, or ``"https://example.com/data/"``.
-        file_pattern : str
-            Glob pattern for file discovery.  Defaults to ``"**"``
-            (recursive).
-        storage_options : dict[str, object] | None
-            Extra keyword arguments for the ``fsspec`` filesystem
-            (e.g. ``{"anon": True}``).
-        cache_storage : str | None
-            Local directory for cached downloads.  If ``None``, a
-            temporary directory is used.
-        manifold_dim : int or {"auto"}
-            Target manifold dimension.
-        point_source : {"vertices", "cell_centroids"}
-            Point source mode.
-        warn_on_lost_data : bool
-            Warn when data arrays are discarded.
-        backend : {"pyvista", "rust"}
-            VTK reading backend.
-
-        Returns
-        -------
-        VTKSource
-            Configured source backed by a :class:`FsspecFileStore`.
-
-        Examples
-        --------
-        >>> source = VTKSource.from_url(
-        ...     "hf://datasets/neashton/drivaerml/run_1/slices"
-        ... )
-        >>> source = VTKSource.from_url(
-        ...     "s3://my-bucket/data/", storage_options={"anon": True}
-        ... )
-        """
-        store = FsspecFileStore(
-            url=url,
-            pattern=file_pattern,
-            extensions=_VTK_EXTENSIONS,
-            storage_options=storage_options,
-            cache_storage=cache_storage,
-        )
-        return cls(
-            store=store,
-            manifold_dim=manifold_dim,
-            point_source=point_source,
-            warn_on_lost_data=warn_on_lost_data,
-            backend=backend,
-        )
+        self._files = discovered
 
     # -- Source interface -----------------------------------------------------
 
-    @property
-    def store(self) -> FileStore:
-        """Return the underlying :class:`FileStore`.
-
-        This is useful for passing the store to a
-        :class:`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` to
-        enable directory-mirroring via ``{relpath}`` / ``{stem}``
-        placeholders.
-
-        Returns
-        -------
-        FileStore
-            The file store backing this source.
-        """
-        return self._store
-
     def __len__(self) -> int:
         """Return the number of discovered VTK files."""
-        return len(self._store)
+        return len(self._files)
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
         """Read the *index*-th VTK file and yield a Mesh.
@@ -335,16 +225,50 @@ class VTKSource(Source[Mesh]):
         Parameters
         ----------
         index : int
-            Zero-based file index.
+            Zero-based file index into the discovered VTK file list.
 
         Yields
         ------
         Mesh
             The converted physicsnemo Mesh.
         """
-        path = self._store[index]
+        path = str(self._files[index])
         mesh = self._read_with_rust(path) if self._backend == "rust" else self._read_with_pyvista(path)
         yield mesh
+
+    # -- Path helpers (used by MeshSink for naming) --------------------------
+
+    @property
+    def root(self) -> pathlib.Path:
+        """Return the root directory of this source.
+
+        Returns
+        -------
+        pathlib.Path
+            The root directory containing the discovered VTK files.
+        """
+        return self._root
+
+    def relative_path(self, index: int) -> str:
+        """Return the path of the *index*-th file relative to the root.
+
+        This is used by sinks (e.g.
+        :class:`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink`) to
+        resolve ``{relpath}`` and ``{stem}`` naming placeholders.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based file index.
+
+        Returns
+        -------
+        str
+            POSIX-style relative path (e.g. ``"subdir/mesh.vtu"``).
+        """
+        return self._files[index].relative_to(self._root).as_posix()
+
+    # -- Private readers -----------------------------------------------------
 
     def _read_with_pyvista(self, path: str) -> Mesh:
         """Read VTK file using PyVista backend.

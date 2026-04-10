@@ -68,6 +68,10 @@ class TestFileStoreProtocol:
 
     def test_custom_class_matches_protocol(self):
         class Custom:
+            @property
+            def paths(self):
+                return []
+
             def __len__(self):
                 return 0
 

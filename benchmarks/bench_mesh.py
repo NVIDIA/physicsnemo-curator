@@ -32,7 +32,6 @@ class TimeMeshE2E:
     def setup(self, n_files):
         """Generate synthetic VTU files and build the pipeline."""
         from physicsnemo_curator.core.base import Pipeline
-        from physicsnemo_curator.core.store import LocalFileStore
         from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
         from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
         from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
@@ -51,8 +50,7 @@ class TimeMeshE2E:
                 seed=42 + i,
             )
 
-        store = LocalFileStore(self._input_dir, extensions=frozenset({".vtu"}))
-        source = VTKSource(store, backend="pyvista")
+        source = VTKSource(self._input_dir, backend="pyvista")
         precision = PrecisionFilter(target_dtype="float32")
         info = MeshInfoFilter(
             output=str(Path(self._info_dir) / "info.json"),
@@ -90,7 +88,6 @@ class MemMeshE2E:
     def setup(self, n_files):
         """Generate synthetic VTU files and build the pipeline."""
         from physicsnemo_curator.core.base import Pipeline
-        from physicsnemo_curator.core.store import LocalFileStore
         from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
         from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
         from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
@@ -109,8 +106,7 @@ class MemMeshE2E:
                 seed=42 + i,
             )
 
-        store = LocalFileStore(self._input_dir, extensions=frozenset({".vtu"}))
-        source = VTKSource(store, backend="pyvista")
+        source = VTKSource(self._input_dir, backend="pyvista")
         precision = PrecisionFilter(target_dtype="float32")
         info = MeshInfoFilter(
             output=str(Path(self._info_dir) / "info.json"),
@@ -150,14 +146,12 @@ class TimeVTKSourceRead:
 
     def setup(self, n_points):
         """Generate a single VTU file and create the source."""
-        from physicsnemo_curator.core.store import LocalFileStore
         from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
         self._tmpdir = create_temp_dir()
         n_cells = n_points // 2
         write_synthetic_vtu(Path(self._tmpdir) / "test.vtu", n_points, n_cells)
-        store = LocalFileStore(self._tmpdir, extensions=frozenset({".vtu"}))
-        self.source = VTKSource(store, backend="pyvista")
+        self.source = VTKSource(self._tmpdir, backend="pyvista")
 
     def time_read(self, n_points):
         """Read a single mesh via VTKSource."""
@@ -255,15 +249,13 @@ class TimePrecisionFilter:
 
     def setup(self, n_points):
         """Generate a VTU file and create source + filter."""
-        from physicsnemo_curator.core.store import LocalFileStore
         from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
         from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
         self._tmpdir = create_temp_dir()
         n_cells = n_points // 2
         write_synthetic_vtu(Path(self._tmpdir) / "test.vtu", n_points, n_cells)
-        store = LocalFileStore(self._tmpdir, extensions=frozenset({".vtu"}))
-        self.source = VTKSource(store, backend="pyvista")
+        self.source = VTKSource(self._tmpdir, backend="pyvista")
         self.filt = PrecisionFilter(target_dtype="float32")
 
     def time_filter(self, n_points):
@@ -288,7 +280,6 @@ class TimeMeshInfoFilter:
 
     def setup(self, n_points):
         """Generate a VTU file and create source + filter."""
-        from physicsnemo_curator.core.store import LocalFileStore
         from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
         from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
@@ -296,8 +287,7 @@ class TimeMeshInfoFilter:
         self._info_dir = create_temp_dir()
         n_cells = n_points // 2
         write_synthetic_vtu(Path(self._tmpdir) / "test.vtu", n_points, n_cells)
-        store = LocalFileStore(self._tmpdir, extensions=frozenset({".vtu"}))
-        self.source = VTKSource(store, backend="pyvista")
+        self.source = VTKSource(self._tmpdir, backend="pyvista")
         self.filt = MeshInfoFilter(
             output=str(Path(self._info_dir) / "info.json"),
             log_level="warning",
@@ -326,7 +316,6 @@ class TimeMeanFilter:
 
     def setup(self, n_points):
         """Generate a VTU file and create source + filter."""
-        from physicsnemo_curator.core.store import LocalFileStore
         from physicsnemo_curator.mesh.filters.mean import MeanFilter
         from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
@@ -334,8 +323,7 @@ class TimeMeanFilter:
         self._output_dir = create_temp_dir()
         n_cells = n_points // 2
         write_synthetic_vtu(Path(self._tmpdir) / "test.vtu", n_points, n_cells)
-        store = LocalFileStore(self._tmpdir, extensions=frozenset({".vtu"}))
-        self.source = VTKSource(store, backend="pyvista")
+        self.source = VTKSource(self._tmpdir, backend="pyvista")
         self.filt = MeanFilter(output=str(Path(self._output_dir) / "mean.parquet"))
 
     def time_filter(self, n_points):
@@ -464,7 +452,6 @@ class TimeMeshSink:
 
     def setup(self, n_points):
         """Generate a VTU file and create source + sink."""
-        from physicsnemo_curator.core.store import LocalFileStore
         from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
         from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
@@ -472,8 +459,7 @@ class TimeMeshSink:
         self._output_dir = create_temp_dir()
         n_cells = n_points // 2
         write_synthetic_vtu(Path(self._input_dir) / "test.vtu", n_points, n_cells)
-        store = LocalFileStore(self._input_dir, extensions=frozenset({".vtu"}))
-        self.source = VTKSource(store, backend="pyvista")
+        self.source = VTKSource(self._input_dir, backend="pyvista")
         self.sink = MeshSink(output_dir=self._output_dir)
 
     def time_write(self, n_points):

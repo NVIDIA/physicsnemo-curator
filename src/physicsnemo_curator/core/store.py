@@ -45,12 +45,29 @@ class FileStore(Protocol):
     """Protocol for objects that map integer indices to local file paths.
 
     A :class:`FileStore` is a **sized**, **indexable** collection: it
-    knows how many files it manages (``__len__``) and can return a local
-    filesystem path for any valid index (``__getitem__``).
+    knows how many files it manages (``__len__``), can return a local
+    filesystem path for any valid index (``__getitem__``), and exposes
+    the discovered file paths without side effects (``paths``).
 
     Concrete implementations handle discovery, filtering, sorting, and —
     for remote stores — transparent caching / download.
     """
+
+    @property
+    def paths(self) -> list[str]:
+        """Return all discovered file paths without side effects.
+
+        For local stores this returns the already-resolved paths.  For
+        remote stores this returns the *remote* paths (no download is
+        triggered).  The returned list is sorted and its length matches
+        ``__len__``.
+
+        Returns
+        -------
+        list[str]
+            Discovered file paths (local or remote).
+        """
+        ...
 
     def __len__(self) -> int:
         """Return the number of files in the store."""
@@ -156,6 +173,18 @@ class LocalFileStore:
             The root path supplied at construction time.
         """
         return self._root
+
+    @property
+    def paths(self) -> list[str]:
+        """Return all discovered file paths.
+
+        Returns
+        -------
+        list[str]
+            Absolute path strings for every discovered file, in sorted
+            order.
+        """
+        return [str(p) for p in self._files]
 
     def relative_path(self, index: int) -> str:
         """Return the path of the file at *index* relative to the store root.
@@ -376,6 +405,18 @@ class FsspecFileStore:
         """Return a string representation of the store."""
         return f"FsspecFileStore(url={self._url!r}, files={len(self._remote_files)})"
 
+    @property
+    def paths(self) -> list[str]:
+        """Return all discovered remote file paths without downloading.
+
+        Returns
+        -------
+        list[str]
+            Remote file paths in sorted order.  No downloads are
+            triggered.
+        """
+        return list(self._remote_files)
+
     # -- internal ---------------------------------------------------------
 
     def _discover(self) -> list[str]:
@@ -566,6 +607,24 @@ class RunIndexedFileStore:
         return (
             f"RunIndexedFileStore(url={self._url!r}, template={self._file_template!r}, runs={len(self._run_indices)})"
         )
+
+    @property
+    def paths(self) -> list[str]:
+        """Return all resolved remote file paths without downloading.
+
+        Each path is constructed from the run index and file template.
+
+        Returns
+        -------
+        list[str]
+            Remote file paths in sorted run-index order.  No downloads
+            are triggered.
+        """
+        result: list[str] = []
+        for run_id in self._run_indices:
+            filename = self._file_template.format(i=run_id)
+            result.append(f"{self._root_path}/{self._run_prefix}{run_id}/{filename}")
+        return result
 
     def _ensure_local(self, remote_path: str) -> str:
         """Download *remote_path* to the cache (if not already present).
