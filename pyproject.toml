@@ -181,6 +181,12 @@ python-version = "3.12"
 [tool.ty.rules]
 unresolved-import = "ignore"
 
+[[tool.ty.overrides]]
+include = ["test/**"]
+
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+
 # ---------------------------------------------------------------------------
 # Maturin (Rust/PyO3 build)
 # ---------------------------------------------------------------------------

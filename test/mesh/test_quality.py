@@ -78,7 +78,7 @@ def _make_triangle_mesh(
 
     td = None
     if point_data:
-        td = TensorDict(point_data, batch_size=[n_points])
+        td = TensorDict(point_data, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
 
     return Mesh(points=pts, cells=cells, point_data=td)
 

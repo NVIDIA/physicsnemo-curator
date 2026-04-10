@@ -212,7 +212,7 @@ class MeshSink(Sink["Mesh"]):
 
             subdir = self._output_dir / name
             subdir.parent.mkdir(parents=True, exist_ok=True)
-            mesh.save(str(subdir))  # @tensorclass adds .save() dynamically
+            mesh.save(str(subdir))  # ty: ignore[unresolved-attribute]  # @tensorclass adds .save() dynamically
             logger.debug("Saved mesh to %s", subdir)
             paths.append(str(subdir))
 

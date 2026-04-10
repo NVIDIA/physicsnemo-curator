@@ -367,8 +367,8 @@ class _MomentAccumulator:
         self._mean += delta_n
 
         # Min/max
-        self._min = np.minimum(self._min, x)  # numpy ufunc stub limitation
-        self._max = np.maximum(self._max, x)  # numpy ufunc stub limitation
+        self._min = np.minimum(self._min, x)  # ty: ignore[no-matching-overload]  # numpy ufunc stub limitation
+        self._max = np.maximum(self._max, x)  # ty: ignore[no-matching-overload]  # numpy ufunc stub limitation
 
     def finalize(self) -> xr.Dataset:
         """Compute final statistics and return as an xarray Dataset.

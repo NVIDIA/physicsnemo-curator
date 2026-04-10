@@ -259,7 +259,7 @@ class TestDeserializePipeline:
         )
         data = serialize_pipeline(pipeline)
         restored = deserialize_pipeline(data)
-        assert restored.filters[0]._amount == 42  # ty: ignore[unresolved-attribute]
+        assert restored.filters[0]._amount == 42
 
     def test_round_trip_without_sink(self) -> None:
         """Deserialized pipeline with no sink has sink=None."""
@@ -287,7 +287,7 @@ class TestDeserializePipeline:
         )
         data = serialize_pipeline(pipeline)
         restored = deserialize_pipeline(data)
-        assert [f._amount for f in restored.filters] == [1, 2, 3]  # ty: ignore[unresolved-attribute]
+        assert [f._amount for f in restored.filters] == [1, 2, 3]
 
     def test_unknown_class_raises(self) -> None:
         """Deserializing a config with a fake module raises an import error."""

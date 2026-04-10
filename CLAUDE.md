@@ -118,6 +118,7 @@ The `commit` tool enforces this automatically — always use it instead of raw `
 - **Scope** (optional): `mesh`, `da`, `core`, `run`, `cli`, `rust`
 - **Summary**: imperative mood, lowercase, no trailing period, max 72 chars
 - **Pre-commit hooks** are always run before the commit is created
+- **NEVER** use `--no-verify` to skip pre-commit hooks. Always resolve all hook failures before committing.
 
 ## Skills Available
 

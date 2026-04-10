@@ -343,7 +343,7 @@ class TestD3PlotSourceLocal:
         mock_d3plot_cls.return_value = _make_mock_d3plot()
         source = D3PlotSource(input_dir=str(no_k_root))
         mesh = next(source[0])
-        assert torch.all(mesh.point_data["thickness"] == 0.0)
+        assert torch.all(mesh.point_data["thickness"] == 0.0)  # ty: ignore[no-matching-overload]
 
 
 # ---------------------------------------------------------------------------
@@ -580,7 +580,7 @@ Part_3
         mesh_rust = next(source_rust[0])
 
         # Both should produce the same thickness values.
-        np.testing.assert_allclose(
+        np.testing.assert_allclose(  # ty: ignore[no-matching-overload]
             mesh_rust.point_data["thickness"].numpy(),
             mesh_py.point_data["thickness"].numpy(),
             atol=1e-10,
