@@ -37,6 +37,7 @@ datasets
 parallel
 profiling
 checkpointing
+dashboard
 cli
 ```
 

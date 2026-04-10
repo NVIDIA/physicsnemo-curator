@@ -26,6 +26,16 @@ Interactive command-line interface for guided pipeline construction.
 /autoapi/physicsnemo_curator/cli/index
 ```
 
+## Dashboard
+
+Interactive web dashboard for pipeline metrics inspection.
+
+```{toctree}
+:maxdepth: 2
+
+/autoapi/physicsnemo_curator/dashboard/index
+```
+
 ## Run
 
 Execution backends for parallel and distributed pipeline processing.
