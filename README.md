@@ -42,8 +42,6 @@ pipeline components for users to create their own data processing pipelines.
 - **Multiple domains** — first-class support for unstructured meshes
   (`physicsnemo.mesh.Mesh`), gridded data arrays (`xarray.DataArray`),
   and atomic/molecular data (`nvalchemi.data.AtomicData`)
-- **FileStore abstraction** — decouple file discovery from reading; local
-  directories, S3, HuggingFace Hub, or custom backends
 - **Pluggable execution** — sequential, thread pool, process pool, Loky,
   Dask, or Prefect backends
 - **Registry & CLI** — all sources, filters, and sinks are discoverable
@@ -122,19 +120,11 @@ pip install physicsnemo-curator[da]
 # Atomic domain (molecular dynamics)
 pip install physicsnemo-curator[atm]
 
-# LS-DYNA crash simulation support
-pip install physicsnemo-curator[lsdyna]
-
 # Interactive Wizard
 pip install physicsnemo-curator[wiz]
 
-# Dashboard (Panel/Bokeh visualization)
+# Dashboard
 pip install physicsnemo-curator[dashboard]
-
-# Parallel backends
-pip install physicsnemo-curator[loky]    # Loky backend
-pip install physicsnemo-curator[dask]    # Dask backend
-pip install physicsnemo-curator[prefect] # Prefect backend
 ```
 
 ## Wizard
