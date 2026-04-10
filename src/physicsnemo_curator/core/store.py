@@ -146,6 +146,50 @@ class LocalFileStore:
         """
         return str(self._files[index])
 
+    @property
+    def root(self) -> pathlib.Path:
+        """Return the root directory of the store.
+
+        Returns
+        -------
+        pathlib.Path
+            The root path supplied at construction time.
+        """
+        return self._root
+
+    def relative_path(self, index: int) -> str:
+        """Return the path of the file at *index* relative to the store root.
+
+        For stores backed by a single file, the filename alone is returned.
+        For directory stores, the path is relative to the root directory
+        preserving any intermediate subdirectories.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based file index.
+
+        Returns
+        -------
+        str
+            POSIX-style relative path from the store root to the file.
+
+        Raises
+        ------
+        IndexError
+            If *index* is out of range.
+
+        Examples
+        --------
+        >>> store = LocalFileStore("./data/")
+        >>> store.relative_path(0)
+        'sim_a/mesh.vtu'
+        """
+        abs_path = self._files[index]
+        if self._root.is_file():
+            return abs_path.name
+        return str(abs_path.relative_to(self._root))
+
     def __repr__(self) -> str:
         """Return a string representation of the store."""
         return f"LocalFileStore(root={self._root!r}, files={len(self._files)})"
@@ -178,9 +222,17 @@ class LocalFileStore:
             msg = f"Path {self._root} does not exist."
             raise FileNotFoundError(msg)
 
+        # ``pathlib.Path.glob("**")`` only matches directories, not
+        # files.  Normalise to ``"**/*"`` so that ``"**"`` behaves as
+        # users expect (recursive file discovery), matching the
+        # convention used by ``fsspec`` and shell globbing.
+        pattern = self._pattern
+        if pattern == "**":
+            pattern = "**/*"
+
         files = sorted(
             p
-            for p in self._root.glob(self._pattern)
+            for p in self._root.glob(pattern)
             if p.is_file() and (self._extensions is None or p.suffix.lower() in self._extensions)
         )
 
@@ -289,6 +341,36 @@ class FsspecFileStore:
 
         remote_path = self._remote_files[index]
         return self._ensure_local(remote_path)
+
+    def relative_path(self, index: int) -> str:
+        """Return the remote path at *index* relative to the store root URL.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based file index.
+
+        Returns
+        -------
+        str
+            POSIX-style relative path from the store root to the file.
+
+        Raises
+        ------
+        IndexError
+            If *index* is out of range.
+        """
+        if index < -len(self._remote_files) or index >= len(self._remote_files):
+            msg = f"Index {index} out of range for store with {len(self._remote_files)} files."
+            raise IndexError(msg)
+
+        remote_path = self._remote_files[index]
+        # remote_path is absolute within the filesystem; strip the root prefix.
+        rel = remote_path
+        prefix = self._root_path.rstrip("/") + "/"
+        if rel.startswith(prefix):
+            rel = rel[len(prefix) :]
+        return rel
 
     def __repr__(self) -> str:
         """Return a string representation of the store."""

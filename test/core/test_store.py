@@ -154,6 +154,55 @@ class TestLocalFileStore:
         assert "LocalFileStore" in r
         assert "files=1" in r
 
+    def test_root_property(self, tmp_path):
+        """Root property should return the path given at construction."""
+        _populate_dir(tmp_path, ["a.dat"])
+        store = LocalFileStore(str(tmp_path))
+        assert store.root == tmp_path
+
+    def test_relative_path_flat(self, tmp_path):
+        """Relative path in a flat directory is just the filename."""
+        _populate_dir(tmp_path, ["a.vtk", "b.vtk"])
+        store = LocalFileStore(str(tmp_path))
+        assert store.relative_path(0) == "a.vtk"
+        assert store.relative_path(1) == "b.vtk"
+
+    def test_relative_path_nested(self, tmp_path):
+        """Relative path preserves subdirectory structure."""
+        (tmp_path / "sim_a").mkdir()
+        (tmp_path / "sim_b" / "sub").mkdir(parents=True)
+        (tmp_path / "sim_a" / "mesh.vtk").write_bytes(b"")
+        (tmp_path / "sim_b" / "sub" / "mesh.vtk").write_bytes(b"")
+        store = LocalFileStore(str(tmp_path), pattern="**")
+        # Sorted alphabetically: sim_a/mesh.vtk, sim_b/sub/mesh.vtk
+        assert store.relative_path(0) == "sim_a/mesh.vtk"
+        assert store.relative_path(1) == str(pathlib.PurePosixPath("sim_b/sub/mesh.vtk"))
+
+    def test_relative_path_single_file(self, tmp_path):
+        """Relative path for a single file returns just the filename."""
+        _populate_dir(tmp_path, ["single.vtk"])
+        store = LocalFileStore(str(tmp_path / "single.vtk"))
+        assert store.relative_path(0) == "single.vtk"
+
+    def test_recursive_glob(self, tmp_path):
+        """Pattern '**' discovers files in subdirectories."""
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b" / "c").mkdir(parents=True)
+        (tmp_path / "root.dat").write_bytes(b"")
+        (tmp_path / "a" / "nested.dat").write_bytes(b"")
+        (tmp_path / "b" / "c" / "deep.dat").write_bytes(b"")
+        store = LocalFileStore(str(tmp_path), pattern="**")
+        assert len(store) == 3
+
+    def test_recursive_glob_with_extension_filter(self, tmp_path):
+        """Recursive glob + extension filter discovers only matching files."""
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "mesh.vtk").write_bytes(b"")
+        (tmp_path / "sub" / "mesh.vtk").write_bytes(b"")
+        (tmp_path / "sub" / "data.csv").write_bytes(b"")
+        store = LocalFileStore(str(tmp_path), pattern="**", extensions=frozenset({".vtk"}))
+        assert len(store) == 2
+
 
 # ---------------------------------------------------------------------------
 # FsspecFileStore — using memory:// and file:// (no network needed)
@@ -317,3 +366,19 @@ class TestFsspecFileStore:
         path2 = store[0]
         assert path1 == path2
         assert pathlib.Path(path1).exists()
+
+    def test_relative_path(self):
+        """Relative path should strip the root prefix."""
+        import fsspec
+
+        fs = fsspec.filesystem("memory")
+        fs.mkdir("/reldir/sub")
+        with fs.open("/reldir/a.dat", "wb") as f:
+            f.write(b"data")
+        with fs.open("/reldir/sub/b.dat", "wb") as f:
+            f.write(b"data")
+
+        store = FsspecFileStore("memory:///reldir")
+        # Files should be sorted: a.dat, sub/b.dat
+        assert store.relative_path(0) == "a.dat"
+        assert store.relative_path(1) == "sub/b.dat"

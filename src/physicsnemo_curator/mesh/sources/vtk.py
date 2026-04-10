@@ -188,7 +188,7 @@ class VTKSource(Source[Mesh]):
     def from_path(
         cls,
         input_path: str,
-        file_pattern: str = "*",
+        file_pattern: str = "**",
         *,
         manifold_dim: int | Literal["auto"] = "auto",
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
@@ -202,7 +202,9 @@ class VTKSource(Source[Mesh]):
         input_path : str
             Path to a directory containing VTK files, or a single file.
         file_pattern : str
-            Glob pattern for filtering files in a directory.
+            Glob pattern for filtering files in a directory.  Defaults
+            to ``"**"`` which recursively discovers VTK files in all
+            subdirectories.  Use ``"*"`` for flat (non-recursive) discovery.
         manifold_dim : int or {"auto"}
             Target manifold dimension.
         point_source : {"vertices", "cell_centroids"}
@@ -301,6 +303,22 @@ class VTKSource(Source[Mesh]):
         )
 
     # -- Source interface -----------------------------------------------------
+
+    @property
+    def store(self) -> FileStore:
+        """Return the underlying :class:`FileStore`.
+
+        This is useful for passing the store to a
+        :class:`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` to
+        enable directory-mirroring via ``{relpath}`` / ``{stem}``
+        placeholders.
+
+        Returns
+        -------
+        FileStore
+            The file store backing this source.
+        """
+        return self._store
 
     def __len__(self) -> int:
         """Return the number of discovered VTK files."""

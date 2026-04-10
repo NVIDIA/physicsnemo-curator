@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 
     from physicsnemo.mesh import Mesh
 
+    from physicsnemo_curator.core.store import FileStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +47,19 @@ class MeshSink(Sink["Mesh"]):
     to control output names — for example, to produce filenames that match the
     patterns expected by ``MeshReader`` in PhysicsNeMo.
 
+    When a *source_store* is provided, two additional template placeholders
+    become available:
+
+    * ``{relpath}`` — the parent directory of the source file relative to
+      the store root (e.g. ``sim_a/subdir`` for a file at
+      ``<root>/sim_a/subdir/mesh.vtu``).  Empty string when the file lives
+      directly in the root.
+    * ``{stem}`` — the filename stem of the source file (without extension,
+      e.g. ``mesh`` for ``mesh.vtu``).
+
+    These enable **directory-mirroring** workflows where the output dataset
+    reproduces the nested folder layout of the input.
+
     Parameters
     ----------
     output_dir : str
@@ -52,10 +67,15 @@ class MeshSink(Sink["Mesh"]):
     naming_template : str or None
         Python format string used to generate subdirectory names.  The
         placeholders ``{index}`` (source index) and ``{seq}`` (sequence
-        number within the source, starting at 0) are available.  Standard
-        format-spec syntax is supported (e.g. ``{index:04d}``).  When
-        ``None`` (the default) the built-in pattern
-        ``mesh_{index:04d}_{seq}`` is used.
+        number within the source, starting at 0) are always available.
+        When a *source_store* is supplied, ``{relpath}`` and ``{stem}``
+        are also available.  Standard format-spec syntax is supported
+        (e.g. ``{index:04d}``).  When ``None`` (the default) the
+        built-in pattern ``mesh_{index:04d}_{seq}`` is used.
+    source_store : FileStore or None
+        Optional :class:`~physicsnemo_curator.core.store.FileStore` used
+        to resolve ``{relpath}`` and ``{stem}`` placeholders.  If
+        ``None``, those placeholders are unavailable.
 
     Examples
     --------
@@ -75,6 +95,15 @@ class MeshSink(Sink["Mesh"]):
     >>> paths = sink(mesh_generator, index=0)  # doctest: +SKIP
     >>> paths  # doctest: +SKIP
     ['./output/boundary_0.vtp.pmsh']
+
+    Directory mirroring (preserves input folder structure):
+
+    >>> source = VTKSource.from_path("./input/", file_pattern="**")  # doctest: +SKIP
+    >>> sink = MeshSink(  # doctest: +SKIP
+    ...     output_dir="./output/",
+    ...     naming_template="{relpath}/{stem}",
+    ...     source_store=source._store,
+    ... )
     """
 
     name: ClassVar[str] = "PhysicsNeMo Mesh Writer"
@@ -94,7 +123,9 @@ class MeshSink(Sink["Mesh"]):
             Param(
                 name="naming_template",
                 description=(
-                    "Format string for output names. Placeholders: {index}, {seq}. Default: mesh_{index:04d}_{seq}"
+                    "Format string for output names. "
+                    "Placeholders: {index}, {seq}, {relpath}, {stem}. "
+                    "Default: mesh_{index:04d}_{seq}"
                 ),
                 type=str,
                 default=None,
@@ -105,6 +136,7 @@ class MeshSink(Sink["Mesh"]):
         self,
         output_dir: str,
         naming_template: str | None = None,
+        source_store: FileStore | None = None,
     ) -> None:
         """Initialise the mesh sink.
 
@@ -115,6 +147,9 @@ class MeshSink(Sink["Mesh"]):
         naming_template : str or None
             Python format string for subdirectory names.  See the class
             docstring for details.
+        source_store : FileStore or None
+            Optional file store providing ``relative_path(index)`` for
+            ``{relpath}`` and ``{stem}`` placeholders.
 
         Raises
         ------
@@ -123,16 +158,17 @@ class MeshSink(Sink["Mesh"]):
         """
         self._output_dir = pathlib.Path(output_dir)
         self._naming_template = naming_template
+        self._source_store = source_store
 
         # Validate the template eagerly so users get a clear error at
         # construction time rather than deep inside a pipeline run.
         if naming_template is not None:
             try:
-                naming_template.format(index=0, seq=0)
+                naming_template.format(index=0, seq=0, relpath="test", stem="test")
             except (KeyError, IndexError, ValueError) as exc:
                 msg = (
                     f"Invalid naming_template {naming_template!r}: {exc}. "
-                    "Only {index} and {seq} placeholders are supported."
+                    "Only {index}, {seq}, {relpath}, and {stem} placeholders are supported."
                 )
                 raise ValueError(msg) from exc
 
@@ -154,12 +190,28 @@ class MeshSink(Sink["Mesh"]):
         self._output_dir.mkdir(parents=True, exist_ok=True)
         paths: list[str] = []
 
+        # Resolve relpath / stem from source store if available.
+        relpath = ""
+        stem = ""
+        if self._source_store is not None and hasattr(self._source_store, "relative_path"):
+            rel = self._source_store.relative_path(index)  # ty: ignore[call-non-callable]
+            rel_path = pathlib.PurePosixPath(rel)
+            stem = rel_path.stem
+            relpath = str(rel_path.parent) if str(rel_path.parent) != "." else ""
+
         for seq, mesh in enumerate(items):
             if self._naming_template is not None:
-                name = self._naming_template.format(index=index, seq=seq)
+                name = self._naming_template.format(
+                    index=index,
+                    seq=seq,
+                    relpath=relpath,
+                    stem=stem,
+                )
             else:
                 name = f"mesh_{index:04d}_{seq}"
+
             subdir = self._output_dir / name
+            subdir.parent.mkdir(parents=True, exist_ok=True)
             mesh.save(str(subdir))  # @tensorclass adds .save() dynamically
             logger.debug("Saved mesh to %s", subdir)
             paths.append(str(subdir))
