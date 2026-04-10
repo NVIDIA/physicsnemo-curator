@@ -15,3 +15,14 @@
 # limitations under the License.
 
 """ASV benchmark suite for physicsnemo-curator."""
+
+import sys
+from pathlib import Path
+
+# Ensure the project root (parent of ``benchmarks/``) is on ``sys.path`` so
+# that worker processes spawned by multiprocessing backends (loky, process_pool
+# with *spawn*) can resolve ``benchmarks.*`` modules when un-pickling pipeline
+# components defined here.
+_project_root = str(Path(__file__).resolve().parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
