@@ -27,7 +27,6 @@ This module registers its components with the global
 from __future__ import annotations
 
 from physicsnemo_curator.core.registry import registry
-from physicsnemo_curator.core.store import FsspecFileStore, LocalFileStore, RunIndexedFileStore
 from physicsnemo_curator.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
@@ -46,9 +45,6 @@ from physicsnemo_curator.mesh.sources.windtunnel import WindTunnelSource
 
 # Register submodule and components with the global registry.
 registry.register_submodule("mesh", "Mesh data curation (physicsnemo.mesh.Mesh)", "physicsnemo.mesh")
-registry.register_store("mesh", "Local directory", LocalFileStore)
-registry.register_store("mesh", "Remote (fsspec)", FsspecFileStore)
-registry.register_store("mesh", "Run-indexed (remote)", RunIndexedFileStore)
 registry.register_source("mesh", AnsysRSTSource)
 registry.register_source("mesh", D3PlotSource)
 registry.register_source("mesh", VTKSource)

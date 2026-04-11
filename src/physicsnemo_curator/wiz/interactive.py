@@ -16,7 +16,7 @@
 
 """Interactive pipeline wizard using questionary prompts.
 
-Walks the user through selecting a submodule, store, source, filters, and
+Walks the user through selecting a submodule, source, filters, and
 sink, then constructs and executes a :class:`~curator.core.base.Pipeline`.
 Optionally loads a saved pipeline or saves the built pipeline to YAML.
 """
@@ -38,7 +38,6 @@ from rich.theme import Theme
 from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
 from physicsnemo_curator.core.registry import registry
 from physicsnemo_curator.core.serialization import load_pipeline, save_pipeline
-from physicsnemo_curator.core.store import FileStore, FsspecFileStore, LocalFileStore
 
 # Custom theme with NVIDIA green accent
 CURATOR_THEME = Theme(
@@ -175,85 +174,22 @@ def _prompt_params(component_cls: Any) -> dict[str, Any]:
     return values
 
 
-def _build_source(source_cls: type, store: FileStore | None, kwargs: dict[str, Any]) -> Source[Any]:
-    """Construct a source, injecting a :class:`FileStore` when supported.
-
-    Sources that accept a ``store`` init parameter (e.g.
-    :class:`DrivAerMLSource`) receive the store via dependency injection.
-    Sources that don't (e.g. :class:`VTKSource`) receive ``input_path``
-    and ``file_pattern`` directly from the collected kwargs.
+def _build_source(source_cls: type, kwargs: dict[str, Any]) -> Source[Any]:
+    """Construct a source instance from user-provided parameters.
 
     Parameters
     ----------
     source_cls : type
         The Source subclass.
-    store : FileStore or None
-        Pre-built file store to inject (may be ``None`` if the source
-        handles its own file discovery).
     kwargs : dict[str, Any]
-        Additional parameter values collected from the user (e.g.
-        conversion options such as ``manifold_dim``).
+        Parameter values collected from the user.
 
     Returns
     -------
     Source[Any]
         Constructed source instance.
     """
-    import inspect
-
-    sig = inspect.signature(source_cls.__init__)
-    if "store" in sig.parameters and store is not None:
-        return source_cls(store=store, **kwargs)
     return source_cls(**kwargs)
-
-
-def _build_store(store_cls: type) -> FileStore:
-    """Prompt for store-specific inputs and construct the store.
-
-    For :class:`LocalFileStore` the user provides a local path and optional
-    glob pattern.  For :class:`FsspecFileStore` the user provides a URL and
-    optional pattern / cache directory.
-
-    Parameters
-    ----------
-    store_cls : type
-        The FileStore class to build.
-
-    Returns
-    -------
-    FileStore
-        Constructed file store instance.
-    """
-    if store_cls is LocalFileStore:
-        path = questionary.text("  Path to file or directory:").ask()
-        if path is None:
-            _print_error("Aborted.")
-            sys.exit(1)
-        pattern = questionary.text("  Glob pattern [*]:", default="*").ask()
-        if pattern is None:
-            _print_error("Aborted.")
-            sys.exit(1)
-        return LocalFileStore(path=path, pattern=pattern or "*")
-
-    if store_cls is FsspecFileStore:
-        url = questionary.text("  Remote URL (s3://, hf://, https://):").ask()
-        if url is None:
-            _print_error("Aborted.")
-            sys.exit(1)
-        pattern = questionary.text("  Glob pattern [**]:", default="**").ask()
-        if pattern is None:
-            _print_error("Aborted.")
-            sys.exit(1)
-        cache = questionary.text("  Local cache directory (leave empty for temp):", default="").ask()
-        return FsspecFileStore(
-            url=url,
-            pattern=pattern or "**",
-            cache_storage=cache or None,
-        )
-
-    # Generic fallback for user-registered stores.
-    _print_info("Custom store — no interactive prompts, constructing with defaults")
-    return store_cls()
 
 
 def _print_pipeline_summary(source_name: str, filter_names: list[str], sink_name: str) -> None:
@@ -277,7 +213,7 @@ def _print_pipeline_summary(source_name: str, filter_names: list[str], sink_name
 def _build_pipeline_interactive() -> Pipeline[Any]:  # noqa: C901, PLR0912, PLR0915
     """Walk through the interactive build steps and return a Pipeline.
 
-    Steps: submodule selection, store config, source selection, filter
+    Steps: submodule selection, source selection, filter
     selection, and sink selection.
 
     Returns
@@ -285,7 +221,7 @@ def _build_pipeline_interactive() -> Pipeline[Any]:  # noqa: C901, PLR0912, PLR0
     Pipeline[Any]
         The fully configured pipeline ready for execution or saving.
     """
-    total_steps = 5
+    total_steps = 4
 
     # ------------------------------------------------------------------
     # 1. Discover and register available submodules
@@ -326,28 +262,9 @@ def _build_pipeline_interactive() -> Pipeline[Any]:  # noqa: C901, PLR0912, PLR0
     _print_success(f"Selected submodule: [highlight]{submodule_name}[/highlight]")
 
     # ------------------------------------------------------------------
-    # 2. Select and build store (data location)
+    # 2. Select source
     # ------------------------------------------------------------------
-    _print_step(2, total_steps, "Configure Data Store")
-    stores = registry.stores(submodule_name)
-    store_instance: FileStore | None = None
-
-    if stores:
-        store_choices = [questionary.Choice(title=name, value=name) for name in stores]
-        store_name: str | None = questionary.select("Select a data store:", choices=store_choices).ask()
-        if store_name is None:
-            _print_error("Aborted.")
-            sys.exit(1)
-
-        store_cls = stores[store_name]
-        console.print(f"\n  [header]Configure {store_name}:[/header]")
-        store_instance = _build_store(store_cls)
-        _print_success(f"Found [highlight]{len(store_instance)}[/highlight] file(s) in store")
-
-    # ------------------------------------------------------------------
-    # 3. Select source
-    # ------------------------------------------------------------------
-    _print_step(3, total_steps, "Select Source/Reader")
+    _print_step(2, total_steps, "Select Source/Reader")
     sources = registry.sources(submodule_name)
     if not sources:
         _print_error(f"No sources registered for {submodule_name!r}.")
@@ -365,27 +282,14 @@ def _build_pipeline_interactive() -> Pipeline[Any]:  # noqa: C901, PLR0912, PLR0
     console.print(f"\n  [header]Configure {source_cls.name}:[/header]")
     source_kwargs = _prompt_params(source_cls)
 
-    # When a store handles file discovery, remove the store-related params
-    # from the source kwargs (they were already consumed by the store step).
-    # When there is no store, keep them so the source can use them directly.
-    import inspect
-
-    sig = inspect.signature(source_cls.__init__)
-    uses_store = "store" in sig.parameters and store_instance is not None
-
-    if uses_store:
-        source_kwargs.pop("input_path", None)
-        source_kwargs.pop("url", None)
-        source_kwargs.pop("file_pattern", None)
-
-    source_instance: Source[Any] = _build_source(source_cls, store_instance, source_kwargs)
+    source_instance: Source[Any] = _build_source(source_cls, source_kwargs)
 
     _print_success(f"Found [highlight]{len(source_instance)}[/highlight] item(s) in source")
 
     # ------------------------------------------------------------------
-    # 4. Select filters (multi-select)
+    # 3. Select filters (multi-select)
     # ------------------------------------------------------------------
-    _print_step(4, total_steps, "Select Filters")
+    _print_step(3, total_steps, "Select Filters")
     filters = registry.filters(submodule_name)
     filter_instances: list[Filter[Any]] = []
     filter_names: list[str] = []
@@ -418,9 +322,9 @@ def _build_pipeline_interactive() -> Pipeline[Any]:  # noqa: C901, PLR0912, PLR0
         _print_warning("No filters available for this submodule")
 
     # ------------------------------------------------------------------
-    # 5. Select sink
+    # 4. Select sink
     # ------------------------------------------------------------------
-    _print_step(5, total_steps, "Select Sink/Writer")
+    _print_step(4, total_steps, "Select Sink/Writer")
     sinks = registry.sinks(submodule_name)
     if not sinks:
         _print_error(f"No sinks registered for {submodule_name!r}.")

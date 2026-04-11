@@ -35,8 +35,6 @@ class SubmoduleEntry:
     import_check : str
         Dotted module path to probe availability (e.g.
         ``"physicsnemo.mesh"``).
-    stores : dict[str, type]
-        Registered store classes keyed by display name.
     sources : dict[str, type]
         Registered source classes keyed by their :attr:`~Source.name`.
     filters : dict[str, type]
@@ -48,7 +46,6 @@ class SubmoduleEntry:
     name: str
     description: str
     import_check: str
-    stores: dict[str, type] = field(default_factory=dict)
     sources: dict[str, type] = field(default_factory=dict)
     filters: dict[str, type] = field(default_factory=dict)
     sinks: dict[str, type] = field(default_factory=dict)
@@ -102,22 +99,6 @@ class Registry:
                 import_check=import_check,
             )
 
-    def register_store(self, submodule: str, name: str, cls: type) -> None:
-        """Register a :class:`~curator.core.store.FileStore` under *submodule*.
-
-        Parameters
-        ----------
-        submodule : str
-            Target submodule name (must already be registered).
-        name : str
-            Human-readable display name for the store (e.g. ``"Local
-            directory"``, ``"Remote (fsspec)"``).
-        cls : type
-            A class that implements the :class:`FileStore` protocol.
-        """
-        self._ensure_submodule(submodule)
-        self._submodules[submodule].stores[name] = cls
-
     def register_source(self, submodule: str, cls: Any) -> None:
         """Register a source class under *submodule*.
 
@@ -168,21 +149,6 @@ class Registry:
             Mapping of submodule name to entry.
         """
         return dict(self._submodules)
-
-    def stores(self, submodule: str) -> dict[str, type]:
-        """Return registered stores for *submodule*.
-
-        Parameters
-        ----------
-        submodule : str
-            Submodule name.
-
-        Returns
-        -------
-        dict[str, type]
-            Mapping of store display name to class.
-        """
-        return dict(self._submodules[submodule].stores)
 
     def sources(self, submodule: str) -> dict[str, type]:
         """Return registered sources for *submodule*.
@@ -244,21 +210,6 @@ class Registry:
         """
         return list(self._submodules[submodule].sources.values())
 
-    def list_stores(self, submodule: str) -> list[tuple[str, type]]:
-        """Return a list of registered stores for *submodule*.
-
-        Parameters
-        ----------
-        submodule : str
-            Submodule name.
-
-        Returns
-        -------
-        list[tuple[str, type]]
-            List of (display_name, class) tuples.
-        """
-        return list(self._submodules[submodule].stores.items())
-
     def list_filters(self, submodule: str) -> list[type]:
         """Return a list of registered filter classes for *submodule*.
 
@@ -310,7 +261,6 @@ class Registry:
             status = "available" if entry.available else "not installed"
             parts.append(
                 f"  {name} ({status}): "
-                f"{len(entry.stores)} stores, "
                 f"{len(entry.sources)} sources, "
                 f"{len(entry.filters)} filters, "
                 f"{len(entry.sinks)} sinks"
