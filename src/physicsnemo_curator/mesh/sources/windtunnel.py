@@ -27,21 +27,21 @@ The dataset provides one VTK mesh type per simulation:
   (VTK, surface data with point-data scalars)
 
 Simulations are organised by data split (``train``, ``validation``,
-``test``) and identified by unique alphanumeric simulation IDs.  File
-discovery is delegated to a :class:`~curator.core.store.FsspecFileStore`.
+``test``) and identified by unique alphanumeric simulation IDs.
+File discovery and caching are handled internally using ``fsspec``.
 """
 
 from __future__ import annotations
 
+import pathlib
 import tempfile
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import pyvista as pv
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.io import from_pyvista
 
 from physicsnemo_curator.core.base import Param, Source
-from physicsnemo_curator.core.store import FsspecFileStore
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -164,13 +164,13 @@ class WindTunnelSource(Source[Mesh]):
         self._point_source = point_source
         self._warn_on_lost_data = warn_on_lost_data
 
-        self._stores = self._build_stores()
+        self._split_files = self._discover_splits()
 
     # -- Source interface -----------------------------------------------------
 
     def __len__(self) -> int:
         """Return the total number of simulations across selected splits."""
-        return sum(len(s) for s in self._stores)
+        return sum(len(files) for _, _, files in self._split_files)
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
         """Read the pressure-field mesh for the *index*-th simulation.
@@ -191,11 +191,21 @@ class WindTunnelSource(Source[Mesh]):
             msg = f"Index {index} out of range for source with {len(self)} items."
             raise IndexError(msg)
 
-        # Find which store (split) this index falls into.
+        # Find which split this index falls into.
         offset = 0
-        for store in self._stores:
-            if index < offset + len(store):
-                path = store[index - offset]
+        for fs, protocol, files in self._split_files:
+            if index < offset + len(files):
+                remote_path = files[index - offset]
+                # Inline _ensure_local with the per-split fs.
+                if protocol in ("file", ""):
+                    path = remote_path
+                else:
+                    local_path = pathlib.Path(self._cache_storage) / remote_path.lstrip("/")
+                    if not local_path.exists():
+                        local_path.parent.mkdir(parents=True, exist_ok=True)
+                        fs.get(remote_path, str(local_path))
+                    path = str(local_path)
+
                 pv_mesh = pv.read(path)
                 mesh = from_pyvista(
                     pv_mesh,
@@ -205,30 +215,38 @@ class WindTunnelSource(Source[Mesh]):
                 )
                 yield mesh
                 return
-            offset += len(store)
+            offset += len(files)
 
     # -- Internal helpers ----------------------------------------------------
 
-    def _build_stores(self) -> list[FsspecFileStore]:
-        """Build FsspecFileStore objects for each selected split.
+    def _discover_splits(self) -> list[tuple[Any, str, list[str]]]:
+        """Discover pressure-field VTK files for each selected split.
 
         Returns
         -------
-        list[FsspecFileStore]
-            One store per selected data split.
+        list[tuple[Any, str, list[str]]]
+            List of ``(fsspec_fs, protocol, remote_files)`` per split.
         """
+        import fsspec
+
         splits = ["train", "validation", "test"] if self._split == "all" else [self._split]
 
-        stores: list[FsspecFileStore] = []
+        result: list[tuple[Any, str, list[str]]] = []
         for split in splits:
             split_url = f"{self._url}/data/{split}"
-            store = FsspecFileStore(
-                url=split_url,
-                pattern="**/pressure_field_mesh.vtk",
-                extensions=frozenset({".vtk"}),
-                storage_options=self._storage_options,
-                cache_storage=self._cache_storage,
-            )
-            stores.append(store)
+            fs, root_path = fsspec.core.url_to_fs(split_url, **self._storage_options)
+            protocol = fs.protocol if isinstance(fs.protocol, str) else fs.protocol[0]
 
-        return stores
+            glob_expr = f"{root_path}/**/pressure_field_mesh.vtk"
+            all_files = fs.glob(glob_expr)
+            files = sorted(
+                f for f in all_files if pathlib.PurePosixPath(f).suffix.lower() in {".vtk"} and not fs.isdir(f)
+            )
+
+            if not files:
+                msg = f"No matching files at {split_url} with pattern '**/pressure_field_mesh.vtk'."
+                raise ValueError(msg)
+
+            result.append((fs, protocol, files))
+
+        return result
