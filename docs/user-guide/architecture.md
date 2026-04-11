@@ -92,7 +92,7 @@ patterns (Gamma et al., 1994) reinforce the framework:
 | **Strategy** | `RunBackend` and its six variants | Decouple definition from execution |
 | **Built-in Metrics** | `Pipeline.track_metrics` | Unified checkpointing and profiling |
 | **Plugin** | `Registry` + domain submodules | Domain-agnostic core; register at import |
-| **Protocol** | `FileStore` | Decouple discovery from reading |
+| **Protocol** | `Source` ABC | Decouple discovery from reading |
 
 ## Core Components
 
@@ -247,99 +247,22 @@ Submodules register their components with the global
 {class}`~physicsnemo_curator.core.registry.Registry` at import time, enabling the
 CLI to discover them dynamically.
 
-## FileStore
-
-{class}`~physicsnemo_curator.core.store.FileStore` is a protocol that decouples
-**file discovery and access** from **file reading**.  Sources accept a
-`FileStore` via dependency injection, so the same reader works with local
-directories, S3 buckets, HuggingFace Hub datasets, or any custom backend.
-
-```python
-@runtime_checkable
-class FileStore(Protocol):
-    def __len__(self) -> int: ...
-    def __getitem__(self, index: int) -> str: ...
-    # returns a local filesystem path
-```
-
-Built-in implementations are registered with each submodule's
-{class}`~physicsnemo_curator.core.registry.Registry` and are selectable in the CLI.
-Users can also register custom stores at runtime (see {ref}`store-registration`
-above).
-
-Two built-in implementations are provided:
-
-### LocalFileStore
-
-{class}`~physicsnemo_curator.core.store.LocalFileStore` discovers and serves files
-from a local directory using `pathlib.Path.glob`:
-
-```python
-from physicsnemo_curator.core.store import LocalFileStore
-
-store = LocalFileStore("./data/", extensions=frozenset({".vtk", ".vtu"}))
-path = store[0]  # "/absolute/path/to/data/mesh_0000.vtu"
-```
-
-### FsspecFileStore
-
-{class}`~physicsnemo_curator.core.store.FsspecFileStore` discovers and serves files
-from any `fsspec`-compatible URL, transparently caching downloads:
-
-```python
-from physicsnemo_curator.core.store import FsspecFileStore
-
-# HuggingFace Hub
-store = FsspecFileStore(
-    "hf://datasets/neashton/drivaerml/run_1/slices",
-    extensions=frozenset({".vtk", ".vtp"}),
-)
-
-# S3 (public bucket)
-store = FsspecFileStore(
-    "s3://my-bucket/cfd-data/",
-    storage_options={"anon": True},
-)
-
-path = store[0]  # local cached path, ready for pyvista.read()
-```
-
-Remote files are downloaded once and cached locally.  The cache location
-can be controlled via the `cache_storage` parameter.
-
-### Custom stores
-
-Any object implementing `__len__` and `__getitem__` (returning a local
-path string) satisfies the `FileStore` protocol:
-
-```python
-class DatabaseFileStore:
-    """Fetch VTK files from a database by row id."""
-    def __len__(self) -> int:
-        return self._db.count()
-    def __getitem__(self, index: int) -> str:
-        return self._db.download_to_cache(index)
-```
-
 ## Registry
 
 The {class}`~physicsnemo_curator.core.registry.Registry` is a global singleton that
-tracks all submodules, their pipeline components, and their file stores:
+tracks all submodules and their pipeline components:
 
 ```python
 from physicsnemo_curator.core.registry import registry
 
 # Registration happens at import time in each submodule's __init__.py
 registry.register_submodule("mesh", "Mesh processing", "physicsnemo.mesh")
-registry.register_store("mesh", "Local directory", LocalFileStore)
-registry.register_store("mesh", "Remote (fsspec)", FsspecFileStore)
 registry.register_source("mesh", VTKSource)
 registry.register_filter("mesh", MeanFilter)
 registry.register_sink("mesh", MeshSink)
 
 # Query
 registry.submodules()         # {"mesh": SubmoduleEntry(...)}
-registry.stores("mesh")       # {"Local directory": <class LocalFileStore>, ...}
 registry.sources("mesh")      # {"VTK Reader": <class VTKSource>}
 registry.filters("mesh")      # {"Mean Statistics": <class MeanFilter>}
 registry.sinks("mesh")        # {"PhysicsNeMo Mesh Writer": <class MeshSink>}
@@ -347,21 +270,3 @@ registry.sinks("mesh")        # {"PhysicsNeMo Mesh Writer": <class MeshSink>}
 
 Each {class}`~physicsnemo_curator.core.registry.SubmoduleEntry` can check whether its
 dependencies are available via the `.available` property.
-
-(store-registration)=
-
-### Store Registration
-
-File stores are registered per-submodule with a human-readable display
-name.  The built-in stores (`LocalFileStore` and `FsspecFileStore`) are
-registered automatically when a submodule is imported.  Users can register
-custom stores at runtime:
-
-```python
-from physicsnemo_curator.core.registry import registry
-
-registry.register_store("mesh", "My Database Store", DatabaseFileStore)
-```
-
-The interactive CLI uses the store registry to present data-source options
-before prompting for a reader.

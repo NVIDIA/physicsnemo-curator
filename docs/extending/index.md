@@ -52,45 +52,6 @@ class MyComponent:
         self._option = option
 ```
 
-## FileStores
-
-A {class}`~physicsnemo_curator.core.store.FileStore` maps integer indices to
-local file paths.  Sources never handle file discovery or downloads directly —
-that is the store's job.  Any object with `__len__` and `__getitem__`
-(returning a `str` path) satisfies the protocol:
-
-```python
-class DatabaseFileStore:
-    """Fetch files from a database by row id."""
-
-    def __init__(self, connection_string: str, table: str) -> None:
-        self._db = connect(connection_string)
-        self._rows = self._db.query(f"SELECT id FROM {table}")
-
-    def __len__(self) -> int:
-        return len(self._rows)
-
-    def __getitem__(self, index: int) -> str:
-        row_id = self._rows[index]
-        return self._db.download_to_cache(row_id)
-```
-
-Register custom stores with the global registry so the interactive CLI can
-offer them as a data-source option:
-
-```python
-from physicsnemo_curator.core.registry import registry
-
-registry.register_store("mesh", "My Database", DatabaseFileStore)
-```
-
-The CLI will then show *My Database* alongside *Local directory* and
-*Remote (fsspec)* in the store selection prompt.
-
-Built-in stores include {class}`~physicsnemo_curator.core.store.LocalFileStore`,
-{class}`~physicsnemo_curator.core.store.FsspecFileStore`, and
-{class}`~physicsnemo_curator.core.store.RunIndexedFileStore`.
-
 ## Registering Components
 
 To make components discoverable by the CLI, register them in your submodule's
@@ -99,7 +60,6 @@ To make components discoverable by the CLI, register them in your submodule's
 ```python
 # src/physicsnemo_curator/mymodule/__init__.py
 from physicsnemo_curator.core.registry import registry
-from physicsnemo_curator.core.store import LocalFileStore, FsspecFileStore
 
 from .sources.my_source import MySource
 from .filters.my_filter import MyFilter
@@ -110,8 +70,6 @@ registry.register_submodule(
     "My custom data processing",
     "some_dependency",  # import check for availability
 )
-registry.register_store("mymodule", "Local directory", LocalFileStore)
-registry.register_store("mymodule", "Remote (fsspec)", FsspecFileStore)
 registry.register_source("mymodule", MySource)
 registry.register_filter("mymodule", MyFilter)
 registry.register_sink("mymodule", MySink)
@@ -127,19 +85,17 @@ import pytest
 
 pytestmark = pytest.mark.requires("mesh")
 
-from physicsnemo_curator.core.store import LocalFileStore
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
 
 class TestMySource:
     def test_len(self, tmp_path):
-        # Create test fixtures...
-        store = LocalFileStore(str(tmp_path))
-        source = MySource(store=store)
+        # Create test fixtures in tmp_path...
+        source = MySource(input_path=str(tmp_path))
         assert len(source) > 0
 
     def test_yields_correct_type(self, tmp_path):
-        store = LocalFileStore(str(tmp_path))
-        source = MySource(store=store)
+        # Create test fixtures in tmp_path...
+        source = MySource(input_path=str(tmp_path))
         item = next(source[0])
         assert isinstance(item, Mesh)
 ```
@@ -164,7 +120,7 @@ to execute a pipeline:
 from physicsnemo_curator import run_pipeline
 
 pipeline = (
-    MySource(store=store)
+    MySource(input_path="./data/")
     .filter(MyFilter())
     .write(MySink(output_dir="./out/"))
 )

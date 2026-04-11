@@ -70,16 +70,17 @@ mesh = Mesh(
 For **da** sources, determine how to construct `xarray.DataArray` with
 appropriate dimensions, coordinates, and attributes.
 
-### FileStore Strategy
+### File Discovery Strategy
 
-Choose the right FileStore based on dataset organization:
+Each source handles its own file discovery and caching internally.
+Choose the approach based on dataset organization:
 
-| Pattern | FileStore | When to use |
-|---------|-----------|------------|
-| Flat directory of files | `FsspecFileStore` | Generic remote/local file glob |
-| Run-indexed dirs (`run_0/`, `run_1/`) | `RunIndexedFileStore` | Benchmark datasets with numbered runs |
-| Local directory | `LocalFileStore` | Local-only sources |
-| No FileStore needed | Direct fsspec/pyarrow | Single-file datasets or Parquet tables |
+| Pattern | Approach | When to use |
+|---------|----------|------------|
+| Flat directory of files | `pathlib.Path.glob()` | Local-only sources |
+| Remote flat files | `fsspec` + `fs.glob()` | Generic remote file glob |
+| Run-indexed dirs (`run_0/`, `run_1/`) | `fsspec` + `fs.ls()` + regex | Benchmark datasets with numbered runs |
+| Single-file datasets | Direct `fsspec`/`pyarrow` | Parquet tables, Zarr stores |
 
 ## Step 1: Create the Source Module
 
@@ -191,7 +192,7 @@ class <ClassName>(Source[Mesh]):
         self._cache_storage = cache_storage or tempfile.mkdtemp(
             prefix="curator_<name>_"
         )
-        # Build FileStore or initialize data access here
+        # Initialize file discovery and data access here
         # Load lightweight metadata eagerly (e.g. parameter tables)
         # Defer heavy data loading (geometry, fields) to __getitem__
 
@@ -558,8 +559,8 @@ Study these for patterns:
 
 | Source | File | Format | Complexity | Good example for |
 |--------|------|--------|-----------|-----------------|
-| `VTKSource` | `mesh/sources/vtk.py` | VTK | Medium | FileStore injection, from_pyvista |
-| `DrivAerMLSource` | `mesh/sources/drivaerml.py` | VTP/VTU | High | RunIndexedFileStore, multiple mesh types |
+| `VTKSource` | `mesh/sources/vtk.py` | VTK | Medium | Local pathlib file discovery, from_pyvista |
+| `DrivAerMLSource` | `mesh/sources/drivaerml.py` | VTP/VTU | High | Remote fsspec discovery, multiple mesh types |
 | `WindTunnelSource` | `mesh/sources/windtunnel.py` | VTK | Low | Simplest HF source, splits |
 | `NavierStokesCylinderSource` | `mesh/sources/ns_cylinder.py` | Parquet | Medium | Non-VTK, direct Mesh construction |
 | `ERA5Source` | `da/sources/era5.py` | API | High | DataArray source, multi-backend |

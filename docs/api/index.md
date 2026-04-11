@@ -7,8 +7,8 @@
 
 ## Core
 
-Base abstractions, file stores, component registry, checkpointing, and
-profiling utilities.
+Base abstractions, component registry, checkpointing, and profiling
+utilities.
 
 ```{toctree}
 :maxdepth: 2

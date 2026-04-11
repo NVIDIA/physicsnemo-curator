@@ -9,15 +9,15 @@ single data structure, and pipelines are executed lazily on a per-item basis.
 
 ## Key Features
 
-- **Fluent pipeline API** — build pipelines with `Source(store).filter(F()).write(S())`
+- **Fluent pipeline API** — build pipelines with `Source(...).filter(F()).write(S())`
 - **Lazy evaluation** — `pipeline[i]` processes only the *i*-th item
 - **Parallel execution** — `run_pipeline(pipeline, n_jobs=-1)` processes all items across multiple backends
 - **Generator semantics** — sources and filters can yield zero, one, or many items
-- **FileStore abstraction** — decouple file discovery from reading; local dirs, S3, HuggingFace Hub, or custom backends
 - **Built-in dataset sources** — DrivAerML, AhmedML, WindsorML, WindTunnel-20k from HuggingFace Hub
+- **Remote data support** — sources handle local dirs, S3, HuggingFace Hub via fsspec with transparent caching
 - **Pluggable submodules** — `mesh`, `da`, `atm` with independent dependency groups
 - **Interactive CLI** — guided pipeline builder powered by Click + Questionary
-- **Component registry** — automatic discovery of sources, filters, sinks, and stores
+- **Component registry** — automatic discovery of sources, filters, and sinks
 
 ## Quick Install
 

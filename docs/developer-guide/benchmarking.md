@@ -78,10 +78,12 @@ ASV benchmarks live in the `benchmarks/` directory at the project root:
 ```text
 benchmarks/
 ├── __init__.py
-├── bench_pipeline.py    # Pipeline construction & iteration
-├── bench_profiling.py   # Profiling overhead measurement
-├── bench_store.py       # FileStore creation & indexing
-└── bench_import.py      # Package import time
+├── _helpers.py          # Shared benchmark utilities
+├── asv_build.py         # ASV build configuration
+├── bench_atm.py         # Atomic data benchmarks
+├── bench_backends.py    # Execution backend benchmarks
+├── bench_da.py          # DataArray benchmarks
+└── bench_mesh.py        # Mesh pipeline benchmarks
 ```
 
 ### Writing ASV Benchmarks

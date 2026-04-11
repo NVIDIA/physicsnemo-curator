@@ -17,7 +17,7 @@ Three component-authoring skills live in `.claude/skills/`:
 
 | Skill | Trigger | What it does |
 |-------|---------|--------------|
-| **add-source** | "Add a new data source" | Generates source class with FileStore, params, tests, registry |
+| **add-source** | "Add a new data source" | Generates source class with params, tests, registry |
 | **add-filter** | "Add a new filter" | Generates filter with correct generator patterns and tests |
 | **add-sink** | "Add a new sink" | Generates sink with naming strategy, append logic, and tests |
 
