@@ -24,10 +24,10 @@ class TimeATME2E:
 
     def setup(self, n_rows):
         """Create synthetic ASELMDB and build the pipeline."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
-        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
         from physicsnemo_curator.core.base import Pipeline
+        from physicsnemo_curator.domains.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         self._data_dir = create_temp_dir()
         self._output_dir = create_temp_dir()
@@ -68,10 +68,10 @@ class MemATME2E:
 
     def setup(self, n_rows):
         """Create synthetic ASELMDB and build the pipeline."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
-        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
         from physicsnemo_curator.core.base import Pipeline
+        from physicsnemo_curator.domains.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         self._data_dir = create_temp_dir()
         self._output_dir = create_temp_dir()
@@ -115,7 +115,7 @@ class TimeASELMDBSourceBackend:
 
     def setup(self, n_rows):
         """Create a single ASELMDB file and both source variants."""
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         self._data_dir = create_temp_dir()
         db_path = Path(self._data_dir) / "data0000.aselmdb"
@@ -226,8 +226,8 @@ class TimeAtomicInfoFilter:
 
     def setup(self, n_rows):
         """Create ASELMDB and source + filter."""
-        from physicsnemo_curator.atm.filters.atomic_info import AtomicInfoFilter
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.domains.atm.filters.atomic_info import AtomicInfoFilter
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         self._data_dir = create_temp_dir()
         self._info_dir = create_temp_dir()
@@ -263,8 +263,8 @@ class TimeAtomicStatsFilter:
 
     def setup(self, n_rows):
         """Create ASELMDB and source + filter."""
-        from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.domains.atm.filters.stats import AtomicStatsFilter
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         self._data_dir = create_temp_dir()
         self._stats_dir = create_temp_dir()
@@ -297,8 +297,8 @@ class TimeAtomicDataZarrSink:
 
     def setup(self, n_rows):
         """Create ASELMDB and source + sink."""
-        from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
-        from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         self._data_dir = create_temp_dir()
         self._output_dir = create_temp_dir()

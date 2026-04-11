@@ -23,9 +23,9 @@ curating LS-DYNA crash simulation data.
 
 Automotive crash simulations produce multi-timestep shell meshes stored in
 the ``d3plot`` binary format.  The pipeline reads these files with
-:class:`~physicsnemo_curator.mesh.sources.d3plot.D3PlotSource`, removes
+:class:`~physicsnemo_curator.domains.mesh.sources.d3plot.D3PlotSource`, removes
 non-deforming wall nodes with
-:class:`~physicsnemo_curator.mesh.filters.wall_node.WallNodeFilter`, logs
+:class:`~physicsnemo_curator.domains.mesh.filters.wall_node.WallNodeFilter`, logs
 mesh metadata, converts fields to single precision, and writes the
 processed meshes to disk.
 
@@ -44,18 +44,18 @@ processed meshes to disk.
 # informational and precision filters, a **Sink** for writing outputs,
 # and :func:`~physicsnemo_curator.run.run_pipeline` for parallel execution.
 
-from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.filters.wall_node import WallNodeFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.d3plot import D3PlotSource
+from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
+from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.domains.mesh.filters.wall_node import WallNodeFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.d3plot import D3PlotSource
 from physicsnemo_curator.run import run_pipeline
 
 # %%
 # Configure the Source
 # --------------------
 #
-# :class:`~physicsnemo_curator.mesh.sources.d3plot.D3PlotSource` scans
+# :class:`~physicsnemo_curator.domains.mesh.sources.d3plot.D3PlotSource` scans
 # ``input_dir`` for subdirectories containing a ``d3plot`` file.  Each
 # subdirectory corresponds to one crash simulation run.
 #
@@ -135,9 +135,9 @@ for idx, paths in enumerate(results):
 # This example showed how to:
 #
 # - Read LS-DYNA d3plot crash simulation data with
-#   :class:`~physicsnemo_curator.mesh.sources.d3plot.D3PlotSource`.
+#   :class:`~physicsnemo_curator.domains.mesh.sources.d3plot.D3PlotSource`.
 # - Remove non-deforming wall nodes with
-#   :class:`~physicsnemo_curator.mesh.filters.wall_node.WallNodeFilter`.
+#   :class:`~physicsnemo_curator.domains.mesh.filters.wall_node.WallNodeFilter`.
 # - Log mesh metadata and convert precision in a composable filter chain.
 # - Write processed meshes in parallel with ``run_pipeline``.
 #

@@ -45,16 +45,16 @@ example fast.
 
 from datetime import datetime
 
-from physicsnemo_curator.da.filters.moments import MomentsFilter
-from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
-from physicsnemo_curator.da.sources.era5 import ERA5Source
+from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
+from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
 # --------------------
 #
-# :class:`~physicsnemo_curator.da.sources.era5.ERA5Source` connects to a
+# :class:`~physicsnemo_curator.domains.da.sources.era5.ERA5Source` connects to a
 # cloud-hosted ERA5 mirror and discovers available timestamps.  Each
 # index yields one hourly snapshot as an :class:`xarray.DataArray` with
 # dimensions ``(time, variable, lat, lon)``.
@@ -96,12 +96,12 @@ print(f"Backend: {source.active_backend}")
 # :class:`~physicsnemo_curator.core.base.Pipeline`.  Nothing is
 # executed until we explicitly process indices.
 #
-# - :class:`~physicsnemo_curator.da.filters.moments.MomentsFilter`
+# - :class:`~physicsnemo_curator.domains.da.filters.moments.MomentsFilter`
 #   computes running temporal statistics (mean, variance, skewness,
 #   min, max) using Welford's numerically stable online algorithm.
 #   The filter is **pass-through** — each DataArray is yielded
 #   unchanged while accumulators update in the background.
-# - :class:`~physicsnemo_curator.da.sinks.zarr_writer.ZarrSink`
+# - :class:`~physicsnemo_curator.domains.da.sinks.zarr_writer.ZarrSink`
 #   writes each DataArray to a Zarr store, with one group per
 #   variable and automatic append along the ``time`` dimension.
 

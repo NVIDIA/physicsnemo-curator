@@ -123,8 +123,8 @@ for details.
 ### Basic parallel ETL
 
 ```python
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator import run_pipeline
 
 pipeline = (
@@ -140,8 +140,8 @@ print(f"Wrote {sum(len(r) for r in results)} files")
 ### With HuggingFace dataset sources
 
 ```python
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator import run_pipeline
 
 pipeline = (

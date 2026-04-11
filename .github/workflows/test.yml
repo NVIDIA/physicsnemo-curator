@@ -118,7 +118,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: >
-          uv run pytest test/mesh/
+          uv run pytest test/domains/mesh/
           --cov --cov-fail-under=0
           --cov-report=xml:coverage-mesh.xml
           --cov-report=term-missing
@@ -168,7 +168,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: >
-          uv run pytest test/da/
+          uv run pytest test/domains/da/
           --cov --cov-fail-under=0
           --cov-report=xml:coverage-da.xml
           --cov-report=term-missing
@@ -216,7 +216,7 @@ jobs:
 
       - name: Run atm tests with coverage
         run: >
-          uv run pytest test/atm/
+          uv run pytest test/domains/atm/
           --cov --cov-fail-under=0
           --cov-report=xml:coverage-atm.xml
           --cov-report=term-missing

@@ -22,8 +22,8 @@ Which submodule does this sink belong to?
 
 | Domain | Type parameter | Submodule | Dependency group |
 |--------|---------------|-----------|-----------------|
-| **mesh** | `Sink["Mesh"]` | `src/physicsnemo_curator/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
-| **da** | `Sink["xr.DataArray"]` | `src/physicsnemo_curator/da/` | `da` (xarray, earth2studio, zarr) |
+| **mesh** | `Sink["Mesh"]` | `src/physicsnemo_curator/domains/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
+| **da** | `Sink["xr.DataArray"]` | `src/physicsnemo_curator/domains/da/` | `da` (xarray, earth2studio, zarr) |
 
 ### Sink Design
 
@@ -58,8 +58,8 @@ Which submodule does this sink belong to?
 
 Create the sink file at the appropriate location:
 
-- **mesh**: `src/physicsnemo_curator/mesh/sinks/<name>.py`
-- **da**: `src/physicsnemo_curator/da/sinks/<name>.py`
+- **mesh**: `src/physicsnemo_curator/domains/mesh/sinks/<name>.py`
+- **da**: `src/physicsnemo_curator/domains/da/sinks/<name>.py`
 
 ### Required SPDX Header
 
@@ -529,8 +529,8 @@ class Test<ClassName>Pipeline:
 
     def test_in_pipeline(self, tmp_path: pathlib.Path) -> None:
         """Sink works correctly at the end of a pipeline."""
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
-        # or: from physicsnemo_curator.da.sources.era5 import ERA5Source
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
+        # or: from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 
         # Create source data
         ...
@@ -586,11 +586,11 @@ uv run pytest test/<domain>/ -v -k "not slow"
 
 ### Edit the domain `__init__.py`
 
-For **mesh** sinks, edit `src/physicsnemo_curator/mesh/__init__.py`:
+For **mesh** sinks, edit `src/physicsnemo_curator/domains/mesh/__init__.py`:
 
 ```python
 # Add import (alphabetical order among sinks)
-from physicsnemo_curator.mesh.sinks.<module> import <ClassName>
+from physicsnemo_curator.domains.mesh.sinks.<module> import <ClassName>
 
 # Add registration (after existing register_sink calls)
 registry.register_sink("mesh", <ClassName>)
@@ -603,7 +603,7 @@ __all__ = [
 ]
 ```
 
-For **da** sinks, edit `src/physicsnemo_curator/da/__init__.py` with
+For **da** sinks, edit `src/physicsnemo_curator/domains/da/__init__.py` with
 the same pattern using `"da"` as the submodule name.
 
 ## Step 4: Quality Checks

@@ -38,20 +38,20 @@ example, we process multiple DrivAerML CFD meshes concurrently with a
 # Imports
 # -------
 
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Build the Pipeline
 # ------------------
 #
-# :class:`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
+# :class:`~physicsnemo_curator.domains.mesh.sources.drivaerml.DrivAerMLSource`
 # provides 500 DrivAerML automotive CFD meshes from HuggingFace Hub.
-# We attach a :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter`
+# We attach a :class:`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter`
 # for spatial statistics and a
-# :class:`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` for
+# :class:`~physicsnemo_curator.domains.mesh.sinks.mesh_writer.MeshSink` for
 # output.
 
 pipeline = (
@@ -102,7 +102,7 @@ for i, paths in enumerate(results):
 # -----------------
 #
 # When running in parallel, stateful filters (like
-# :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter`) produce
+# :class:`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter`) produce
 # per-index shard files.
 # :func:`~physicsnemo_curator.run.gather_pipeline` discovers those
 # shards, calls the filter's ``merge()`` method to combine them into

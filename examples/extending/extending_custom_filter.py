@@ -153,8 +153,8 @@ assert "Log Transform" in registered
 
 from datetime import datetime
 
-from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
-from physicsnemo_curator.da.sources.era5 import ERA5Source
+from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
+from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 from physicsnemo_curator.run import run_pipeline
 
 source = ERA5Source(
@@ -194,5 +194,5 @@ for i, paths in enumerate(results):
 #
 # For **stateful** filters (like statistics accumulators), add a
 # ``flush()`` method and an ``_output_path`` attribute.  See
-# :class:`~physicsnemo_curator.mesh.filters.stats.StatsFilter` for
+# :class:`~physicsnemo_curator.domains.mesh.filters.stats.StatsFilter` for
 # an example with Welford accumulators and cross-worker merging.

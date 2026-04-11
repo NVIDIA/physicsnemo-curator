@@ -18,14 +18,14 @@ dependencies.
 
 ### VTKSource
 
-{class}`~physicsnemo_curator.mesh.sources.vtk.VTKSource` reads VTK files from a
+{class}`~physicsnemo_curator.domains.mesh.sources.vtk.VTKSource` reads VTK files from a
 local directory and converts each to a
 {class}`physicsnemo.mesh.Mesh` using {func}`physicsnemo.mesh.io.from_pyvista`.
 
 The constructor takes a path string directly:
 
 ```python
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
 # Local directory (discovers VTK files automatically)
 source = VTKSource("./data/", manifold_dim=2)
@@ -38,10 +38,10 @@ source = VTKSource("./cfd/", point_source="cell_centroids")
 ```
 
 For remote datasets (HuggingFace Hub), use purpose-built dataset sources
-such as {class}`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`:
+such as {class}`~physicsnemo_curator.domains.mesh.sources.drivaerml.DrivAerMLSource`:
 
 ```python
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 
 source = DrivAerMLSource(mesh_type="boundary")
 ```
@@ -78,7 +78,7 @@ source = DrivAerMLSource(mesh_type="boundary")
 **Examples:**
 
 ```python
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
 # Local directory (auto-discovers VTK files)
 source = VTKSource("./data/")
@@ -100,14 +100,14 @@ source = VTKSource("./data/", file_pattern="timestep_*")
 For remote datasets from HuggingFace Hub, use the dedicated dataset sources:
 
 ```python
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 
 source = DrivAerMLSource(mesh_type="boundary")
 ```
 
 ### MeanFilter
 
-{class}`~physicsnemo_curator.mesh.filters.mean.MeanFilter` computes the spatial mean
+{class}`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter` computes the spatial mean
 of every field in `point_data` and `cell_data` for each mesh, accumulates
 the results in memory, and writes them to a Parquet file on `flush()`.
 
@@ -134,7 +134,7 @@ are filled with `NULL` in the Parquet output.
 **Example:**
 
 ```python
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 
 filt = MeanFilter(output="stats.parquet")
 
@@ -154,7 +154,7 @@ print(table.to_pandas())
 
 ### MeshSink
 
-{class}`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` saves
+{class}`~physicsnemo_curator.domains.mesh.sinks.mesh_writer.MeshSink` saves
 {class}`physicsnemo.mesh.Mesh` objects using the native tensordict
 memory-mapped format ({meth}`Mesh.save`).
 
@@ -193,7 +193,7 @@ mesh = Mesh.load("./output/mesh_0000_0")
 **Examples:**
 
 ```python
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 
 # Default naming
 sink = MeshSink(output_dir="./output/")
@@ -211,10 +211,10 @@ paths = pipeline[0]  # ['./output/boundary_0.vtp.pmsh']
 ## Full Pipeline Example
 
 ```python
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 
 # Local data
 pipeline = (

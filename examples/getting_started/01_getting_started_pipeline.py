@@ -42,10 +42,10 @@ compose pipelines before running them.
 # Every pipeline has three ingredients: a **Source** (data reader), zero
 # or more **Filters** (transforms or analytics), and a **Sink** (writer).
 
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
 # %%
 # Step 1: Create a Source
@@ -53,7 +53,7 @@ from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSou
 #
 # A :class:`~physicsnemo_curator.core.base.Source` is an indexed
 # collection of data items.  Here we use
-# :class:`~physicsnemo_curator.mesh.sources.ns_cylinder.NavierStokesCylinderSource`
+# :class:`~physicsnemo_curator.domains.mesh.sources.ns_cylinder.NavierStokesCylinderSource`
 # which provides 500 Navier-Stokes flow simulations as
 # :class:`~physicsnemo.mesh.Mesh` objects.
 
@@ -69,9 +69,9 @@ print(f"Items available: {len(source)}")
 # Filters transform or inspect items as they flow through the pipeline.
 # The fluent ``.filter()`` method chains multiple filters together:
 #
-# - :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter`
+# - :class:`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter`
 #   computes spatial means and writes a Parquet summary.
-# - :class:`~physicsnemo_curator.mesh.filters.precision.PrecisionFilter`
+# - :class:`~physicsnemo_curator.domains.mesh.filters.precision.PrecisionFilter`
 #   converts floating-point fields to ``float32``.
 
 pipeline = source.filter(MeanFilter(output="outputs/getting_started/stats.parquet")).filter(

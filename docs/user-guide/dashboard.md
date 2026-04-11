@@ -125,7 +125,7 @@ Timing and resource analysis:
 
 Filters that produce artifacts (Parquet, Zarr, etc.) can have custom
 visualizations in the Pipeline tab.  A built-in widget is provided for
-{class}`~physicsnemo_curator.mesh.filters.mean.MeanFilter`.
+{class}`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter`.
 
 ### Writing a custom widget
 

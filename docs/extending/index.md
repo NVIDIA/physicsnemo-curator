@@ -85,7 +85,7 @@ import pytest
 
 pytestmark = pytest.mark.requires("mesh")
 
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
 class TestMySource:
     def test_len(self, tmp_path):

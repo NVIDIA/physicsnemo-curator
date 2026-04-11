@@ -56,16 +56,16 @@ References
 
 import pyarrow.parquet as pq
 
-from physicsnemo_curator.atm.filters.stats import AtomicStatsFilter
-from physicsnemo_curator.atm.sinks.zarr_writer import AtomicDataZarrSink
-from physicsnemo_curator.atm.sources.aselmdb import ASELMDBSource
+from physicsnemo_curator.domains.atm.filters.stats import AtomicStatsFilter
+from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
 # --------------------
 #
-# :class:`~physicsnemo_curator.atm.sources.aselmdb.ASELMDBSource`
+# :class:`~physicsnemo_curator.domains.atm.sources.aselmdb.ASELMDBSource`
 # discovers all ``.aselmdb`` files in a directory, sorted
 # lexicographically.  Each file corresponds to one source index and
 # may contain thousands of atomic structures.
@@ -93,14 +93,14 @@ if source.metadata is not None:
 # :class:`~physicsnemo_curator.core.base.Pipeline`.  Nothing is
 # executed until we explicitly process indices.
 #
-# - :class:`~physicsnemo_curator.atm.filters.stats.AtomicStatsFilter`
+# - :class:`~physicsnemo_curator.domains.atm.filters.stats.AtomicStatsFilter`
 #   examines each :class:`~nvalchemi.data.AtomicData` and accumulates
 #   per-field, per-component statistics using Welford's online algorithm.
 #   Fields are grouped by level (node, edge, system) and include
 #   ``positions``, ``forces``, ``energies``, ``atomic_numbers``, and
 #   any extra data attached to the structures.  The filter is
 #   **pass-through** — each item is yielded unchanged.
-# - :class:`~physicsnemo_curator.atm.sinks.zarr_writer.AtomicDataZarrSink`
+# - :class:`~physicsnemo_curator.domains.atm.sinks.zarr_writer.AtomicDataZarrSink`
 #   collects items into batches (default 1000) and writes them to a
 #   structured Zarr store using ``AtomicDataZarrWriter``.  Multiple
 #   pipeline indices append to the **same** store.

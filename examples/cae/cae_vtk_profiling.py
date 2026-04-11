@@ -21,7 +21,7 @@ VTK Backend Profiling: PyVista vs Rust
 This example demonstrates the built-in
 :class:`~physicsnemo_curator.core.profiling.ProfiledPipeline` utility and
 compares the two VTK reading backends available in
-:class:`~physicsnemo_curator.mesh.sources.vtk.VTKSource`:
+:class:`~physicsnemo_curator.domains.mesh.sources.vtk.VTKSource`:
 
 - **PyVista** (default): full-featured Python reader supporting all VTK
   formats, manifold dimensions, and point-source modes.
@@ -44,17 +44,17 @@ can see exactly where time is spent.
 # Imports
 # -------
 #
-# We use :class:`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
+# We use :class:`~physicsnemo_curator.domains.mesh.sources.drivaerml.DrivAerMLSource`
 # to download DrivAerML boundary files, then
-# :class:`~physicsnemo_curator.mesh.sources.vtk.VTKSource` (which exposes the
+# :class:`~physicsnemo_curator.domains.mesh.sources.vtk.VTKSource` (which exposes the
 # ``backend`` parameter) for local VTK reading, a filter, a sink, and the
 # :class:`~physicsnemo_curator.core.profiling.ProfiledPipeline` wrapper.
 
 from physicsnemo_curator.core.profiling import ProfiledPipeline
 
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 from physicsnemo_curator.run import run_pipeline
 
 # %%

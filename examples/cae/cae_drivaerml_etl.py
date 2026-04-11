@@ -39,17 +39,17 @@ by the ``drivaer_ml_surface.yaml`` dataset config.
 # **Filter** to compute statistics, a **Sink** to write outputs, and
 # :func:`~physicsnemo_curator.run.run_pipeline` for parallel execution.
 
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
 # Configure the Source
 # --------------------
 #
-# :class:`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
+# :class:`~physicsnemo_curator.domains.mesh.sources.drivaerml.DrivAerMLSource`
 # connects to the HuggingFace Hub dataset and discovers available runs.
 # We select ``mesh_type="boundary"`` to read the surface VTP files
 # which contain the flow fields on the vehicle boundary.
@@ -87,11 +87,11 @@ print(f"Train: {len(train_indices)} runs, Val: {len(val_indices)} runs")
 # :class:`~physicsnemo_curator.core.base.Pipeline`.  Nothing is
 # executed until we explicitly process indices.
 #
-# - :class:`~physicsnemo_curator.mesh.filters.mean.MeanFilter` computes
+# - :class:`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter` computes
 #   per-field spatial means and accumulates them into a Parquet summary.
-# - :class:`~physicsnemo_curator.mesh.filters.precision.PrecisionFilter`
+# - :class:`~physicsnemo_curator.domains.mesh.filters.precision.PrecisionFilter`
 #   converts to float32 for consistency with training.
-# - :class:`~physicsnemo_curator.mesh.sinks.mesh_writer.MeshSink` writes
+# - :class:`~physicsnemo_curator.domains.mesh.sinks.mesh_writer.MeshSink` writes
 #   each mesh in PhysicsNeMo's native ``.pmsh`` format.
 #
 # The ``naming_template`` produces output names like

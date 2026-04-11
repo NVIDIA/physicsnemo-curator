@@ -235,8 +235,8 @@ assert "Cylinder Flow (Custom)" in registered
 #
 # The custom source works with any compatible filter and sink.
 
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.run import run_pipeline
 
 source = CylinderFlowSource()

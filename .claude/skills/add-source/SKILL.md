@@ -23,8 +23,8 @@ Which submodule does this source belong to?
 
 | Domain | Type parameter | Submodule | Dependency group |
 |--------|---------------|-----------|-----------------|
-| **mesh** | `Source[Mesh]` | `src/physicsnemo_curator/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
-| **da** | `Source[xr.DataArray]` | `src/physicsnemo_curator/da/` | `da` (xarray, earth2studio, zarr) |
+| **mesh** | `Source[Mesh]` | `src/physicsnemo_curator/domains/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
+| **da** | `Source[xr.DataArray]` | `src/physicsnemo_curator/domains/da/` | `da` (xarray, earth2studio, zarr) |
 
 ### Dataset Information
 
@@ -86,8 +86,8 @@ Choose the approach based on dataset organization:
 
 Create the source file at the appropriate location:
 
-- **mesh**: `src/physicsnemo_curator/mesh/sources/<name>.py`
-- **da**: `src/physicsnemo_curator/da/sources/<name>.py`
+- **mesh**: `src/physicsnemo_curator/domains/mesh/sources/<name>.py`
+- **da**: `src/physicsnemo_curator/domains/da/sources/<name>.py`
 
 ### Required SPDX Header
 
@@ -473,11 +473,11 @@ uv run pytest test/<domain>/test_<name>.py -v -k "E2E"
 
 ### Edit the domain `__init__.py`
 
-For **mesh** sources, edit `src/physicsnemo_curator/mesh/__init__.py`:
+For **mesh** sources, edit `src/physicsnemo_curator/domains/mesh/__init__.py`:
 
 ```python
 # Add import (alphabetical order among sources)
-from physicsnemo_curator.mesh.sources.<module> import <ClassName>
+from physicsnemo_curator.domains.mesh.sources.<module> import <ClassName>
 
 # Add registration (after existing register_source calls)
 registry.register_source("mesh", <ClassName>)
@@ -490,7 +490,7 @@ __all__ = [
 ]
 ```
 
-For **da** sources, edit `src/physicsnemo_curator/da/__init__.py` with the
+For **da** sources, edit `src/physicsnemo_curator/domains/da/__init__.py` with the
 same pattern using `"da"` as the submodule name.
 
 ## Step 4: Quality Checks

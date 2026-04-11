@@ -84,8 +84,8 @@ class TimeDAE2E:
     def setup(self, n_timesteps):
         """Build the DA pipeline with synthetic source."""
         from physicsnemo_curator.core.base import Pipeline
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
         self._output_dir = create_temp_dir()
         self._moments_dir = create_temp_dir()
@@ -126,8 +126,8 @@ class MemDAE2E:
     def setup(self, n_timesteps):
         """Build the DA pipeline with synthetic source."""
         from physicsnemo_curator.core.base import Pipeline
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
         self._output_dir = create_temp_dir()
         self._moments_dir = create_temp_dir()
@@ -170,7 +170,7 @@ class TimeMomentsFilter:
 
     def setup(self, n_lat):
         """Create synthetic DataArrays and filter."""
-        from physicsnemo_curator.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
 
         self._output_dir = create_temp_dir()
         self.filt = MomentsFilter(
@@ -206,7 +206,7 @@ class TimeZarrSinkWrite:
 
     def setup(self, n_lat):
         """Create synthetic DataArray and sink."""
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
         self._output_dir = create_temp_dir()
         self.sink = ZarrSink(output_path=str(Path(self._output_dir) / "out.zarr"))
@@ -232,7 +232,7 @@ class TimeNetCDF4SinkWrite:
 
     def setup(self, n_lat):
         """Create synthetic DataArray and sink."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo_curator.domains.da.sinks.netcdf_writer import NetCDF4Sink
 
         self._output_dir = create_temp_dir()
         self.sink = NetCDF4Sink(output_dir=self._output_dir)
@@ -258,8 +258,8 @@ class TimeSinkComparison:
 
     def setup(self, n_lat):
         """Create synthetic DataArray and both sinks."""
-        from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
-        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo_curator.domains.da.sinks.netcdf_writer import NetCDF4Sink
+        from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
         self._zarr_dir = create_temp_dir()
         self._nc_dir = create_temp_dir()

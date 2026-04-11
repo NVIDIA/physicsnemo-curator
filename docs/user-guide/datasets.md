@@ -14,17 +14,17 @@ Requires the `mesh` dependency group (`uv sync --group mesh`).
 ```{list-table}
 :widths: 30 70
 
-* - {py:class}`~physicsnemo_curator.mesh.sources.vtk.VTKSource`
+* - {py:class}`~physicsnemo_curator.domains.mesh.sources.vtk.VTKSource`
   - Generic VTK file source
-* - {py:class}`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
+* - {py:class}`~physicsnemo_curator.domains.mesh.sources.drivaerml.DrivAerMLSource`
   - DrivAerML dataset source
-* - {py:class}`~physicsnemo_curator.mesh.sources.ahmedml.AhmedMLSource`
+* - {py:class}`~physicsnemo_curator.domains.mesh.sources.ahmedml.AhmedMLSource`
   - AhmedML dataset source
-* - {py:class}`~physicsnemo_curator.mesh.sources.windsorml.WindsorMLSource`
+* - {py:class}`~physicsnemo_curator.domains.mesh.sources.windsorml.WindsorMLSource`
   - WindsorML dataset source
-* - {py:class}`~physicsnemo_curator.mesh.sources.windtunnel.WindTunnelSource`
+* - {py:class}`~physicsnemo_curator.domains.mesh.sources.windtunnel.WindTunnelSource`
   - Wind Tunnel dataset source
-* - {py:class}`~physicsnemo_curator.mesh.sources.ns_cylinder.NavierStokesCylinderSource`
+* - {py:class}`~physicsnemo_curator.domains.mesh.sources.ns_cylinder.NavierStokesCylinderSource`
   - Navier-Stokes Cylinder dataset source
 ```
 
@@ -37,7 +37,7 @@ and climate datasets.  Requires the `da` dependency group
 ```{list-table}
 :widths: 30 70
 
-* - {py:class}`~physicsnemo_curator.da.sources.era5.ERA5Source`
+* - {py:class}`~physicsnemo_curator.domains.da.sources.era5.ERA5Source`
   - ERA5 reanalysis dataset source
 ```
 
@@ -50,6 +50,6 @@ group (`uv sync --group atm`).
 ```{list-table}
 :widths: 30 70
 
-* - {py:class}`~physicsnemo_curator.atm.sources.aselmdb.ASELMDBSource`
+* - {py:class}`~physicsnemo_curator.domains.atm.sources.aselmdb.ASELMDBSource`
   - ASE LMDB atomic data source (OMol25, OPoly26)
 ```

@@ -195,7 +195,7 @@ assert "HDF5 Writer" in registered
 
 from datetime import datetime
 
-from physicsnemo_curator.da.sources.era5 import ERA5Source
+from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 from physicsnemo_curator.run import run_pipeline
 
 source = ERA5Source(
@@ -250,4 +250,4 @@ with h5py.File(first_path, "r") as f:
 # 6. Optionally register with ``registry.register_sink()``
 #
 # For **append** semantics (multiple indices writing to the same file),
-# see :class:`~physicsnemo_curator.da.sinks.zarr_writer.ZarrSink`.
+# see :class:`~physicsnemo_curator.domains.da.sinks.zarr_writer.ZarrSink`.

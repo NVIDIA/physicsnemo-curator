@@ -62,7 +62,7 @@ class ScaleFilter(Filter["Mesh"]):
 ### Pass-through with side effects
 
 Yield items unchanged while accumulating information.  This is the pattern
-used by {class}`~physicsnemo_curator.mesh.filters.mean.MeanFilter`:
+used by {class}`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter`:
 
 ```python
 def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:

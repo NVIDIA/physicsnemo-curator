@@ -42,9 +42,9 @@ datasets where you want crash resilience without re-processing.
 
 from physicsnemo_curator.core.checkpoint import CheckpointedPipeline
 
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 from physicsnemo_curator.run import run_pipeline
 
 # %%

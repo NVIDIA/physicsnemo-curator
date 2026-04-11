@@ -39,9 +39,9 @@ pip install physicsnemo-curator[wiz]
 
 ```python
 from physicsnemo_curator import run_pipeline
-from physicsnemo_curator.mesh.sources.vtk import VTKSource
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
+from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 
 # Build the pipeline
 pipeline = (

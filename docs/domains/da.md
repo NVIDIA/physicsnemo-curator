@@ -23,7 +23,7 @@ maps to a single timestamp.
 
 ```python
 from datetime import datetime
-from physicsnemo_curator.da.sources.era5 import ERA5Source
+from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 
 source = ERA5Source(
     times=[datetime(2020, 6, 1, 0), datetime(2020, 6, 1, 6)],
@@ -54,7 +54,7 @@ along specified dimensions using Welford's online algorithm.  The DataArray
 is yielded unchanged (pass-through).
 
 ```python
-from physicsnemo_curator.da.filters.moments import MomentsFilter
+from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
 
 filt = MomentsFilter(
     output="stats.zarr",
@@ -62,7 +62,7 @@ filt = MomentsFilter(
 )
 ```
 
-Call {meth}`~physicsnemo_curator.da.filters.moments.MomentsFilter.flush` after processing
+Call {meth}`~physicsnemo_curator.domains.da.filters.moments.MomentsFilter.flush` after processing
 to write accumulated statistics to the output Zarr store.  Each variable gets
 its own group with arrays: ``mean``, ``variance``, ``skewness``, ``min``,
 ``max``, plus a ``count`` attribute.
@@ -74,7 +74,7 @@ its own Zarr group (e.g. ``output.zarr/t2m/``) with dimensions
 ``(time, lat, lon)``.  Subsequent calls append along the ``time`` dimension.
 
 ```python
-from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
 sink = ZarrSink(
     output_path="output.zarr",
@@ -108,7 +108,7 @@ Subsequent calls with the same split key **append** along the time
 dimension using the unlimited dimension.
 
 ```python
-from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+from physicsnemo_curator.domains.da.sinks.netcdf_writer import NetCDF4Sink
 
 # Default: split by year
 sink = NetCDF4Sink(
@@ -136,9 +136,9 @@ The ``time`` dimension is unlimited by default, allowing efficient appends.
 ```python
 from datetime import datetime
 from physicsnemo_curator import run_pipeline
-from physicsnemo_curator.da.sources.era5 import ERA5Source
-from physicsnemo_curator.da.filters.moments import MomentsFilter
-from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
+from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
 # Fetch 24 hours of surface weather data
 times = [datetime(2020, 6, 1, h) for h in range(24)]
@@ -184,7 +184,7 @@ era5_stats.zarr/
 Replace the sink to write NetCDF4 files instead of Zarr:
 
 ```python
-from physicsnemo_curator.da.sinks.netcdf_writer import NetCDF4Sink
+from physicsnemo_curator.domains.da.sinks.netcdf_writer import NetCDF4Sink
 
 sink = NetCDF4Sink(
     output_dir="era5_output_nc",

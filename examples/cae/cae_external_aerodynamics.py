@@ -44,11 +44,11 @@ We process only the first 3 runs to keep the example fast.
 # a **Sink** to write outputs, and
 # :func:`~physicsnemo_curator.run.run_pipeline` for parallel execution.
 
-from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.filters.stats import StatsFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
+from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.domains.mesh.filters.stats import StatsFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
@@ -60,15 +60,15 @@ from physicsnemo_curator.run import gather_pipeline, run_pipeline
 #
 # We chain four stages:
 #
-# 1. :class:`~physicsnemo_curator.mesh.sources.drivaerml.DrivAerMLSource`
+# 1. :class:`~physicsnemo_curator.domains.mesh.sources.drivaerml.DrivAerMLSource`
 #    discovers runs and reads surface meshes from HuggingFace Hub.
-# 2. :class:`~physicsnemo_curator.mesh.filters.mesh_info.MeshInfoFilter`
+# 2. :class:`~physicsnemo_curator.domains.mesh.filters.mesh_info.MeshInfoFilter`
 #    logs metadata (point/cell counts, field shapes) and writes structured
 #    records to a JSON-lines file for post-analysis.
-# 3. :class:`~physicsnemo_curator.mesh.filters.stats.StatsFilter` computes
+# 3. :class:`~physicsnemo_curator.domains.mesh.filters.stats.StatsFilter` computes
 #    comprehensive per-field statistics (mean, std, skewness, kurtosis) and
 #    stores Welford accumulator state for cross-file aggregation.
-# 4. :class:`~physicsnemo_curator.mesh.filters.precision.PrecisionFilter`
+# 4. :class:`~physicsnemo_curator.domains.mesh.filters.precision.PrecisionFilter`
 #    casts all float64 fields to float32, reducing memory and storage by
 #    half — a standard step before ML training.
 
@@ -96,7 +96,7 @@ surface_pipeline = (
 # meshes are typically much larger than surface meshes, so we read cell
 # centroids rather than raw vertices.
 #
-# Here we use :class:`~physicsnemo_curator.mesh.filters.stats.StatsFilter`
+# Here we use :class:`~physicsnemo_curator.domains.mesh.filters.stats.StatsFilter`
 # for volume field statistics.  This filter includes Welford accumulators
 # that can be merged across parallel workers for exact global statistics.
 

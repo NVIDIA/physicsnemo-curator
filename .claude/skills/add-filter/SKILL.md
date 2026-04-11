@@ -22,8 +22,8 @@ Which submodule does this filter belong to?
 
 | Domain | Type parameter | Submodule | Dependency group |
 |--------|---------------|-----------|-----------------|
-| **mesh** | `Filter["Mesh"]` | `src/physicsnemo_curator/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
-| **da** | `Filter["xr.DataArray"]` | `src/physicsnemo_curator/da/` | `da` (xarray, earth2studio, zarr) |
+| **mesh** | `Filter["Mesh"]` | `src/physicsnemo_curator/domains/mesh/` | `mesh` (physicsnemo, pyvista, pyarrow, torch) |
+| **da** | `Filter["xr.DataArray"]` | `src/physicsnemo_curator/domains/da/` | `da` (xarray, earth2studio, zarr) |
 
 ### Filter Design
 
@@ -63,8 +63,8 @@ Which submodule does this filter belong to?
 
 Create the filter file at the appropriate location:
 
-- **mesh**: `src/physicsnemo_curator/mesh/filters/<name>.py`
-- **da**: `src/physicsnemo_curator/da/filters/<name>.py`
+- **mesh**: `src/physicsnemo_curator/domains/mesh/filters/<name>.py`
+- **da**: `src/physicsnemo_curator/domains/da/filters/<name>.py`
 
 ### Required SPDX Header
 
@@ -467,7 +467,7 @@ def _create_test_mesh(
 
 Alternatively, for filters that do not need VTK files, you can construct
 `Mesh` objects directly using mock data (see the `NavierStokesCylinderSource`
-test pattern in `test/mesh/test_ns_cylinder.py`).
+test pattern in `test/domains/mesh/test_ns_cylinder.py`).
 
 ### Test Classes
 
@@ -502,7 +502,7 @@ class Test<ClassName>Integration:
 
     def test_yields_mesh_unchanged(self, tmp_path: pathlib.Path) -> None:
         """Filter should yield the mesh without modification."""
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
         _create_test_mesh(tmp_path / "vtk")
         source = VTKSource.from_path(str(tmp_path / "vtk"))
@@ -585,8 +585,8 @@ class Test<ClassName>Pipeline:
 
     def test_chained_in_pipeline(self, tmp_path: pathlib.Path) -> None:
         """Filter works correctly in a multi-filter pipeline."""
-        from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
         vtk_dir = tmp_path / "vtk"
         _create_test_mesh(vtk_dir, "mesh_0.vtu")
@@ -653,11 +653,11 @@ uv run pytest test/<domain>/ -v -k "not slow"
 
 ### Edit the domain `__init__.py`
 
-For **mesh** filters, edit `src/physicsnemo_curator/mesh/__init__.py`:
+For **mesh** filters, edit `src/physicsnemo_curator/domains/mesh/__init__.py`:
 
 ```python
 # Add import (alphabetical order among filters)
-from physicsnemo_curator.mesh.filters.<module> import <ClassName>
+from physicsnemo_curator.domains.mesh.filters.<module> import <ClassName>
 
 # Add registration (after existing register_filter calls)
 registry.register_filter("mesh", <ClassName>)
@@ -670,7 +670,7 @@ __all__ = [
 ]
 ```
 
-For **da** filters, edit `src/physicsnemo_curator/da/__init__.py` with
+For **da** filters, edit `src/physicsnemo_curator/domains/da/__init__.py` with
 the same pattern using `"da"` as the submodule name.
 
 ### Export any public helpers
@@ -679,7 +679,7 @@ If the filter provides a public helper function (like `merge_welford_stats`
 in `StatsFilter`), add it to the import and `__all__` as well:
 
 ```python
-from physicsnemo_curator.mesh.filters.<module> import <ClassName>, <helper_func>
+from physicsnemo_curator.domains.mesh.filters.<module> import <ClassName>, <helper_func>
 
 __all__ = [
     ...,

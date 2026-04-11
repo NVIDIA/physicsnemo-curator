@@ -60,9 +60,9 @@ console = Console(theme=CURATOR_THEME)
 # Map submodule names to their Python module paths so we can import them
 # on demand (triggering component registration).
 _SUBMODULE_IMPORTS: dict[str, str] = {
-    "mesh": "physicsnemo_curator.mesh",
-    "da": "physicsnemo_curator.da",
-    "atm": "physicsnemo_curator.atm",
+    "mesh": "physicsnemo_curator.domains.mesh",
+    "da": "physicsnemo_curator.domains.da",
+    "atm": "physicsnemo_curator.domains.atm",
 }
 
 

@@ -32,10 +32,10 @@ class TimeMeshE2E:
     def setup(self, n_files):
         """Generate synthetic VTU files and build the pipeline."""
         from physicsnemo_curator.core.base import Pipeline
-        from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
-        from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-        from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
+        from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+        from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
         self._input_dir = create_temp_dir()
         self._output_dir = create_temp_dir()
@@ -88,10 +88,10 @@ class MemMeshE2E:
     def setup(self, n_files):
         """Generate synthetic VTU files and build the pipeline."""
         from physicsnemo_curator.core.base import Pipeline
-        from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
-        from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-        from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
+        from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+        from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
         self._input_dir = create_temp_dir()
         self._output_dir = create_temp_dir()
@@ -146,7 +146,7 @@ class TimeVTKSourceRead:
 
     def setup(self, n_points):
         """Generate a single VTU file and create the source."""
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
         self._tmpdir = create_temp_dir()
         n_cells = n_points // 2
@@ -249,8 +249,8 @@ class TimePrecisionFilter:
 
     def setup(self, n_points):
         """Generate a VTU file and create source + filter."""
-        from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
         self._tmpdir = create_temp_dir()
         n_cells = n_points // 2
@@ -280,8 +280,8 @@ class TimeMeshInfoFilter:
 
     def setup(self, n_points):
         """Generate a VTU file and create source + filter."""
-        from physicsnemo_curator.mesh.filters.mesh_info import MeshInfoFilter
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
         self._tmpdir = create_temp_dir()
         self._info_dir = create_temp_dir()
@@ -316,8 +316,8 @@ class TimeMeanFilter:
 
     def setup(self, n_points):
         """Generate a VTU file and create source + filter."""
-        from physicsnemo_curator.mesh.filters.mean import MeanFilter
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
         self._tmpdir = create_temp_dir()
         self._output_dir = create_temp_dir()
@@ -366,25 +366,25 @@ class TimeD3PlotComponents:
 
     def time_parse_k_file_python(self, n_elements):
         """Parse .k file with Python implementation."""
-        from physicsnemo_curator.mesh.sources.d3plot import _parse_k_file
+        from physicsnemo_curator.domains.mesh.sources.d3plot import _parse_k_file
 
         _parse_k_file(self.k_file)
 
     def time_parse_k_file_rust(self, n_elements):
         """Parse .k file with Rust implementation."""
-        from physicsnemo_curator.mesh.sources.d3plot import _parse_k_file_rust
+        from physicsnemo_curator.domains.mesh.sources.d3plot import _parse_k_file_rust
 
         _parse_k_file_rust(self.k_file)
 
     def time_node_thickness_python(self, n_elements):
         """Compute node thickness with Python implementation."""
-        from physicsnemo_curator.mesh.sources.d3plot import _compute_node_thickness
+        from physicsnemo_curator.domains.mesh.sources.d3plot import _compute_node_thickness
 
         _compute_node_thickness(self.connectivity, self.part_ids, self.part_thickness)
 
     def time_node_thickness_rust(self, n_elements):
         """Compute node thickness with Rust implementation."""
-        from physicsnemo_curator.mesh.sources.d3plot import (
+        from physicsnemo_curator.domains.mesh.sources.d3plot import (
             _compute_node_thickness_rust,
         )
 
@@ -392,13 +392,13 @@ class TimeD3PlotComponents:
 
     def time_von_mises_python(self, n_elements):
         """Compute von Mises stress with Python implementation."""
-        from physicsnemo_curator.mesh.sources.d3plot import _von_mises_from_voigt
+        from physicsnemo_curator.domains.mesh.sources.d3plot import _von_mises_from_voigt
 
         _von_mises_from_voigt(self.stress)
 
     def time_von_mises_rust(self, n_elements):
         """Compute von Mises stress with Rust implementation."""
-        from physicsnemo_curator.mesh.sources.d3plot import (
+        from physicsnemo_curator.domains.mesh.sources.d3plot import (
             _von_mises_from_voigt_rust,
         )
 
@@ -428,13 +428,13 @@ class PeakmemD3PlotComponents:
 
     def peakmem_node_thickness_python(self, n_elements):
         """Peak memory for Python node thickness."""
-        from physicsnemo_curator.mesh.sources.d3plot import _compute_node_thickness
+        from physicsnemo_curator.domains.mesh.sources.d3plot import _compute_node_thickness
 
         _compute_node_thickness(self.connectivity, self.part_ids, self.part_thickness)
 
     def peakmem_node_thickness_rust(self, n_elements):
         """Peak memory for Rust node thickness."""
-        from physicsnemo_curator.mesh.sources.d3plot import (
+        from physicsnemo_curator.domains.mesh.sources.d3plot import (
             _compute_node_thickness_rust,
         )
 
@@ -452,8 +452,8 @@ class TimeMeshSink:
 
     def setup(self, n_points):
         """Generate a VTU file and create source + sink."""
-        from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-        from physicsnemo_curator.mesh.sources.vtk import VTKSource
+        from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+        from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
         self._input_dir = create_temp_dir()
         self._output_dir = create_temp_dir()

@@ -66,7 +66,7 @@ import physicsnemo_curator
 print(physicsnemo_curator.__version__)  # "0.1.0"
 
 # Check mesh dependencies
-from physicsnemo_curator.mesh.sources.vtk import VTKSource  # requires physicsnemo_curator[mesh]
+from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource  # requires physicsnemo_curator[mesh]
 ```
 
 ## Building Documentation

@@ -205,7 +205,7 @@ Worker tracking works with all backends — the instrumentation is in
 ```python
 from pathlib import Path
 from physicsnemo_curator import Pipeline, run_pipeline
-from physicsnemo_curator.atm import ASELMDBSource, AtomicDataZarrSink
+from physicsnemo_curator.domains.atm import ASELMDBSource, AtomicDataZarrSink
 
 # Build pipeline — checkpointing is on by default
 pipeline = (

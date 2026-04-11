@@ -19,10 +19,10 @@ pip install physicsnemo-curator[mesh]
 ```
 
 ```python
-from physicsnemo_curator.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # 1. Source — reads boundary VTP files from HuggingFace Hub
@@ -78,9 +78,9 @@ pip install physicsnemo-curator[da]
 ```python
 from datetime import datetime, timedelta
 
-from physicsnemo_curator.da.filters.moments import MomentsFilter
-from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
-from physicsnemo_curator.da.sources.era5 import ERA5Source
+from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
+from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # 1. Source — one month of 6-hourly ERA5 snapshots
