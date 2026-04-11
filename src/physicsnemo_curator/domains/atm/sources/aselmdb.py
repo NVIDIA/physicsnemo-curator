@@ -330,10 +330,10 @@ def _atomic_data_from_row(
 class ASELMDBSource(Source["AtomicData"]):
     """Read atomic data from ASE LMDB (``.aselmdb``) database files.
 
-    The source discovers all ``.aselmdb`` files under *data_dir*, sorted
-    lexicographically.  Each file is treated as one source index containing
-    many atomic structures.  Calling ``source[i]`` returns a generator that
-    opens the *i*-th database file and yields one
+    The source discovers all ``.aselmdb`` files under *data_dir* matching
+    *file_pattern*, sorted lexicographically.  Each file is treated as one
+    source index containing many atomic structures.  Calling ``source[i]``
+    returns a generator that opens the *i*-th database file and yields one
     :class:`~nvalchemi.data.AtomicData` per row.
 
     This source is compatible with any dataset stored in the ``.aselmdb``
@@ -345,10 +345,19 @@ class ASELMDBSource(Source["AtomicData"]):
     An optional ``metadata.npz`` file (same directory or explicit path) is
     loaded eagerly if present.  It is not required for operation.
 
+    When paired with a sink that supports directory mirroring (e.g.
+    :class:`~physicsnemo_curator.domains.atm.sinks.zarr_writer.AtomicDataZarrSink`
+    with a *naming_template*), the :meth:`relative_path` method allows the
+    output to reproduce the input directory layout.
+
     Parameters
     ----------
     data_dir : str
         Directory containing ``.aselmdb`` files.
+    file_pattern : str
+        Glob pattern for file discovery.  Defaults to ``"**/*.aselmdb"``
+        which recursively finds all ``.aselmdb`` files.  Use
+        ``"*.aselmdb"`` to restrict to the top-level directory.
     metadata_path : str
         Optional path to a ``metadata.npz`` file.  Empty string (default)
         means auto-detect ``<data_dir>/metadata.npz``.
@@ -392,6 +401,12 @@ class ASELMDBSource(Source["AtomicData"]):
                 type=str,
             ),
             Param(
+                name="file_pattern",
+                description="Glob pattern for .aselmdb file discovery",
+                type=str,
+                default="**/*.aselmdb",
+            ),
+            Param(
                 name="metadata_path",
                 description="Path to metadata.npz (empty = auto-detect in data_dir)",
                 type=str,
@@ -409,6 +424,7 @@ class ASELMDBSource(Source["AtomicData"]):
     def __init__(
         self,
         data_dir: str,
+        file_pattern: str = "**/*.aselmdb",
         metadata_path: str = "",
         backend: Literal["python", "rust"] = "python",
     ) -> None:
@@ -423,10 +439,19 @@ class ASELMDBSource(Source["AtomicData"]):
                 logger.warning("Rust LMDB backend unavailable; falling back to 'python'.")
                 self._backend = "python"
 
+        root = pathlib.Path(data_dir)
+        if not root.is_dir():
+            msg = f"Path {root} is not a directory."
+            raise FileNotFoundError(msg)
+
+        self._root = root.resolve()
+
         # Discover .aselmdb files eagerly (sorted for deterministic ordering).
-        self._db_files: list[pathlib.Path] = sorted(self._data_dir.glob("*.aselmdb"))
+        self._db_files: list[pathlib.Path] = sorted(
+            p.resolve() for p in root.glob(file_pattern) if p.is_file() and p.suffix == ".aselmdb"
+        )
         if not self._db_files:
-            msg = f"No .aselmdb files found in {self._data_dir}"
+            msg = f"No .aselmdb files found in {self._data_dir} with pattern {file_pattern!r}"
             raise ValueError(msg)
 
         logger.info(
@@ -554,3 +579,34 @@ class ASELMDBSource(Source["AtomicData"]):
     def metadata(self) -> dict[str, np.ndarray]:
         """Return loaded metadata arrays, if any."""
         return dict(self._metadata)
+
+    @property
+    def root(self) -> pathlib.Path:
+        """Return the root directory of this source.
+
+        Returns
+        -------
+        pathlib.Path
+            The resolved root directory containing the discovered files.
+        """
+        return self._root
+
+    def relative_path(self, index: int) -> str:
+        """Return the path of the *index*-th file relative to the root.
+
+        This is used by sinks (e.g.
+        :class:`~physicsnemo_curator.domains.atm.sinks.zarr_writer.AtomicDataZarrSink`)
+        to resolve ``{relpath}`` and ``{stem}`` naming placeholders,
+        enabling output directory layouts that mirror the input.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based file index.
+
+        Returns
+        -------
+        str
+            POSIX-style relative path (e.g. ``"subdir/data.aselmdb"``).
+        """
+        return self._db_files[index].relative_to(self._root).as_posix()

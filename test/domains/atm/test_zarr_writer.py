@@ -89,6 +89,28 @@ class TestAtomicDataZarrSinkUnit:
         sink = AtomicDataZarrSink(output_path=str(tmp_path / "out.zarr"))
         assert sink.batch_size == 1000
 
+    def test_naming_template_property_default(self, tmp_path: pathlib.Path) -> None:
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+
+        sink = AtomicDataZarrSink(output_path=str(tmp_path / "out.zarr"))
+        assert sink.naming_template is None
+
+    def test_naming_template_property_set(self, tmp_path: pathlib.Path) -> None:
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+
+        sink = AtomicDataZarrSink(
+            output_path=str(tmp_path / "out/"),
+            naming_template="{relpath}/{stem}.zarr",
+        )
+        assert sink.naming_template == "{relpath}/{stem}.zarr"
+
+    def test_naming_template_param(self) -> None:
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+
+        params = AtomicDataZarrSink.params()
+        names = [p.name for p in params]
+        assert "naming_template" in names
+
 
 # ---------------------------------------------------------------------------
 # Write tests (mocked writer)
@@ -207,6 +229,134 @@ class TestAtomicDataZarrSinkWrite:
         sink(iter([_make_mock_atomic_data()]), index=0)
 
         assert nested_path.parent.exists()
+
+
+# ---------------------------------------------------------------------------
+# Directory mirroring tests (naming_template + set_source)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requires("atm")
+class TestAtomicDataZarrSinkMirroring:
+    """Tests for directory mirroring via naming_template and set_source."""
+
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
+    def test_naming_template_with_index(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+
+        mock_writer = MagicMock()
+        mock_writer_cls.return_value = mock_writer
+
+        sink = AtomicDataZarrSink(
+            output_path=str(tmp_path / "output"),
+            naming_template="store_{index:04d}.zarr",
+        )
+        paths = sink(iter([_make_mock_atomic_data()]), index=3)
+
+        assert len(paths) == 1
+        assert paths[0] == str(tmp_path / "output" / "store_0003.zarr")
+
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
+    def test_naming_template_with_relpath_stem(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+
+        mock_writer = MagicMock()
+        mock_writer_cls.return_value = mock_writer
+
+        # Create a mock source with relative_path.
+        source = MagicMock()
+        source.relative_path.return_value = "split_a/run_01.aselmdb"
+
+        sink = AtomicDataZarrSink(
+            output_path=str(tmp_path / "output"),
+            naming_template="{relpath}/{stem}.zarr",
+        )
+        sink.set_source(source)
+        paths = sink(iter([_make_mock_atomic_data()]), index=0)
+
+        assert len(paths) == 1
+        assert paths[0] == str(tmp_path / "output" / "split_a" / "run_01.zarr")
+        source.relative_path.assert_called_once_with(0)
+
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
+    def test_naming_template_flat_relpath(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+
+        mock_writer = MagicMock()
+        mock_writer_cls.return_value = mock_writer
+
+        # Source file at top level — relpath should be empty string.
+        source = MagicMock()
+        source.relative_path.return_value = "data.aselmdb"
+
+        sink = AtomicDataZarrSink(
+            output_path=str(tmp_path / "output"),
+            naming_template="{stem}.zarr",
+        )
+        sink.set_source(source)
+        paths = sink(iter([_make_mock_atomic_data()]), index=0)
+
+        assert len(paths) == 1
+        assert paths[0] == str(tmp_path / "output" / "data.zarr")
+
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
+    def test_naming_template_separate_stores_per_index(
+        self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path
+    ) -> None:
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+
+        mock_writer = MagicMock()
+        mock_writer_cls.return_value = mock_writer
+
+        sink = AtomicDataZarrSink(
+            output_path=str(tmp_path / "output"),
+            naming_template="store_{index}.zarr",
+        )
+
+        # Two indices should write to separate stores.
+        paths_0 = sink(iter([_make_mock_atomic_data()]), index=0)
+        paths_1 = sink(iter([_make_mock_atomic_data()]), index=1)
+
+        assert paths_0[0] != paths_1[0]
+        assert paths_0[0] == str(tmp_path / "output" / "store_0.zarr")
+        assert paths_1[0] == str(tmp_path / "output" / "store_1.zarr")
+
+        # Each store should get a write call (not append), since they're
+        # separate new stores.
+        assert mock_writer.write.call_count == 2
+        mock_writer.append.assert_not_called()
+
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
+    def test_no_source_relpath_defaults_empty(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+
+        mock_writer = MagicMock()
+        mock_writer_cls.return_value = mock_writer
+
+        # No set_source call — relpath/stem should resolve to empty strings.
+        sink = AtomicDataZarrSink(
+            output_path=str(tmp_path / "output"),
+            naming_template="idx_{index}.zarr",
+        )
+        paths = sink(iter([_make_mock_atomic_data()]), index=5)
+
+        assert paths[0] == str(tmp_path / "output" / "idx_5.zarr")
+
+    @patch("nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter")
+    def test_set_source_called_by_pipeline(self, mock_writer_cls: MagicMock, tmp_path: pathlib.Path) -> None:
+        from physicsnemo_curator.domains.atm.sinks.zarr_writer import AtomicDataZarrSink
+
+        sink = AtomicDataZarrSink(
+            output_path=str(tmp_path / "output"),
+            naming_template="{stem}.zarr",
+        )
+
+        # Verify set_source exists and is callable.
+        assert hasattr(sink, "set_source")
+        source = MagicMock()
+        sink.set_source(source)
+        # The source should be stored internally.
+        assert sink._source is source
 
 
 # ---------------------------------------------------------------------------

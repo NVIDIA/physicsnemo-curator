@@ -23,6 +23,11 @@ Items are collected into batches of configurable size before being flushed
 to the store for efficient I/O.  The first batch creates the store via
 :meth:`write`, and subsequent batches extend it via :meth:`append`.
 
+When a *naming_template* is provided and the pipeline's source exposes a
+``relative_path(index)`` method, the sink can mirror the input directory
+structure — each source index writes to a separate Zarr store whose path
+is derived from the source file layout.
+
 Examples
 --------
 >>> sink = AtomicDataZarrSink(output_path="./output.zarr")  # doctest: +SKIP
@@ -35,7 +40,7 @@ import logging
 import pathlib
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from physicsnemo_curator.core.base import Param, Sink
+from physicsnemo_curator.core.base import Param, Sink, Source
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -52,23 +57,50 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
     Zarr store using :class:`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter`.
     The first flush creates the store; all subsequent flushes append to it.
 
-    Multiple pipeline indices write to the **same** store via append
-    semantics, producing a single consolidated output.
+    **Default mode** (no *naming_template*): all pipeline indices write to
+    the **same** store via append semantics, producing a single consolidated
+    output.
+
+    **Directory-mirroring mode** (*naming_template* provided): each pipeline
+    index writes to a separate Zarr store whose name is derived from the
+    template.  When the pipeline's source exposes a ``relative_path(index)``
+    method (e.g.
+    :class:`~physicsnemo_curator.domains.atm.sources.aselmdb.ASELMDBSource`),
+    the ``{relpath}`` and ``{stem}`` placeholders resolve to the source's
+    directory structure, enabling output layouts that mirror the input.
 
     Parameters
     ----------
     output_path : str
-        Path for the output Zarr store directory.
+        Base directory for output Zarr store(s).
+    naming_template : str or None
+        Python format string for per-index store naming.  The placeholders
+        ``{index}`` (source index) is always available.  When the source
+        supports it, ``{relpath}`` (parent directory relative to source
+        root) and ``{stem}`` (filename stem without extension) are also
+        available.  When ``None`` (default), all indices write to a single
+        store at *output_path*.
     batch_size : int
         Number of :class:`AtomicData` items to accumulate before flushing
         to the store.  Larger batches reduce I/O overhead.
 
     Examples
     --------
+    Default (single store):
+
     >>> sink = AtomicDataZarrSink(output_path="./output.zarr")  # doctest: +SKIP
     >>> paths = sink(atomic_data_iterator, index=0)  # doctest: +SKIP
     >>> paths
     ['./output.zarr']
+
+    Directory mirroring:
+
+    >>> sink = AtomicDataZarrSink(  # doctest: +SKIP
+    ...     output_path="./output/",
+    ...     naming_template="{relpath}/{stem}.zarr",
+    ... )
+    >>> # Input:  ./data/split_a/run_01.aselmdb
+    >>> # Output: ./output/split_a/run_01.zarr
     """
 
     name: ClassVar[str] = "AtomicData Zarr"
@@ -81,13 +113,22 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
         Returns
         -------
         list[Param]
-            The ``output_path`` and ``batch_size`` parameters.
+            The ``output_path``, ``naming_template``, and ``batch_size``
+            parameters.
         """
         return [
             Param(
                 name="output_path",
-                description="Path for the output Zarr store",
+                description="Base path for the output Zarr store(s)",
                 type=str,
+            ),
+            Param(
+                name="naming_template",
+                description=(
+                    "Per-index naming template (e.g. '{relpath}/{stem}.zarr'). Leave empty for single-store mode."
+                ),
+                type=str,
+                default="",
             ),
             Param(
                 name="batch_size",
@@ -97,10 +138,35 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
             ),
         ]
 
-    def __init__(self, output_path: str, batch_size: int = 1000) -> None:
+    def __init__(
+        self,
+        output_path: str,
+        naming_template: str | None = None,
+        batch_size: int = 1000,
+    ) -> None:
         self._output_path = pathlib.Path(output_path)
+        self._naming_template = naming_template or None
         self._batch_size = batch_size
-        self._store_exists = self._output_path.exists()
+        self._source: Source[AtomicData] | None = None
+
+        # Track which store paths have been created (for write vs append).
+        self._existing_stores: set[str] = set()
+        if self._naming_template is None and self._output_path.exists():
+            self._existing_stores.add(str(self._output_path))
+
+    def set_source(self, source: Source[AtomicData]) -> None:
+        """Inject the pipeline source for ``{relpath}``/``{stem}`` resolution.
+
+        Called automatically by the :class:`~physicsnemo_curator.core.base.Pipeline`
+        when the sink is attached via :meth:`Pipeline.write`.
+
+        Parameters
+        ----------
+        source : Source[AtomicData]
+            The pipeline source.  If it exposes a ``relative_path(index)``
+            method, the sink will use it to resolve naming placeholders.
+        """
+        self._source = source
 
     def __call__(self, items: Iterator[AtomicData], index: int) -> list[str]:
         """Consume atomic data items and write them to the Zarr store.
@@ -110,8 +176,9 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
         items : Iterator[AtomicData]
             Stream of :class:`AtomicData` objects to persist.
         index : int
-            Source index (used for logging; all indices write to the same
-            store).
+            Source index.  In single-store mode this is used only for
+            logging.  In directory-mirroring mode it determines the
+            output store path via the naming template.
 
         Returns
         -------
@@ -121,31 +188,64 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
         """
         from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrWriter
 
-        self._output_path.parent.mkdir(parents=True, exist_ok=True)
+        store_path = self._resolve_store_path(index)
+        store_path.parent.mkdir(parents=True, exist_ok=True)
 
-        writer = AtomicDataZarrWriter(str(self._output_path))
+        writer = AtomicDataZarrWriter(str(store_path))
         wrote_any = False
         batch: list[AtomicData] = []
 
         for item in items:
             batch.append(item)
             if len(batch) >= self._batch_size:
-                self._flush(writer, batch)
+                self._flush(writer, batch, str(store_path))
                 wrote_any = True
                 batch = []
 
         # Flush remaining items.
         if batch:
-            self._flush(writer, batch)
+            self._flush(writer, batch, str(store_path))
             wrote_any = True
 
         if wrote_any:
-            logger.info("Wrote index %d to %s", index, self._output_path)
-            return [str(self._output_path)]
+            logger.info("Wrote index %d to %s", index, store_path)
+            return [str(store_path)]
 
         return []
 
-    def _flush(self, writer: Any, batch: list[AtomicData]) -> None:
+    def _resolve_store_path(self, index: int) -> pathlib.Path:
+        """Resolve the output Zarr store path for the given index.
+
+        Parameters
+        ----------
+        index : int
+            Source index.
+
+        Returns
+        -------
+        pathlib.Path
+            The resolved store path.
+        """
+        if self._naming_template is None:
+            return self._output_path
+
+        # Resolve relpath / stem from source if available.
+        relpath = ""
+        stem = ""
+        if self._source is not None and hasattr(self._source, "relative_path"):
+            rel = self._source.relative_path(index)  # ty: ignore[call-non-callable]
+            rel_path = pathlib.PurePosixPath(rel)
+            stem = rel_path.stem
+            relpath = str(rel_path.parent) if str(rel_path.parent) != "." else ""
+
+        name = self._naming_template.format(
+            index=index,
+            relpath=relpath,
+            stem=stem,
+        )
+        return self._output_path / name
+
+    def _flush(self, writer: Any, batch: list[AtomicData], store_key: str) -> None:
         """Write or append a batch of items to the store.
 
         Parameters
@@ -154,13 +254,16 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
             The nvalchemi Zarr writer instance.
         batch : list[AtomicData]
             Items to flush.
+        store_key : str
+            String key identifying which store this batch targets,
+            used to track write-vs-append state.
         """
-        if self._store_exists:
+        if store_key in self._existing_stores:
             writer.append(batch)
         else:
             writer.write(batch)
-            self._store_exists = True
-        logger.debug("Flushed batch of %d items (append=%s)", len(batch), self._store_exists)
+            self._existing_stores.add(store_key)
+        logger.debug("Flushed batch of %d items to %s", len(batch), store_key)
 
     # -- Properties -----------------------------------------------------------
 
@@ -168,6 +271,11 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
     def output_path(self) -> pathlib.Path:
         """Return the output Zarr store path."""
         return self._output_path
+
+    @property
+    def naming_template(self) -> str | None:
+        """Return the naming template, or ``None`` for single-store mode."""
+        return self._naming_template
 
     @property
     def batch_size(self) -> int:

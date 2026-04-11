@@ -270,6 +270,60 @@ class TestASELMDBSourceLocal:
         source = ASELMDBSource(data_dir=str(self.mock_root))
         assert source.data_dir == self.mock_root
 
+    def test_root_property(self) -> None:
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
+
+        source = ASELMDBSource(data_dir=str(self.mock_root))
+        assert source.root == self.mock_root.resolve()
+
+    def test_relative_path(self) -> None:
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
+
+        source = ASELMDBSource(data_dir=str(self.mock_root))
+        rel = source.relative_path(0)
+        assert rel == "data0000.aselmdb"
+
+    def test_relative_path_nested(self, tmp_path: pathlib.Path) -> None:
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
+
+        nested_root = tmp_path / "nested"
+        nested_root.mkdir()
+        sub = nested_root / "split_a"
+        sub.mkdir()
+        (sub / "run01.aselmdb").write_bytes(b"mock")
+        (sub / "run02.aselmdb").write_bytes(b"mock")
+
+        source = ASELMDBSource(data_dir=str(nested_root), file_pattern="**/*.aselmdb")
+        assert len(source) == 2
+        rel = source.relative_path(0)
+        assert rel == "split_a/run01.aselmdb"
+
+    def test_file_pattern_flat(self, tmp_path: pathlib.Path) -> None:
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
+
+        flat_root = tmp_path / "flat"
+        flat_root.mkdir()
+        (flat_root / "a.aselmdb").write_bytes(b"mock")
+        sub = flat_root / "nested"
+        sub.mkdir()
+        (sub / "b.aselmdb").write_bytes(b"mock")
+
+        # Default pattern finds both
+        source_all = ASELMDBSource(data_dir=str(flat_root))
+        assert len(source_all) == 2
+
+        # Flat pattern finds only top-level
+        source_flat = ASELMDBSource(data_dir=str(flat_root), file_pattern="*.aselmdb")
+        assert len(source_flat) == 1
+        assert source_flat.relative_path(0) == "a.aselmdb"
+
+    def test_file_pattern_param(self) -> None:
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
+
+        params = ASELMDBSource.params()
+        names = [p.name for p in params]
+        assert "file_pattern" in names
+
 
 # ---------------------------------------------------------------------------
 # Registry tests
