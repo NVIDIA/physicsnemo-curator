@@ -26,22 +26,21 @@ The dataset provides three mesh types per run:
 * **volume** — volumetric field data (VTU, ~5.6 GB each)
 * **slices** — x/y/z-normal slice planes with flow fields (VTP)
 
-File discovery and caching are delegated to a
-:class:`~curator.core.store.RunIndexedFileStore` (for boundary/volume)
-or :class:`~curator.core.store.FsspecFileStore` (for slices).
+File discovery and caching are handled internally using ``fsspec``.
 """
 
 from __future__ import annotations
 
+import pathlib
+import re
 import tempfile
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import pyvista as pv
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.io import from_pyvista
 
 from physicsnemo_curator.core.base import Param, Source
-from physicsnemo_curator.core.store import FsspecFileStore, RunIndexedFileStore
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -164,6 +163,8 @@ class AhmedMLSource(Source[Mesh]):
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
     ) -> None:
+        import fsspec
+
         self._mesh_type: MeshType = mesh_type
         self._url = url
         self._storage_options = storage_options or {}
@@ -172,22 +173,100 @@ class AhmedMLSource(Source[Mesh]):
         self._point_source = point_source
         self._warn_on_lost_data = warn_on_lost_data
 
+        self._fs, self._root_path = fsspec.core.url_to_fs(self._url, **self._storage_options)
+        self._protocol = self._fs.protocol if isinstance(self._fs.protocol, str) else self._fs.protocol[0]
+        self._run_indices = self._discover_runs()
+
         if mesh_type == "slices":
-            self._store = self._build_slices_store()
+            self._file_template = "boundary_{i}.vtp"  # dummy, not used for slices
+            self._build_slices_data()
         else:
-            template = _MESH_TEMPLATES[mesh_type]
-            self._store = RunIndexedFileStore(
-                url=self._url,
-                file_template=template,
-                storage_options=self._storage_options,
-                cache_storage=self._cache_storage,
-            )
+            self._file_template = _MESH_TEMPLATES[mesh_type]
+
+    def _discover_runs(self) -> list[int]:
+        """Discover ``run_<i>/`` directories at the base URL.
+
+        Returns
+        -------
+        list[int]
+            Sorted list of integer run indices.
+
+        Raises
+        ------
+        ValueError
+            If no ``run_<i>/`` directories are found.
+        """
+        run_pattern = re.compile(r"^run_(\d+)$")
+        entries = self._fs.ls(self._root_path, detail=False)
+
+        run_indices: list[int] = []
+        for entry in entries:
+            basename = pathlib.PurePosixPath(entry).name
+            m = run_pattern.match(basename)
+            if m:
+                run_indices.append(int(m.group(1)))
+
+        if not run_indices:
+            msg = f"No run_<i>/ directories found at {self._url}."
+            raise ValueError(msg)
+
+        return sorted(run_indices)
+
+    def _ensure_local(self, remote_path: str) -> str:
+        """Download *remote_path* to the local cache if not already present.
+
+        Parameters
+        ----------
+        remote_path : str
+            Filesystem path (no protocol prefix).
+
+        Returns
+        -------
+        str
+            Local filesystem path.
+        """
+        if self._protocol in ("file", ""):
+            return remote_path
+
+        local_path = pathlib.Path(self._cache_storage) / remote_path.lstrip("/")
+        if not local_path.exists():
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            self._fs.get(remote_path, str(local_path))
+
+        return str(local_path)
+
+    def _ensure_local_with_fs(self, fs: Any, protocol: str, remote_path: str) -> str:
+        """Download *remote_path* using the given filesystem.
+
+        Parameters
+        ----------
+        fs : Any
+            fsspec filesystem instance.
+        protocol : str
+            Filesystem protocol string.
+        remote_path : str
+            Remote path to download.
+
+        Returns
+        -------
+        str
+            Local filesystem path.
+        """
+        if protocol in ("file", ""):
+            return remote_path
+
+        local_path = pathlib.Path(self._cache_storage) / remote_path.lstrip("/")
+        if not local_path.exists():
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            fs.get(remote_path, str(local_path))
+
+        return str(local_path)
 
     # -- Source interface -----------------------------------------------------
 
     def __len__(self) -> int:
         """Return the number of available runs."""
-        return len(self._store)
+        return len(self._run_indices)
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
         """Read the mesh(es) for the *index*-th run.
@@ -209,7 +288,14 @@ class AhmedMLSource(Source[Mesh]):
         if self._mesh_type == "slices":
             yield from self._read_slices(index)
         else:
-            path = self._store[index]
+            if index < -len(self._run_indices) or index >= len(self._run_indices):
+                msg = f"Index {index} out of range for source with {len(self._run_indices)} runs."
+                raise IndexError(msg)
+
+            run_id = self._run_indices[index]
+            filename = self._file_template.format(i=run_id)
+            remote_path = f"{self._root_path}/run_{run_id}/{filename}"
+            path = self._ensure_local(remote_path)
             yield self._read_vtk(path)
 
     # -- Internal helpers ----------------------------------------------------
@@ -235,6 +321,31 @@ class AhmedMLSource(Source[Mesh]):
             warn_on_lost_data=self._warn_on_lost_data,
         )
 
+    def _build_slices_data(self) -> None:
+        """Discover per-run slice files for slices mode.
+
+        Populates ``self._slices_run_data`` — a list of
+        ``(fsspec_fs, protocol, list[str])`` tuples, one per run.
+        """
+        import fsspec
+
+        self._slices_run_data: list[tuple[Any, str, list[str]]] = []
+        for run_id in self._run_indices:
+            slice_url = f"{self._url}/run_{run_id}/slices"
+            fs, root_path = fsspec.core.url_to_fs(slice_url, **self._storage_options)
+            protocol = fs.protocol if isinstance(fs.protocol, str) else fs.protocol[0]
+
+            glob_expr = f"{root_path}/**"
+            all_files = fs.glob(glob_expr)
+            files = sorted(
+                f for f in all_files if pathlib.PurePosixPath(f).suffix.lower() in {".vtp"} and not fs.isdir(f)
+            )
+            if not files:
+                msg = f"No slice files found at {slice_url}."
+                raise ValueError(msg)
+
+            self._slices_run_data.append((fs, protocol, files))
+
     def _read_slices(self, index: int) -> Generator[Mesh]:
         """Read all slice VTP files for a given run index.
 
@@ -248,36 +359,7 @@ class AhmedMLSource(Source[Mesh]):
         Mesh
             One mesh per slice plane file.
         """
-        run_store = self._slices_run_stores[index]
-        for i in range(len(run_store)):
-            path = run_store[i]
-            yield self._read_vtk(path)
-
-    def _build_slices_store(self) -> RunIndexedFileStore:
-        """Build the store for slices mode and pre-build per-run stores.
-
-        Returns
-        -------
-        RunIndexedFileStore
-            A store used only for its ``run_indices`` and ``__len__``.
-        """
-        index_store = RunIndexedFileStore(
-            url=self._url,
-            file_template="boundary_{i}.vtp",
-            storage_options=self._storage_options,
-            cache_storage=self._cache_storage,
-        )
-
-        self._slices_run_stores: list[FsspecFileStore] = []
-        for run_id in index_store.run_indices:
-            slice_url = f"{self._url}/run_{run_id}/slices"
-            store = FsspecFileStore(
-                url=slice_url,
-                pattern="**",
-                extensions=frozenset({".vtp"}),
-                storage_options=self._storage_options,
-                cache_storage=self._cache_storage,
-            )
-            self._slices_run_stores.append(store)
-
-        return index_store
+        fs, protocol, files = self._slices_run_data[index]
+        for remote_path in files:
+            local_path = self._ensure_local_with_fs(fs, protocol, remote_path)
+            yield self._read_vtk(local_path)
