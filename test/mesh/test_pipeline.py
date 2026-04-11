@@ -31,7 +31,6 @@ import pyarrow.parquet as pq  # noqa: E402
 import pyvista as pv  # noqa: E402
 from physicsnemo.mesh import Mesh  # noqa: E402
 
-from physicsnemo_curator.core.store import FsspecFileStore  # noqa: E402
 from physicsnemo_curator.mesh.filters.mean import MeanFilter  # noqa: E402
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink  # noqa: E402
 from physicsnemo_curator.mesh.sources.vtk import VTKSource  # noqa: E402
@@ -1131,21 +1130,24 @@ class TestDrivAerMLRemotePipeline:
 
     @pytest.fixture(autouse=True)
     def _drivaerml_source(self, tmp_path):
-        """Download DrivAerML slices via FsspecFileStore, then read locally.
+        """Download DrivAerML slices via fsspec, then read locally.
 
-        Uses FsspecFileStore to download a small subset of slice VTP
+        Uses fsspec to download a small subset of slice VTP
         files, then creates a VTKSource pointing at the local cache.
         """
+        import fsspec
+
         cache_dir = str(tmp_path / "hf_cache")
-        store = FsspecFileStore(
-            url=_DRIVAERML_URL,
-            pattern="xNormal_p6*",
-            extensions=frozenset({".vtp"}),
-            cache_storage=cache_dir,
-        )
-        # Force download by accessing each file
-        for i in range(len(store)):
-            store[i]
+        fs, root_path = fsspec.core.url_to_fs(_DRIVAERML_URL)
+        glob_expr = f"{root_path}/xNormal_p6*"
+        all_files = fs.glob(glob_expr)
+        files = sorted(f for f in all_files if f.endswith(".vtp"))
+        # Force download by caching each file
+        for remote_path in files:
+            local_path = pathlib.Path(cache_dir) / remote_path.lstrip("/")
+            if not local_path.exists():
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                fs.get(remote_path, str(local_path))
         # Point VTKSource at the cache directory
         self.source = VTKSource(cache_dir, warn_on_lost_data=False)
         self.tmp_path = tmp_path

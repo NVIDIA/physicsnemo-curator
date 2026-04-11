@@ -52,7 +52,6 @@ can see exactly where time is spent.
 
 from physicsnemo_curator.core.profiling import ProfiledPipeline
 
-from physicsnemo_curator.core.store import FsspecFileStore
 from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.mesh.sources.vtk import VTKSource
@@ -62,9 +61,8 @@ from physicsnemo_curator.run import run_pipeline
 # Download DrivAerML Files
 # -------------------------
 #
-# We use :class:`~physicsnemo_curator.core.store.FsspecFileStore` to download
-# a small subset of DrivAerML boundary VTP files from HuggingFace Hub
-# to a local cache directory.  Subsequent runs read from cache.
+# We use ``fsspec`` to download a small subset of DrivAerML boundary VTP files
+# from HuggingFace Hub to a local cache directory.  Subsequent runs read from cache.
 
 N_RUNS = 3
 N_JOBS = 1  # Sequential for fair comparison (no scheduling noise)
@@ -72,18 +70,23 @@ N_JOBS = 1  # Sequential for fair comparison (no scheduling noise)
 DRIVAERML_URL = "hf://datasets/neashton/drivaerml"
 CACHE_DIR = "outputs/profiling/drivaerml_cache"
 
-store = FsspecFileStore(
-    url=DRIVAERML_URL,
-    pattern="**/boundary*.vtp",
-    extensions=frozenset({".vtp"}),
-    cache_storage=CACHE_DIR,
-)
+import pathlib
+
+import fsspec
+
+fs, root_path = fsspec.core.url_to_fs(DRIVAERML_URL)
+glob_expr = f"{root_path}/**/boundary*.vtp"
+all_files = fs.glob(glob_expr)
+files = sorted(f for f in all_files if f.endswith(".vtp") and not fs.isdir(f))
 
 # Force download of the files we need
-for i in range(min(N_RUNS, len(store))):
-    _ = store[i]
+for remote_path in files[:N_RUNS]:
+    local_path = pathlib.Path(CACHE_DIR) / remote_path.lstrip("/")
+    if not local_path.exists():
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        fs.get(remote_path, str(local_path))
 
-print(f"VTP files cached: {len(store)}")
+print(f"VTP files cached: {len(files)}")
 
 # %%
 # PyVista Backend

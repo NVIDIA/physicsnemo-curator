@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for HuggingFace dataset sources and RunIndexedFileStore.
+"""Tests for HuggingFace dataset sources.
 
 Unit tests use mock filesystems to avoid network access.
 E2E tests (marked ``slow``) hit the real HuggingFace Hub.
@@ -25,8 +25,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-
-from physicsnemo_curator.core.store import RunIndexedFileStore
 
 if TYPE_CHECKING:
     import pathlib
@@ -41,108 +39,6 @@ try:
     _NETWORK_ERRORS = (*_NETWORK_ERRORS, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError)
 except ImportError:
     pass
-
-
-# ---------------------------------------------------------------------------
-# Unit tests — RunIndexedFileStore
-# ---------------------------------------------------------------------------
-
-
-class TestRunIndexedFileStore:
-    """Unit tests for RunIndexedFileStore with a local filesystem."""
-
-    @pytest.fixture(autouse=True)
-    def _setup_run_dirs(self, tmp_path: pathlib.Path) -> None:
-        """Create a local directory tree mimicking run-indexed layout."""
-        for i in [1, 3, 5, 10]:
-            run_dir = tmp_path / f"run_{i}"
-            run_dir.mkdir()
-            (run_dir / f"boundary_{i}.vtp").write_text(f"mock-vtp-{i}")
-            (run_dir / f"volume_{i}.vtu").write_text(f"mock-vtu-{i}")
-            slices_dir = run_dir / "slices"
-            slices_dir.mkdir()
-            (slices_dir / f"xNormal_{i}.vtp").write_text(f"mock-slice-{i}")
-
-        # Also create a non-run directory that should be ignored.
-        (tmp_path / "openfoam_meshes").mkdir()
-        (tmp_path / "force_mom_all.csv").write_text("mock-csv")
-
-        self.tmp_path = tmp_path
-
-    def test_discovers_runs(self) -> None:
-        """Should find exactly the 4 run directories."""
-        store = RunIndexedFileStore(
-            url=str(self.tmp_path),
-            file_template="boundary_{i}.vtp",
-        )
-        assert len(store) == 4
-
-    def test_run_indices_sorted(self) -> None:
-        """Run indices should be sorted ascending."""
-        store = RunIndexedFileStore(
-            url=str(self.tmp_path),
-            file_template="boundary_{i}.vtp",
-        )
-        assert store.run_indices == [1, 3, 5, 10]
-
-    def test_getitem_returns_correct_path(self) -> None:
-        """Index 0 should resolve to run_1, index 3 to run_10."""
-        store = RunIndexedFileStore(
-            url=str(self.tmp_path),
-            file_template="boundary_{i}.vtp",
-        )
-        path_0 = store[0]
-        assert path_0.endswith("run_1/boundary_1.vtp")
-
-        path_3 = store[3]
-        assert path_3.endswith("run_10/boundary_10.vtp")
-
-    def test_getitem_negative_index(self) -> None:
-        """Negative indexing should work."""
-        store = RunIndexedFileStore(
-            url=str(self.tmp_path),
-            file_template="boundary_{i}.vtp",
-        )
-        path = store[-1]
-        assert path.endswith("run_10/boundary_10.vtp")
-
-    def test_getitem_out_of_range(self) -> None:
-        """Should raise IndexError for out-of-range indices."""
-        store = RunIndexedFileStore(
-            url=str(self.tmp_path),
-            file_template="boundary_{i}.vtp",
-        )
-        with pytest.raises(IndexError):
-            store[99]
-
-    def test_empty_directory_raises(self, tmp_path: pathlib.Path) -> None:
-        """Should raise ValueError when no run_* dirs exist."""
-        empty_dir = tmp_path / "empty"
-        empty_dir.mkdir()
-        with pytest.raises(ValueError, match="No run_"):
-            RunIndexedFileStore(
-                url=str(empty_dir),
-                file_template="boundary_{i}.vtp",
-            )
-
-    def test_repr(self) -> None:
-        """__repr__ should include URL, template, and count."""
-        store = RunIndexedFileStore(
-            url=str(self.tmp_path),
-            file_template="boundary_{i}.vtp",
-        )
-        r = repr(store)
-        assert "RunIndexedFileStore" in r
-        assert "runs=4" in r
-
-    def test_volume_template(self) -> None:
-        """Should work with volume file templates too."""
-        store = RunIndexedFileStore(
-            url=str(self.tmp_path),
-            file_template="volume_{i}.vtu",
-        )
-        path = store[0]
-        assert path.endswith("run_1/volume_1.vtu")
 
 
 # ---------------------------------------------------------------------------
@@ -272,15 +168,6 @@ class TestRegistryIntegration:
         assert "AhmedML" in source_names
         assert "WindsorML" in source_names
         assert "WindTunnel-20k" in source_names
-
-    def test_run_indexed_store_registered(self) -> None:
-        """RunIndexedFileStore should be registered as a mesh store."""
-        import physicsnemo_curator.mesh  # noqa: F401
-        from physicsnemo_curator.core.registry import registry
-
-        stores = registry.list_stores("mesh")
-        store_names = {name for name, _ in stores}
-        assert "Run-indexed (remote)" in store_names
 
 
 # ---------------------------------------------------------------------------
