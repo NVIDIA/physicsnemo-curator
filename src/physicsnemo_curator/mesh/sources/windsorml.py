@@ -28,12 +28,13 @@ The dataset provides two mesh types per run:
 .. note::
    WindsorML does not provide slice plane meshes (only images).
 
-File discovery and caching are delegated to a
-:class:`~curator.core.store.RunIndexedFileStore`.
+File discovery and caching are handled internally using ``fsspec``.
 """
 
 from __future__ import annotations
 
+import pathlib
+import re
 import tempfile
 from typing import TYPE_CHECKING, ClassVar, Literal
 
@@ -42,7 +43,6 @@ from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.io import from_pyvista
 
 from physicsnemo_curator.core.base import Param, Source
-from physicsnemo_curator.core.store import RunIndexedFileStore
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -164,6 +164,8 @@ class WindsorMLSource(Source[Mesh]):
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
     ) -> None:
+        import fsspec
+
         self._mesh_type: MeshType = mesh_type
         self._url = url
         self._storage_options = storage_options or {}
@@ -172,19 +174,68 @@ class WindsorMLSource(Source[Mesh]):
         self._point_source = point_source
         self._warn_on_lost_data = warn_on_lost_data
 
-        template = _MESH_TEMPLATES[mesh_type]
-        self._store = RunIndexedFileStore(
-            url=self._url,
-            file_template=template,
-            storage_options=self._storage_options,
-            cache_storage=self._cache_storage,
-        )
+        self._file_template = _MESH_TEMPLATES[mesh_type]
+        self._fs, self._root_path = fsspec.core.url_to_fs(self._url, **self._storage_options)
+        self._protocol = self._fs.protocol if isinstance(self._fs.protocol, str) else self._fs.protocol[0]
+        self._run_indices = self._discover_runs()
+
+    def _discover_runs(self) -> list[int]:
+        """Discover ``run_<i>/`` directories at the base URL.
+
+        Returns
+        -------
+        list[int]
+            Sorted list of integer run indices.
+
+        Raises
+        ------
+        ValueError
+            If no ``run_<i>/`` directories are found.
+        """
+        run_pattern = re.compile(r"^run_(\d+)$")
+        entries = self._fs.ls(self._root_path, detail=False)
+
+        run_indices: list[int] = []
+        for entry in entries:
+            basename = pathlib.PurePosixPath(entry).name
+            m = run_pattern.match(basename)
+            if m:
+                run_indices.append(int(m.group(1)))
+
+        if not run_indices:
+            msg = f"No run_<i>/ directories found at {self._url}."
+            raise ValueError(msg)
+
+        return sorted(run_indices)
+
+    def _ensure_local(self, remote_path: str) -> str:
+        """Download *remote_path* to the local cache if not already present.
+
+        Parameters
+        ----------
+        remote_path : str
+            Filesystem path (no protocol prefix).
+
+        Returns
+        -------
+        str
+            Local filesystem path.
+        """
+        if self._protocol in ("file", ""):
+            return remote_path
+
+        local_path = pathlib.Path(self._cache_storage) / remote_path.lstrip("/")
+        if not local_path.exists():
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            self._fs.get(remote_path, str(local_path))
+
+        return str(local_path)
 
     # -- Source interface -----------------------------------------------------
 
     def __len__(self) -> int:
         """Return the number of available runs."""
-        return len(self._store)
+        return len(self._run_indices)
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
         """Read the mesh for the *index*-th run.
@@ -199,7 +250,15 @@ class WindsorMLSource(Source[Mesh]):
         Mesh
             The converted physicsnemo Mesh.
         """
-        path = self._store[index]
+        if index < -len(self._run_indices) or index >= len(self._run_indices):
+            msg = f"Index {index} out of range for source with {len(self._run_indices)} runs."
+            raise IndexError(msg)
+
+        run_id = self._run_indices[index]
+        filename = self._file_template.format(i=run_id)
+        remote_path = f"{self._root_path}/run_{run_id}/{filename}"
+        path = self._ensure_local(remote_path)
+
         pv_mesh = pv.read(path)
         mesh = from_pyvista(
             pv_mesh,
