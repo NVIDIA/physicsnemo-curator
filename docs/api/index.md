@@ -51,10 +51,7 @@ Execution backends for parallel and distributed pipeline processing.
 Domain-specific sources, filters, and sinks.
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 3
 
 /autoapi/physicsnemo_curator/domains/index
-/autoapi/physicsnemo_curator/domains/mesh/index
-/autoapi/physicsnemo_curator/domains/atm/index
-/autoapi/physicsnemo_curator/domains/da/index
 ```
