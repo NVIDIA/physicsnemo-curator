@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the ``da`` submodule — ERA5Source, ZarrSink, NetCDF4Sink, MomentsFilter.
+"""Tests for the ``da`` submodule — ERA5Source, HRRRSource, ZarrSink, NetCDF4Sink, MomentsFilter.
 
 Unit tests use synthetic xarray DataArrays and mock the earth2studio
-ARCO backend.  End-to-end tests hit the real ARCO endpoint and are
+backends.  End-to-end tests hit the real ARCO/HRRR endpoints and are
 marked ``@pytest.mark.slow`` + ``@pytest.mark.e2e``.
 """
 
@@ -109,6 +109,46 @@ def _make_simple_dataarray(
             "time": [np.datetime64(datetime(2020, 1, 1, i)) for i in range(n_samples)],
             "lat": lats,
             "lon": lons,
+        },
+    )
+
+
+_HRRR_X_N = 5  # small HRRR grid for tests
+_HRRR_Y_N = 7
+_HRRR_VARS = ["t2m", "u10m"]
+_HRRR_TIMES = [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 1)]
+
+
+def _make_hrrr_dataarray(
+    times: list[datetime] | None = None,
+    variables: list[str] | None = None,
+    n_hrrr_x: int = _HRRR_X_N,
+    n_hrrr_y: int = _HRRR_Y_N,
+    seed: int = 42,
+) -> object:
+    """Create a synthetic DataArray mimicking HRRR output.
+
+    Returns an xr.DataArray but typed as ``object`` to avoid
+    top-level numpy/xarray imports.
+    """
+    import numpy as np
+    import xarray as xr
+
+    times = times or _HRRR_TIMES[:1]
+    variables = variables or _HRRR_VARS
+    hrrr_x = np.arange(n_hrrr_x, dtype=float)
+    hrrr_y = np.arange(n_hrrr_y, dtype=float)
+    rng = np.random.default_rng(seed)
+
+    data = rng.standard_normal((len(times), len(variables), n_hrrr_x, n_hrrr_y))
+    return xr.DataArray(
+        data=data,
+        dims=["time", "variable", "hrrr_x", "hrrr_y"],
+        coords={
+            "time": [np.datetime64(t) for t in times],
+            "variable": variables,
+            "hrrr_x": hrrr_x,
+            "hrrr_y": hrrr_y,
         },
     )
 
@@ -646,6 +686,179 @@ class TestERA5MultiBackend:
         results = list(source[0])
         assert len(results) == 1
         mock_arco.assert_called_once()
+
+
+# ===================================================================
+# HRRRSource tests
+# ===================================================================
+
+
+class TestHRRRSource:
+    """Unit tests for HRRRSource."""
+
+    def test_params(self) -> None:
+        """HRRRSource.params() returns descriptors for times, variables, source, cache, max_workers."""
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        params = HRRRSource.params()
+        names = {p.name for p in params}
+        assert {"times", "variables", "source", "cache", "max_workers"} == names
+
+    def test_name_and_description(self) -> None:
+        """HRRRSource has correct name and description."""
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        assert HRRRSource.name == "HRRR"
+        assert "HRRR" in HRRRSource.description
+
+    def test_len(self) -> None:
+        """Length equals number of timestamps."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.hrrr._import_hrrr", return_value=MagicMock()),
+            patch("physicsnemo_curator.da.sources.hrrr._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = HRRRSource(times=_HRRR_TIMES, variables=_HRRR_VARS)
+        assert len(source) == 2
+
+    def test_getitem(self) -> None:
+        """__getitem__ yields a DataArray from the HRRR backend."""
+        from unittest.mock import MagicMock, patch
+
+        import xarray as xr
+
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        mock_backend = MagicMock()
+        mock_backend.return_value = _make_hrrr_dataarray(times=[_HRRR_TIMES[0]])
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.hrrr._import_hrrr", return_value=mock_backend),
+            patch("physicsnemo_curator.da.sources.hrrr._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = HRRRSource(times=_HRRR_TIMES, variables=_HRRR_VARS)
+        results = list(source[0])
+        assert len(results) == 1
+        assert isinstance(results[0], xr.DataArray)
+        assert "hrrr_x" in results[0].dims
+        assert "hrrr_y" in results[0].dims
+
+    def test_getitem_negative_index(self) -> None:
+        """Negative indexing works."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        mock_backend = MagicMock()
+        mock_backend.return_value = _make_hrrr_dataarray(times=[_HRRR_TIMES[-1]])
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.hrrr._import_hrrr", return_value=mock_backend),
+            patch("physicsnemo_curator.da.sources.hrrr._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = HRRRSource(times=_HRRR_TIMES, variables=_HRRR_VARS)
+        results = list(source[-1])
+        assert len(results) == 1
+
+    def test_getitem_out_of_range(self) -> None:
+        """Out-of-range index raises IndexError."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.hrrr._import_hrrr", return_value=MagicMock()),
+            patch("physicsnemo_curator.da.sources.hrrr._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = HRRRSource(times=_HRRR_TIMES, variables=_HRRR_VARS)
+        with pytest.raises(IndexError):
+            list(source[999])
+
+    def test_empty_times_raises(self) -> None:
+        """Empty times list raises ValueError."""
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        with pytest.raises(ValueError, match="non-empty"):
+            HRRRSource(times=[], variables=_HRRR_VARS)
+
+    def test_empty_variables_raises(self) -> None:
+        """Empty variables list raises ValueError."""
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        with pytest.raises(ValueError, match="non-empty"):
+            HRRRSource(times=_HRRR_TIMES, variables=[])
+
+    def test_invalid_source_raises(self) -> None:
+        """Invalid source name raises ValueError."""
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        with pytest.raises(ValueError, match="Unknown source"):
+            HRRRSource(times=_HRRR_TIMES, variables=_HRRR_VARS, source="invalid")
+
+    def test_unknown_variable_raises(self) -> None:
+        """Variable not in HRRRLexicon raises ValueError."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: v in {"t2m"}
+
+        with (
+            patch("physicsnemo_curator.da.sources.hrrr._import_lexicon", return_value=mock_lexicon),
+            pytest.raises(ValueError, match="not found in HRRRLexicon"),
+        ):
+            HRRRSource(times=_HRRR_TIMES, variables=["t2m", "nonexistent_var"])
+
+    def test_properties(self) -> None:
+        """Properties return copies of the constructor inputs."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.hrrr._import_hrrr", return_value=MagicMock()),
+            patch("physicsnemo_curator.da.sources.hrrr._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = HRRRSource(times=_HRRR_TIMES, variables=_HRRR_VARS, cache=True)
+        assert source.times == _HRRR_TIMES
+        assert source.variables == _HRRR_VARS
+        assert source.source == "aws"
+        assert source.cache is True
+
+    def test_cache_default_false(self) -> None:
+        """Cache defaults to False."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.da.sources.hrrr._import_hrrr", return_value=MagicMock()),
+            patch("physicsnemo_curator.da.sources.hrrr._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = HRRRSource(times=_HRRR_TIMES, variables=_HRRR_VARS)
+        assert source.cache is False
 
 
 # ===================================================================
@@ -1325,6 +1538,14 @@ class TestRegistration:
         sources = registry.sources("da")
         assert "ERA5" in sources
 
+    def test_hrrr_registered(self) -> None:
+        """HRRRSource is discoverable via the registry."""
+        import physicsnemo_curator.da  # noqa: F401
+        from physicsnemo_curator.core.registry import registry
+
+        sources = registry.sources("da")
+        assert "HRRR" in sources
+
     def test_zarrsink_registered(self) -> None:
         """ZarrSink is discoverable via the registry."""
         import physicsnemo_curator.da  # noqa: F401
@@ -1657,3 +1878,66 @@ class TestERA5EndToEnd:
         assert ds["data"].sizes["time"] == 2
         assert ds["data"].sizes["lat"] == 721
         assert ds["data"].sizes["lon"] == 1440
+
+
+# ===================================================================
+# HRRR end-to-end tests (hit real AWS)
+# ===================================================================
+
+
+@pytest.mark.e2e
+@pytest.mark.slow
+class TestHRRREndToEnd:
+    """End-to-end tests against the live HRRR archive on AWS.
+
+    These tests download real data and are slow.  Run with
+    ``pytest -m 'e2e and slow'``.
+    """
+
+    def test_hrrr_fetch_single_timestep(self) -> None:
+        """Fetch a single HRRR timestep with two variables."""
+        import xarray as xr
+
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        source = HRRRSource(
+            times=[datetime(2024, 1, 1, 0)],
+            variables=["t2m", "u10m"],
+            cache=True,
+        )
+        assert len(source) == 1
+        results = list(source[0])
+        assert len(results) == 1
+
+        da = results[0]
+        assert isinstance(da, xr.DataArray)
+        assert da.sizes["time"] == 1
+        assert da.sizes["variable"] == 2
+        assert da.sizes["hrrr_x"] == 1059
+        assert da.sizes["hrrr_y"] == 1799
+
+    def test_hrrr_zarr_pipeline(self, tmp_path: Path) -> None:
+        """Full pipeline: HRRR -> ZarrSink."""
+        import xarray as xr
+
+        from physicsnemo_curator.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo_curator.da.sources.hrrr import HRRRSource
+
+        source = HRRRSource(
+            times=[datetime(2024, 1, 1, 0)],
+            variables=["t2m"],
+            cache=True,
+        )
+        sink = ZarrSink(
+            output_path=str(tmp_path / "output.zarr"),
+            chunks={"time": 1, "hrrr_x": 1059, "hrrr_y": 1799},
+        )
+
+        pipeline = source.write(sink)
+        paths = pipeline[0]
+        assert len(paths) > 0
+
+        ds = xr.open_zarr(str(tmp_path / "output.zarr" / "t2m"))
+        assert ds["data"].sizes["time"] == 1
+        assert ds["data"].sizes["hrrr_x"] == 1059
+        assert ds["data"].sizes["hrrr_y"] == 1799
