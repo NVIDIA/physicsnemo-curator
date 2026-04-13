@@ -561,8 +561,9 @@ class Pipeline[T]:
         The database path is resolved in priority order:
 
         1. ``db_dir`` field (explicit per-pipeline override)
-        2. ``PSNC_DB_DIR`` environment variable
-        3. ``{cwd}/.pnc/`` (default fallback)
+        2. :func:`~physicsnemo_curator.core.cache.default_cache_dir` which
+           honours the ``PSNC_CACHE_DIR`` environment variable, then
+           ``$XDG_CACHE_HOME/psnc/``, then ``~/.cache/psnc/``
 
         Returns
         -------
@@ -577,9 +578,9 @@ class Pipeline[T]:
             if self._store is not None:
                 return self._store
 
-            import os
             import pathlib
 
+            from physicsnemo_curator.core.cache import default_cache_dir
             from physicsnemo_curator.core.pipeline_store import (
                 PipelineStore,
                 _config_hash,
@@ -591,10 +592,8 @@ class Pipeline[T]:
 
             if self.db_dir is not None:
                 db_path = pathlib.Path(self.db_dir) / f"{hash_[:16]}.db"
-            elif (env_dir := os.environ.get("PSNC_DB_DIR")) is not None:
-                db_path = pathlib.Path(env_dir) / f"{hash_[:16]}.db"
             else:
-                db_path = pathlib.Path.cwd() / ".pnc" / f"{hash_[:16]}.db"
+                db_path = default_cache_dir() / f"{hash_[:16]}.db"
 
             self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_)
             return self._store
@@ -696,6 +695,20 @@ class Pipeline[T]:
             If ``track_metrics`` is ``False``.
         """
         return self._require_metrics().completed_indices()
+
+    @property
+    def db_path(self) -> pathlib.Path | None:
+        """Return the resolved database path, or ``None`` if metrics are disabled.
+
+        Returns
+        -------
+        pathlib.Path or None
+            Absolute path to the SQLite database file, or ``None`` when
+            ``track_metrics`` is ``False``.
+        """
+        if not self.track_metrics:
+            return None
+        return self._get_store()._db_path
 
     @property
     def failed_indices(self) -> dict[int, str]:

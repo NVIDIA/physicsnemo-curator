@@ -453,18 +453,18 @@ class TestPipelinePickle:
 
 
 # ---------------------------------------------------------------------------
-# PSNC_DB_DIR environment variable tests
+# PSNC_CACHE_DIR environment variable tests
 # ---------------------------------------------------------------------------
 
 
-class TestPsncDbDirEnvVar:
-    """Tests for PSNC_DB_DIR environment variable support."""
+class TestPsncCacheDirEnvVar:
+    """Tests for PSNC_CACHE_DIR environment variable support via default_cache_dir."""
 
-    def test_env_var_sets_db_dir(self, tmp_path, monkeypatch):
-        """PSNC_DB_DIR env var is used when db_dir is None."""
-        env_dir = tmp_path / "env_db"
+    def test_env_var_sets_cache_dir(self, tmp_path, monkeypatch):
+        """PSNC_CACHE_DIR env var is used when db_dir is None."""
+        env_dir = tmp_path / "cache_db"
         env_dir.mkdir()
-        monkeypatch.setenv("PSNC_DB_DIR", str(env_dir))
+        monkeypatch.setenv("PSNC_CACHE_DIR", str(env_dir))
 
         source = IntSource(values=[1, 2])
         sink = CollectSink()
@@ -476,17 +476,17 @@ class TestPsncDbDirEnvVar:
         )
         pipeline[0]
 
-        # DB should be inside env_dir, not CWD/.pnc/
+        # DB should be inside env_dir (via PSNC_CACHE_DIR)
         db_files = list(env_dir.glob("*.db"))
         assert len(db_files) == 1
 
     def test_explicit_db_dir_overrides_env_var(self, tmp_path, monkeypatch):
-        """Explicit db_dir takes precedence over PSNC_DB_DIR."""
-        env_dir = tmp_path / "env_db"
+        """Explicit db_dir takes precedence over PSNC_CACHE_DIR."""
+        env_dir = tmp_path / "cache_db"
         env_dir.mkdir()
         explicit_dir = tmp_path / "explicit_db"
         explicit_dir.mkdir()
-        monkeypatch.setenv("PSNC_DB_DIR", str(env_dir))
+        monkeypatch.setenv("PSNC_CACHE_DIR", str(env_dir))
 
         source = IntSource(values=[1, 2])
         sink = CollectSink()
@@ -502,6 +502,46 @@ class TestPsncDbDirEnvVar:
         # DB should be inside explicit_dir, NOT env_dir
         assert len(list(explicit_dir.glob("*.db"))) == 1
         assert len(list(env_dir.glob("*.db"))) == 0
+
+
+# ---------------------------------------------------------------------------
+# Pipeline.db_path property tests
+# ---------------------------------------------------------------------------
+
+
+class TestDbPathProperty:
+    """Tests for Pipeline.db_path property."""
+
+    def test_db_path_returns_path_when_metrics_enabled(self, tmp_path):
+        """db_path returns a Path with .db suffix when metrics are enabled."""
+        source = IntSource(values=[1, 2])
+        sink = CollectSink()
+        pipeline = Pipeline(
+            source=source,
+            filters=[DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=sink,
+            track_metrics=True,
+            db_dir=tmp_path,
+        )
+        pipeline[0]
+
+        db_path = pipeline.db_path
+        assert db_path is not None
+        assert db_path.suffix == ".db"
+        assert db_path.parent == tmp_path
+
+    def test_db_path_returns_none_when_metrics_disabled(self):
+        """db_path returns None when track_metrics is False."""
+        source = IntSource(values=[1, 2])
+        sink = CollectSink()
+        pipeline = Pipeline(
+            source=source,
+            filters=[DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=sink,
+            track_metrics=False,
+        )
+
+        assert pipeline.db_path is None
 
 
 # ---------------------------------------------------------------------------
