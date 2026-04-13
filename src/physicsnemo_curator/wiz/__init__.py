@@ -16,10 +16,11 @@
 
 """CLI entry point for PhysicsNeMo Curator.
 
-Run ``curator`` to launch the interactive pipeline wizard (default).
-Run ``curator dashboard <db_path>`` to open the metrics dashboard.
+Run ``psnc`` to launch the interactive pipeline wizard (default).
+Run ``psnc cache list`` to manage cached pipeline databases.
+Run ``psnc dashboard <db_path>`` to open the metrics dashboard.
 
-Requires the ``curator[wiz]`` extra (click, questionary, rich).
+Requires the ``psnc[wiz]`` extra (click, questionary, rich).
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from __future__ import annotations
 import click
 from rich.console import Console
 
+from physicsnemo_curator.wiz.cache_cli import cache_group
 from physicsnemo_curator.wiz.interactive import run_interactive
 
 # Shared console for colored output
@@ -47,6 +49,8 @@ def wizard_cmd() -> None:
     """Launch the interactive pipeline wizard."""
     run_interactive()
 
+
+main.add_command(cache_group)
 
 # Lazily register the dashboard subcommand so that importing
 # physicsnemo_curator.dashboard (which requires panel) is deferred
