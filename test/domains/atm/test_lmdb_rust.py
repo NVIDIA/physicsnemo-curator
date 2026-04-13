@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Consistency tests comparing Rust LMDB reader against Python ASE reader.
+"""Consistency tests comparing Rust LMDB reader against pure-Python reader.
 
 The Rust reader (``physicsnemo_curator._lib.lmdb.read_lmdb``) returns raw
-row dictionaries with NumPy arrays for ``__ndarray__`` markers.  The Python
-ASE path (``ase.db.connect`` → ``row.toatoms()``) deserialises the same
-underlying zlib-compressed JSON but exposes it through an ``AtomsRow`` object.
+row dictionaries with NumPy arrays for ``__ndarray__`` markers.  The
+pure-Python reader (``_read_aselmdb_rows``) uses ``lmdb`` + ``zlib`` +
+``json`` to deserialise the same underlying zlib-compressed JSON.
 
 These tests verify that the Rust reader produces byte-identical NumPy arrays
 for the core atomic fields (positions, numbers, cell, pbc) and structurally
@@ -49,16 +49,19 @@ pytestmark = pytest.mark.requires("atm")
 def single_water_db(tmp_path: pathlib.Path) -> pathlib.Path:
     """Create an .aselmdb with a single water molecule."""
     from ase import Atoms
-    from ase.db import connect
+
+    from physicsnemo_curator.domains.atm.sources.aselmdb import (
+        _atoms_to_row_dict,
+        _write_aselmdb,
+    )
 
     db_path = tmp_path / "water.aselmdb"
     atoms = Atoms("H2O", positions=[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [0.0, 0.96, 0.0]])
     atoms.cell = [10.0, 10.0, 10.0]
     atoms.pbc = True
 
-    db = connect(str(db_path), type="aselmdb")
-    db.write(atoms, key_value_pairs={"label": "water"})
-    db.close()
+    row = _atoms_to_row_dict(atoms, row_id=1, key_value_pairs={"label": "water"})
+    _write_aselmdb(db_path, [row])
     return db_path
 
 
@@ -66,20 +69,24 @@ def single_water_db(tmp_path: pathlib.Path) -> pathlib.Path:
 def multi_row_db(tmp_path: pathlib.Path) -> pathlib.Path:
     """Create an .aselmdb with several diverse rows."""
     from ase import Atoms
-    from ase.db import connect
+
+    from physicsnemo_curator.domains.atm.sources.aselmdb import (
+        _atoms_to_row_dict,
+        _write_aselmdb,
+    )
 
     db_path = tmp_path / "multi.aselmdb"
-    db = connect(str(db_path), type="aselmdb")
+    rows: list[dict[str, object]] = []
 
     # Row 1: water molecule (3 atoms, cubic cell, full PBC)
     water = Atoms("H2O", positions=[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [0.0, 0.96, 0.0]])
     water.cell = [10.0, 10.0, 10.0]
     water.pbc = True
-    db.write(water, key_value_pairs={"label": "water"})
+    rows.append(_atoms_to_row_dict(water, row_id=1, key_value_pairs={"label": "water"}))
 
     # Row 2: CO molecule (2 atoms, no PBC)
     co = Atoms("CO", positions=[[0.0, 0.0, 0.0], [1.13, 0.0, 0.0]])
-    db.write(co)
+    rows.append(_atoms_to_row_dict(co, row_id=2))
 
     # Row 3: larger system — FCC aluminium (4 atoms, triclinic cell)
     al = Atoms(
@@ -93,36 +100,21 @@ def multi_row_db(tmp_path: pathlib.Path) -> pathlib.Path:
         cell=[[4.05, 0.0, 0.0], [0.0, 4.05, 0.0], [0.0, 0.0, 4.05]],
         pbc=[True, True, True],
     )
-    db.write(al)
+    rows.append(_atoms_to_row_dict(al, row_id=3))
 
-    db.close()
+    _write_aselmdb(db_path, rows)
     return db_path
 
 
-def _read_with_ase(db_path: pathlib.Path) -> list[dict[str, object]]:
-    """Read all rows from an .aselmdb via the Python ASE reader.
+def _read_with_python(db_path: pathlib.Path) -> list[dict[str, object]]:
+    """Read all rows from an .aselmdb via the pure-Python reader.
 
-    Returns a list of dicts with the raw AtomsRow fields so we can compare
+    Returns a list of dicts with the raw row fields so we can compare
     against the Rust reader output without going through ``AtomicData``.
     """
-    from ase.db import connect
+    from physicsnemo_curator.domains.atm.sources.aselmdb import _read_aselmdb_rows
 
-    db = connect(str(db_path), type="aselmdb", readonly=True)
-    rows: list[dict[str, object]] = []
-    for row in db.select():
-        rows.append(
-            {
-                "id": row.id,
-                "positions": row.positions,
-                "numbers": row.numbers,
-                "cell": row.cell,
-                "pbc": row.pbc,
-                "unique_id": row.unique_id,
-                "user": row.user,
-            }
-        )
-    db.close()
-    return rows
+    return _read_aselmdb_rows(db_path)
 
 
 def _read_with_rust(db_path: pathlib.Path) -> list[dict[str, object]]:
@@ -191,29 +183,27 @@ class TestRustLmdbReader:
 
 
 class TestRustVsPythonConsistency:
-    """Verify that Rust and Python readers produce equivalent outputs.
+    """Verify that Rust and pure-Python readers produce equivalent outputs.
 
-    The Rust reader returns the raw JSON-level dict (``key_value_pairs``
-    remains a nested dict), while the Python ASE reader unpacks key-value
-    pairs to the top level.  These tests compare the core array fields
-    that must be identical for ``AtomicData.from_atoms`` compatibility.
+    Both readers return the raw JSON-level dict.  These tests compare the
+    core array fields that must be identical for ``AtomicData`` compatibility.
     """
 
     def test_row_count_matches(self, multi_row_db: pathlib.Path) -> None:
         """Both readers return the same number of rows."""
-        ase_rows = _read_with_ase(multi_row_db)
+        ase_rows = _read_with_python(multi_row_db)
         rust_rows = _read_with_rust(multi_row_db)
         assert len(rust_rows) == len(ase_rows)
 
     def test_ids_match(self, multi_row_db: pathlib.Path) -> None:
         """Row IDs are identical and in the same order."""
-        ase_rows = _read_with_ase(multi_row_db)
+        ase_rows = _read_with_python(multi_row_db)
         rust_rows = _read_with_rust(multi_row_db)
         assert [r["id"] for r in rust_rows] == [r["id"] for r in ase_rows]
 
     def test_positions_match(self, multi_row_db: pathlib.Path) -> None:
         """Atomic positions are bit-identical."""
-        ase_rows = _read_with_ase(multi_row_db)
+        ase_rows = _read_with_python(multi_row_db)
         rust_rows = _read_with_rust(multi_row_db)
         for ase_row, rust_row in zip(ase_rows, rust_rows, strict=True):
             np.testing.assert_array_equal(
@@ -224,14 +214,14 @@ class TestRustVsPythonConsistency:
 
     def test_positions_shape(self, multi_row_db: pathlib.Path) -> None:
         """Positions shape is (N, 3) for both readers."""
-        ase_rows = _read_with_ase(multi_row_db)
+        ase_rows = _read_with_python(multi_row_db)
         rust_rows = _read_with_rust(multi_row_db)
         for ase_row, rust_row in zip(ase_rows, rust_rows, strict=True):
             assert rust_row["positions"].shape == ase_row["positions"].shape
 
     def test_numbers_match(self, multi_row_db: pathlib.Path) -> None:
         """Atomic numbers are identical."""
-        ase_rows = _read_with_ase(multi_row_db)
+        ase_rows = _read_with_python(multi_row_db)
         rust_rows = _read_with_rust(multi_row_db)
         for ase_row, rust_row in zip(ase_rows, rust_rows, strict=True):
             np.testing.assert_array_equal(
@@ -242,7 +232,7 @@ class TestRustVsPythonConsistency:
 
     def test_cell_match(self, multi_row_db: pathlib.Path) -> None:
         """Unit cell arrays are bit-identical."""
-        ase_rows = _read_with_ase(multi_row_db)
+        ase_rows = _read_with_python(multi_row_db)
         rust_rows = _read_with_rust(multi_row_db)
         for ase_row, rust_row in zip(ase_rows, rust_rows, strict=True):
             np.testing.assert_array_equal(
@@ -253,7 +243,7 @@ class TestRustVsPythonConsistency:
 
     def test_pbc_match(self, multi_row_db: pathlib.Path) -> None:
         """Periodic boundary conditions are identical."""
-        ase_rows = _read_with_ase(multi_row_db)
+        ase_rows = _read_with_python(multi_row_db)
         rust_rows = _read_with_rust(multi_row_db)
         for ase_row, rust_row in zip(ase_rows, rust_rows, strict=True):
             np.testing.assert_array_equal(
@@ -264,14 +254,14 @@ class TestRustVsPythonConsistency:
 
     def test_unique_id_match(self, multi_row_db: pathlib.Path) -> None:
         """Unique IDs (hex strings) are identical."""
-        ase_rows = _read_with_ase(multi_row_db)
+        ase_rows = _read_with_python(multi_row_db)
         rust_rows = _read_with_rust(multi_row_db)
         for ase_row, rust_row in zip(ase_rows, rust_rows, strict=True):
             assert rust_row["unique_id"] == ase_row["unique_id"]
 
     def test_dtypes_match(self, multi_row_db: pathlib.Path) -> None:
         """NumPy dtypes for core fields are consistent."""
-        ase_rows = _read_with_ase(multi_row_db)
+        ase_rows = _read_with_python(multi_row_db)
         rust_rows = _read_with_rust(multi_row_db)
         for ase_row, rust_row in zip(ase_rows, rust_rows, strict=True):
             assert rust_row["positions"].dtype == ase_row["positions"].dtype
@@ -283,25 +273,25 @@ class TestRustVsPythonSingleRow:
 
     def test_water_positions(self, single_water_db: pathlib.Path) -> None:
         """Water positions match between readers."""
-        ase_rows = _read_with_ase(single_water_db)
+        ase_rows = _read_with_python(single_water_db)
         rust_rows = _read_with_rust(single_water_db)
         np.testing.assert_array_equal(rust_rows[0]["positions"], ase_rows[0]["positions"])
 
     def test_water_numbers(self, single_water_db: pathlib.Path) -> None:
         """Water atomic numbers match between readers."""
-        ase_rows = _read_with_ase(single_water_db)
+        ase_rows = _read_with_python(single_water_db)
         rust_rows = _read_with_rust(single_water_db)
         np.testing.assert_array_equal(rust_rows[0]["numbers"], ase_rows[0]["numbers"])
 
     def test_water_cell(self, single_water_db: pathlib.Path) -> None:
         """Water unit cell matches between readers."""
-        ase_rows = _read_with_ase(single_water_db)
+        ase_rows = _read_with_python(single_water_db)
         rust_rows = _read_with_rust(single_water_db)
         np.testing.assert_array_equal(rust_rows[0]["cell"], np.array(ase_rows[0]["cell"]))
 
     def test_water_pbc(self, single_water_db: pathlib.Path) -> None:
         """Water periodic boundary conditions match between readers."""
-        ase_rows = _read_with_ase(single_water_db)
+        ase_rows = _read_with_python(single_water_db)
         rust_rows = _read_with_rust(single_water_db)
         np.testing.assert_array_equal(rust_rows[0]["pbc"], ase_rows[0]["pbc"])
 
@@ -340,20 +330,20 @@ class TestRustVsPythonE2E:
 
     def test_first_file_row_count(self) -> None:
         """Both readers report the same number of rows for the first val/ file."""
-        ase_rows = _read_with_ase(self.db_path)
+        ase_rows = _read_with_python(self.db_path)
         rust_rows = _read_with_rust(self.db_path)
         assert len(rust_rows) == len(ase_rows)
 
     def test_first_file_positions(self) -> None:
         """Positions are bit-identical for every row in the first val/ file."""
-        ase_rows = _read_with_ase(self.db_path)
+        ase_rows = _read_with_python(self.db_path)
         rust_rows = _read_with_rust(self.db_path)
         for ase_row, rust_row in zip(ase_rows, rust_rows, strict=True):
             np.testing.assert_array_equal(rust_row["positions"], ase_row["positions"])
 
     def test_first_file_numbers(self) -> None:
         """Atomic numbers are identical for every row in the first val/ file."""
-        ase_rows = _read_with_ase(self.db_path)
+        ase_rows = _read_with_python(self.db_path)
         rust_rows = _read_with_rust(self.db_path)
         for ase_row, rust_row in zip(ase_rows, rust_rows, strict=True):
             np.testing.assert_array_equal(rust_row["numbers"], ase_row["numbers"])

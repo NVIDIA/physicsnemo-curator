@@ -41,7 +41,7 @@ def _write_mock_aselmdb_files(root: pathlib.Path, n_files: int = 3, n_rows: int 
     """Create mock .aselmdb files for unit testing.
 
     These are empty files — the actual database reads are mocked at the
-    ``ase.db.connect`` level.
+    ``_read_aselmdb_rows`` level.
     """
     for i in range(n_files):
         (root / f"data{i:04d}.aselmdb").write_bytes(b"mock")
@@ -102,7 +102,7 @@ def _create_real_aselmdb(
     *,
     with_calc: bool = False,
 ) -> None:
-    """Create real .aselmdb files with ASE for backend integration tests.
+    """Create real .aselmdb files for backend integration tests.
 
     Parameters
     ----------
@@ -116,13 +116,17 @@ def _create_real_aselmdb(
         If ``True``, attach energy and forces via SinglePointCalculator.
     """
     from ase import Atoms
-    from ase.db import connect
+
+    from physicsnemo_curator.domains.atm.sources.aselmdb import (
+        _atoms_to_row_dict,
+        _write_aselmdb,
+    )
 
     rng = np.random.default_rng(42)
     db_dir.mkdir(parents=True, exist_ok=True)
     for f_idx in range(n_files):
         db_path = db_dir / f"data{f_idx:04d}.aselmdb"
-        db = connect(str(db_path), type="aselmdb")
+        rows: list[dict[str, object]] = []
         for r_idx in range(n_rows):
             n_atoms = 3 + r_idx
             positions = rng.random((n_atoms, 3)) * 10.0
@@ -139,8 +143,9 @@ def _create_real_aselmdb(
                 forces = rng.random((n_atoms, 3)) - 0.5
                 calc = SinglePointCalculator(atoms, energy=-100.0 * r_idx, forces=forces)
                 atoms.calc = calc
-            db.write(atoms, key_value_pairs={"file_idx": f_idx, "row_idx": r_idx})
-        db.close()
+            row = _atoms_to_row_dict(atoms, row_id=r_idx + 1, key_value_pairs={"file_idx": f_idx, "row_idx": r_idx})
+            rows.append(row)
+        _write_aselmdb(db_path, rows)
 
 
 # ---------------------------------------------------------------------------
@@ -225,13 +230,29 @@ class TestASELMDBSourceLocal:
         assert len(source) == 2
         assert source.metadata == {}
 
-    @patch("ase.db.connect")
-    def test_getitem_yields_atomic_data(self, mock_connect: MagicMock) -> None:
+    @patch("physicsnemo_curator.domains.atm.sources.aselmdb._read_aselmdb_rows")
+    def test_getitem_yields_atomic_data(self, mock_read: MagicMock) -> None:
         from nvalchemi.data import AtomicData
 
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
-        mock_connect.return_value = _make_mock_db(n_rows=3)
+        # Return 3 minimal row dicts that _atomic_data_from_row can consume.
+        mock_read.return_value = [
+            {
+                "id": i + 1,
+                "unique_id": f"uid{i}",
+                "ctime": 0.0,
+                "mtime": 0.0,
+                "user": "",
+                "data": {},
+                "key_value_pairs": {},
+                "numbers": np.array([6, 8, 1], dtype=np.int64),
+                "positions": np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64),
+                "pbc": np.array([False, False, False]),
+                "cell": np.zeros((3, 3), dtype=np.float64),
+            }
+            for i in range(3)
+        ]
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         items = list(source[0])
@@ -239,11 +260,26 @@ class TestASELMDBSourceLocal:
         for item in items:
             assert isinstance(item, AtomicData)
 
-    @patch("ase.db.connect")
-    def test_negative_index(self, mock_connect: MagicMock) -> None:
+    @patch("physicsnemo_curator.domains.atm.sources.aselmdb._read_aselmdb_rows")
+    def test_negative_index(self, mock_read: MagicMock) -> None:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
-        mock_connect.return_value = _make_mock_db(n_rows=2)
+        mock_read.return_value = [
+            {
+                "id": i + 1,
+                "unique_id": f"uid{i}",
+                "ctime": 0.0,
+                "mtime": 0.0,
+                "user": "",
+                "data": {},
+                "key_value_pairs": {},
+                "numbers": np.array([6, 8, 1], dtype=np.int64),
+                "positions": np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64),
+                "pbc": np.array([False, False, False]),
+                "cell": np.zeros((3, 3), dtype=np.float64),
+            }
+            for i in range(2)
+        ]
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
         # source[-1] should be same as source[2] (last of 3 files)

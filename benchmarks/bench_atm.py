@@ -140,10 +140,10 @@ class TimeASELMDBSourceBackend:
 
 
 # ---------------------------------------------------------------------------
-# Component: Raw LMDB reader comparison (Rust vs ASE)
+# Component: Raw LMDB reader comparison (Rust vs Python)
 # ---------------------------------------------------------------------------
 class TimeLmdbReaderComparison:
-    """Compare raw Rust read_lmdb vs ASE db.select for single files."""
+    """Compare raw Rust read_lmdb vs pure-Python reader for single files."""
 
     params = [50, 200, 500]
     param_names = ["n_rows"]
@@ -154,13 +154,13 @@ class TimeLmdbReaderComparison:
         self.db_file = str(Path(self._data_dir) / "data0000.aselmdb")
         create_synthetic_aselmdb(Path(self.db_file), n_rows, with_calc=True)
 
-    def time_ase(self, n_rows):
-        """Read via ASE db.select + toatoms."""
-        from ase.db import connect
+    def time_python(self, n_rows):
+        """Read via pure-Python LMDB reader."""
+        import pathlib
 
-        db = connect(self.db_file, type="aselmdb")
-        for row in db.select():
-            row.toatoms()
+        from physicsnemo_curator.domains.atm.sources.aselmdb import _read_aselmdb_rows
+
+        _read_aselmdb_rows(pathlib.Path(self.db_file))
 
     def time_rust(self, n_rows):
         """Read via Rust LMDB reader."""
@@ -201,14 +201,14 @@ class TimeLmdbReaderParallel:
         for f in self.db_files:
             read_lmdb(f)
 
-    def time_ase_sequential(self, n_files):
-        """Read all files with ASE sequentially."""
-        from ase.db import connect
+    def time_python_sequential(self, n_files):
+        """Read all files with pure-Python reader sequentially."""
+        import pathlib
+
+        from physicsnemo_curator.domains.atm.sources.aselmdb import _read_aselmdb_rows
 
         for f in self.db_files:
-            db = connect(f, type="aselmdb")
-            for row in db.select():
-                row.toatoms()
+            _read_aselmdb_rows(pathlib.Path(f))
 
     def teardown(self, n_files):
         """Remove temporary directory."""

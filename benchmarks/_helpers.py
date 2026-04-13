@@ -145,10 +145,14 @@ def create_synthetic_aselmdb(
         Random seed for reproducibility.
     """
     from ase import Atoms
-    from ase.db import connect
 
-    db = connect(str(db_path), type="aselmdb")
+    from physicsnemo_curator.domains.atm.sources.aselmdb import (
+        _atoms_to_row_dict,
+        _write_aselmdb,
+    )
+
     rng = np.random.default_rng(seed)
+    rows: list[dict[str, object]] = []
     for i in range(n_rows):
         positions = rng.random((3, 3)) * 10.0
         atoms = Atoms("H2O", positions=positions, cell=[10.0, 10.0, 10.0], pbc=True)
@@ -158,8 +162,8 @@ def create_synthetic_aselmdb(
             forces = rng.random((3, 3)) - 0.5
             calc = SinglePointCalculator(atoms, energy=-100.0 * i, forces=forces)
             atoms.calc = calc
-        db.write(atoms, key_value_pairs={"row_index": i})
-    db.close()
+        rows.append(_atoms_to_row_dict(atoms, row_id=i + 1, key_value_pairs={"row_index": i}))
+    _write_aselmdb(db_path, rows)
 
 
 def make_connectivity(

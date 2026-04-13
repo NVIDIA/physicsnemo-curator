@@ -33,9 +33,10 @@ file, converting each ASE :class:`~ase.Atoms` entry to an
 
 Two read backends are supported:
 
-- **python** (default): Uses the ASE database API to read rows and
-  :meth:`AtomicData.from_atoms` for conversion.  Guaranteed compatibility
-  with all ASE row features (constraints, calculator results, etc.).
+- **python** (default): Uses a pure-Python reader (``lmdb`` + ``zlib`` +
+  ``json``) to open the database, decompress entries, and convert
+  ``__ndarray__`` markers to NumPy arrays.  Then constructs
+  :class:`~nvalchemi.data.AtomicData` directly from the raw row dicts.
 - **rust**: Uses a native Rust reader
   (:func:`physicsnemo_curator._lib.lmdb.read_lmdb`) for I/O, zlib
   decompression, and JSON parsing, then constructs
@@ -55,16 +56,6 @@ References
   https://arxiv.org/abs/2512.23117
 - fairchem toolkit: https://github.com/facebookresearch/fairchem
 
-Examples
---------
->>> source = ASELMDBSource(data_dir="./val/")  # doctest: +SKIP
->>> len(source)  # number of .aselmdb files  # doctest: +SKIP
-80
->>> atomic_data = next(source[0])  # doctest: +SKIP
-
-Use the Rust backend for faster reads:
-
->>> source = ASELMDBSource(data_dir="./val/", backend="rust")  # doctest: +SKIP
 """
 
 from __future__ import annotations
@@ -84,6 +75,231 @@ if TYPE_CHECKING:
     from nvalchemi.data import AtomicData
 
 logger = logging.getLogger(__name__)
+
+# Reserved LMDB keys that are not data rows (same set as the Rust reader).
+_RESERVED_LMDB_KEYS = frozenset({"nextid", "deleted_ids", "metadata"})
+
+# NumPy dtype lookup for __ndarray__ markers.
+_NDARRAY_DTYPES: dict[str, np.dtype[np.generic]] = {
+    "float64": np.dtype(np.float64),
+    "float32": np.dtype(np.float32),
+    "int64": np.dtype(np.int64),
+    "int32": np.dtype(np.int32),
+    "uint8": np.dtype(np.uint8),
+    "bool": np.dtype(np.bool_),
+}
+
+
+def _decode_ndarray_markers(obj: object) -> object:
+    """Recursively walk a JSON-decoded object and convert ``__ndarray__`` markers.
+
+    The ASE LMDB format encodes NumPy arrays as
+    ``{"__ndarray__": [shape, dtype_str, flat_data]}``.  This function
+    converts those markers into real :class:`numpy.ndarray` objects
+    in-place (for dicts and lists).
+
+    Parameters
+    ----------
+    obj : object
+        A JSON-decoded Python object (dict, list, scalar).
+
+    Returns
+    -------
+    object
+        The same structure with ``__ndarray__`` dicts replaced by
+        ``numpy.ndarray`` instances.
+    """
+    if isinstance(obj, dict):
+        if "__ndarray__" in obj:
+            marker: object = obj["__ndarray__"]  # ty: ignore[invalid-argument-type]
+            if not isinstance(marker, list) or len(marker) != 3:
+                return obj  # pragma: no cover — defensive
+            shape: list[int] = marker[0]  # ty: ignore[invalid-assignment]
+            dtype_str: str = marker[1]  # ty: ignore[invalid-assignment]
+            flat: list[object] = marker[2]  # ty: ignore[invalid-assignment]
+            dt = _NDARRAY_DTYPES.get(dtype_str, np.dtype(dtype_str))
+            arr = np.array(flat, dtype=dt)
+            if len(shape) > 1:
+                arr = arr.reshape(shape)
+            return arr
+        return {k: _decode_ndarray_markers(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_decode_ndarray_markers(v) for v in obj]
+    return obj
+
+
+def _read_aselmdb_rows(db_path: pathlib.Path) -> list[dict[str, object]]:
+    """Read all data rows from a ``.aselmdb`` file using pure Python.
+
+    Opens the LMDB environment directly, iterates over all entries,
+    skips reserved keys (``nextid``, ``deleted_ids``, ``metadata``),
+    decompresses each zlib-compressed JSON value, parses it, and
+    converts ``__ndarray__`` markers to NumPy arrays.
+
+    Parameters
+    ----------
+    db_path : pathlib.Path
+        Path to the ``.aselmdb`` file.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Row dicts sorted by ascending integer ID, with ``__ndarray__``
+        markers replaced by actual NumPy arrays and a synthetic ``"id"``
+        key added to each dict.
+    """
+    import json
+    import zlib
+
+    import lmdb as lmdb_lib
+
+    env = lmdb_lib.open(str(db_path), readonly=True, subdir=False, lock=False)
+    rows: list[tuple[int, dict[str, object]]] = []
+    try:
+        with env.begin(write=False) as txn:
+            cursor = txn.cursor()
+            for key_bytes, val_bytes in cursor:
+                key_str = bytes(key_bytes).decode("utf-8")
+                if key_str in _RESERVED_LMDB_KEYS:
+                    continue
+                try:
+                    row_id = int(key_str)
+                except ValueError:
+                    continue
+                json_bytes = zlib.decompress(bytes(val_bytes))
+                raw: dict[str, object] = json.loads(json_bytes)
+                decoded = _decode_ndarray_markers(raw)
+                if not isinstance(decoded, dict):
+                    continue  # pragma: no cover — defensive
+                row_dict: dict[str, object] = {str(k): v for k, v in decoded.items()}
+                row_dict["id"] = row_id
+                rows.append((row_id, row_dict))
+    finally:
+        env.close()
+
+    rows.sort(key=lambda pair: pair[0])
+    return [row for _, row in rows]
+
+
+def _encode_ndarray(arr: np.ndarray) -> dict[str, list[object]]:
+    """Encode a NumPy array as an ASE ``__ndarray__`` marker dict.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Array to encode.
+
+    Returns
+    -------
+    dict
+        ``{"__ndarray__": [shape, dtype_str, flat_data]}``
+    """
+    return {"__ndarray__": [list(arr.shape), str(arr.dtype), arr.ravel().tolist()]}
+
+
+def _atoms_to_row_dict(
+    atoms: object,
+    row_id: int,
+    *,
+    key_value_pairs: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Convert an ASE :class:`~ase.Atoms` to an LMDB row dict.
+
+    This encodes atomic fields (positions, numbers, cell, pbc, etc.)
+    as ``__ndarray__`` markers compatible with the ASE LMDB format.
+
+    Parameters
+    ----------
+    atoms : ase.Atoms
+        Atoms object to encode.
+    row_id : int
+        Integer row ID (1-based).
+    key_value_pairs : dict or None
+        Optional key-value pairs to store alongside the row.
+
+    Returns
+    -------
+    dict[str, object]
+        JSON-serialisable row dict.
+    """
+    import uuid
+
+    _numbers = np.asarray(atoms.numbers, dtype=np.int64)  # ty: ignore[unresolved-attribute]
+    _positions = np.asarray(atoms.positions, dtype=np.float64)  # ty: ignore[unresolved-attribute]
+    _cell = np.asarray(atoms.cell, dtype=np.float64).reshape(3, 3)  # ty: ignore[unresolved-attribute]
+    _pbc = np.asarray(atoms.pbc, dtype=np.bool_)  # ty: ignore[unresolved-attribute]
+
+    row: dict[str, object] = {
+        "id": row_id,
+        "unique_id": uuid.uuid4().hex,
+        "ctime": 0.0,
+        "mtime": 0.0,
+        "user": "",
+        "numbers": _encode_ndarray(_numbers),
+        "positions": _encode_ndarray(_positions),
+        "cell": _encode_ndarray(_cell),
+        "pbc": _encode_ndarray(_pbc),
+    }
+
+    # Encode calculator results if present.
+    calc = getattr(atoms, "calc", None)
+    if calc is not None:
+        results = getattr(calc, "results", {})
+        if "energy" in results:
+            row["energy"] = float(results["energy"])
+        if "forces" in results:
+            row["forces"] = _encode_ndarray(np.asarray(results["forces"], dtype=np.float64))
+        if "stress" in results:
+            row["stress"] = _encode_ndarray(np.asarray(results["stress"], dtype=np.float64))
+
+    if key_value_pairs:
+        row["key_value_pairs"] = key_value_pairs
+
+    return row
+
+
+def _write_aselmdb(
+    db_path: pathlib.Path,
+    rows: list[dict[str, object]],
+) -> None:
+    """Write rows to a ``.aselmdb`` file using pure Python.
+
+    Creates a new LMDB environment and writes the given row dicts as
+    zlib-compressed JSON, following the ASE LMDB format convention.
+
+    Parameters
+    ----------
+    db_path : pathlib.Path
+        Output file path.
+    rows : list[dict[str, object]]
+        Row dicts with ``__ndarray__`` markers (as produced by
+        :func:`_atoms_to_row_dict` or similar).  Each must have an
+        ``"id"`` key with an integer value.
+    """
+    import json
+    import zlib
+
+    import lmdb as lmdb_lib
+
+    env = lmdb_lib.open(str(db_path), subdir=False, map_size=50 * 1024 * 1024)
+    try:
+        with env.begin(write=True) as txn:
+            # Write reserved keys.
+            next_id = max((r["id"] for r in rows), default=0) + 1  # type: ignore[type-var]
+            txn.put(b"nextid", zlib.compress(json.dumps(next_id).encode()))
+            txn.put(b"deleted_ids", zlib.compress(b"[]"))
+
+            for row in rows:
+                row_id = row["id"]
+                # Remove "id" from the stored dict — ASE convention.
+                row_copy = {k: v for k, v in row.items() if k != "id"}
+                txn.put(
+                    str(row_id).encode(),
+                    zlib.compress(json.dumps(row_copy).encode()),
+                )
+    finally:
+        env.close()
+
 
 # Keys that the Rust reader returns but are not AtomicData fields.
 _METADATA_KEYS = frozenset(
@@ -507,7 +723,12 @@ class ASELMDBSource(Source["AtomicData"]):
     # -- Backend implementations ----------------------------------------------
 
     def _read_python(self, db_path: pathlib.Path) -> Generator[AtomicData]:
-        """Read rows using the Python ASE database API.
+        """Read rows using a pure-Python LMDB reader.
+
+        Opens the ``.aselmdb`` file directly with the ``lmdb`` package,
+        decompresses each zlib-compressed JSON value, converts
+        ``__ndarray__`` markers to NumPy arrays, and builds
+        :class:`~nvalchemi.data.AtomicData` objects from the raw dicts.
 
         Parameters
         ----------
@@ -519,17 +740,8 @@ class ASELMDBSource(Source["AtomicData"]):
         AtomicData
             One atomic data object per database row.
         """
-        import ase.db
-        from nvalchemi.data import AtomicData
-
-        db = ase.db.connect(str(db_path), type="aselmdb", readonly=True)
-        try:
-            for row in db.select():
-                atoms = row.toatoms()
-                yield AtomicData.from_atoms(atoms)
-        finally:
-            if hasattr(db, "close"):
-                db.close()
+        for row in _read_aselmdb_rows(db_path):
+            yield _atomic_data_from_row(row)
 
     def _read_rust(self, db_path: pathlib.Path) -> Generator[AtomicData]:
         """Read rows using the native Rust LMDB reader.
