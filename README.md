@@ -176,7 +176,6 @@ PhysicsNeMo Curator is part of NVIDIA's open-source Physics-ML ecosystem:
 |---|---|
 | [PhysicsNeMo](https://github.com/NVIDIA/physicsnemo) | Core framework for building, training, and fine-tuning physics-ML models |
 | [PhysicsNeMo CFD](https://github.com/NVIDIA/physicsnemo-cfd) | Pretrained AI models for computational fluid dynamics |
-| [PhysicsNeMo Curator](https://github.com/NVIDIA/physicsnemo-curator) | Accelerated ETL toolkit for AI-ready scientific datasets |
 | [Earth-2 Studio](https://github.com/NVIDIA/earth2studio) | Pretrained AI models for weather and climate |
 | [ALCHEMI Toolkit](https://github.com/NVIDIA/nvalchemi-toolkit) | GPU-first framework for AI-driven atomic simulations |
 | [ALCHEMI Toolkit Ops](https://github.com/NVIDIA/nvalchemi-toolkit-ops) | GPU-optimized primitives for neighbor lists, dispersion, and electrostatics |
