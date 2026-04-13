@@ -20,7 +20,7 @@ You also need the domain submodule installed (e.g. `pip install physicsnemo-cura
 ## Usage
 
 ```bash
-curator
+psnc
 ```
 
 The wizard displays a styled welcome banner and walks through the pipeline
@@ -112,8 +112,69 @@ Step 5/5: Execute Pipeline
 ╭─────────────── ✓ Complete ───────────────╮
 │ Source items processed:        42        │
 │ Outputs written:               42        │
+│ Database path:     ~/.cache/psnc/a1b2.db │
 ╰──────────────────────────────────────────╯
 ```
+
+## Cache Management
+
+Pipeline databases are stored in `~/.cache/psnc/` by default (see
+{doc}`checkpointing` for how to change the location).  The `psnc cache`
+command group provides tools for inspecting and managing these databases.
+
+### Show cache directory
+
+```bash
+psnc cache path
+# ~/.cache/psnc
+```
+
+### List databases
+
+```bash
+psnc cache list
+```
+
+Displays a table of all databases with their hash prefix, creation time,
+pipeline components, progress, and file size.
+
+### Inspect a database
+
+```bash
+psnc cache info a1b2
+```
+
+Shows detailed metadata for a single database identified by hash prefix.
+
+### Remove databases
+
+```bash
+# Remove by hash prefix
+psnc cache rm a1b2
+
+# Remove databases older than 7 days
+psnc cache rm --older-than 7d
+
+# Remove all databases (with confirmation)
+psnc cache rm --all
+
+# Skip confirmation prompt
+psnc cache rm --all --yes
+```
+
+### Duration format
+
+The `--older-than` flag accepts human-readable durations:
+
+| Suffix | Meaning |
+|--------|---------|
+| `s`    | seconds |
+| `m`    | minutes |
+| `h`    | hours   |
+| `d`    | days    |
+| `w`    | weeks   |
+
+Examples: `30m`, `12h`, `7d`, `2w`.
 
 ## Color Scheme
 

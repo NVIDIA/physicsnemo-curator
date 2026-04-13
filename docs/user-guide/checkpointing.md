@@ -47,9 +47,16 @@ When `track_metrics=True` (the default), each `pipeline[index]` call:
 
 ## Controlling the Database Location
 
-By default, the database is stored at `.pnc/{config_hash[:16]}.db`
-relative to the current working directory.  Each unique pipeline
-configuration gets its own database file (based on its SHA-256 hash).
+By default, the database is stored at `~/.cache/psnc/{config_hash[:16]}.db`.
+Each unique pipeline configuration gets its own database file (based on its
+SHA-256 hash).  The cache directory follows XDG conventions and can be
+controlled with environment variables:
+
+| Priority | Method | Example |
+|----------|--------|---------|
+| 1 (highest) | `db_dir` field on Pipeline | `Pipeline(..., db_dir="/output/checkpoints")` |
+| 2 | `PSNC_CACHE_DIR` environment variable | `export PSNC_CACHE_DIR=/data/pipeline-cache` |
+| 3 (lowest) | XDG default | `~/.cache/psnc/` (or `$XDG_CACHE_HOME/psnc/`) |
 
 Override the directory with `db_dir`:
 

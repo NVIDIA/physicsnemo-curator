@@ -75,7 +75,7 @@ Defined in `pyproject.toml` under `[dependency-groups]`:
 
 Optional extras in `[project.optional-dependencies]`:
 
-- **cli**: click, questionary (for interactive CLI)
+- **cli**: click, questionary (for interactive CLI — entry point: `psnc`)
 - **loky**: joblib (for `run_pipeline` loky backend)
 - **dask**: dask (for `run_pipeline` dask backend)
 - **prefect**: prefect (for `run_pipeline` prefect backend)

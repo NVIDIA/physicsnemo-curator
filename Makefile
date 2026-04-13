@@ -190,4 +190,5 @@ clean:
 	rm -rf build dist *.egg-info .coverage htmlcov .pytest_cache .ruff_cache .ty_cache
 	rm -rf src/rust/target
 	rm -rf docs/_build
+	rm -rf .pnc
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

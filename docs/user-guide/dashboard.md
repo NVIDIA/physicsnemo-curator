@@ -29,7 +29,14 @@ This installs the required dependencies:
 ### From the command line
 
 ```bash
-curator dashboard pipeline.db
+psnc dashboard pipeline.db
+```
+
+You can also pass a hash prefix instead of a full path.  The dashboard
+will look up the matching database in the cache directory:
+
+```bash
+psnc dashboard a1b2
 ```
 
 Options:
