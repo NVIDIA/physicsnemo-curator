@@ -32,8 +32,16 @@ This installs the required dependencies:
 psnc dashboard pipeline.db
 ```
 
-You can also pass a hash prefix instead of a full path.  The dashboard
-will look up the matching database in the cache directory:
+You can also pass a serialized pipeline file (`.yaml` or `.json`) — the
+dashboard computes the config hash and locates the matching database
+automatically:
+
+```bash
+psnc dashboard my_pipeline.yaml
+```
+
+Or pass a hash prefix instead of a full path.  The dashboard will look
+up the matching database in the cache directory:
 
 ```bash
 psnc dashboard a1b2
