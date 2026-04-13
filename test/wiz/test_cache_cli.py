@@ -22,9 +22,13 @@ import json
 import sqlite3
 from datetime import UTC, datetime
 
-from click.testing import CliRunner
+import pytest
 
-from physicsnemo_curator.wiz import main
+click = pytest.importorskip("click", reason="click not installed (install wiz extra)")
+
+from click.testing import CliRunner  # noqa: E402
+
+from physicsnemo_curator.wiz import main  # noqa: E402
 
 
 def _create_fake_db(db_path, source_name="TestSource", sink_name="TestSink"):
