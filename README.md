@@ -80,10 +80,10 @@ uv run pre-commit install
 ### Quick Start
 
 ```python
-from physicsnemo_curator.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.mesh.filters.stats import StatsFilter
-from physicsnemo_curator.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.filters.stats import StatsFilter
+from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.run import run_pipeline
 
 # Build a pipeline: Source → Filters → Sink
@@ -125,24 +125,32 @@ pip install physicsnemo-curator[wiz]
 pip install physicsnemo-curator[dashboard]
 ```
 
-## Wizard
+## CLI
 
-PhysicsNeMo Curator includes an interactive pipeline wizard that walks you
-through selecting a source, filters, and sink without writing any code.
+PhysicsNeMo Curator includes the `psnc` command-line tool with an
+interactive pipeline wizard.
 
 ```bash
 pip install 'physicsnemo-curator[wiz]'
-curator
+psnc
 ```
 
-The `curator` command launches a guided workflow:
+### Wizard
 
-1. **Select submodule** — mesh or DataArray
-2. **Configure data store** — local path or remote URL
-3. **Select source** — dataset-specific reader
-4. **Select filters** — toggle any combination of filters
-5. **Select sink** — output format and destination
-6. **Execute** — runs the pipeline with a progress bar
+The `psnc` command (or `psnc wizard`) launches a guided workflow:
+
+1. **Select submodule** — mesh, DataArray, or atomic
+2. **Select source** — dataset-specific reader
+3. **Select filters** — toggle any combination of filters
+4. **Select sink** — output format and destination
+5. **Execute** — runs the pipeline with a progress bar
+
+### Dashboard
+
+```bash
+pip install 'physicsnemo-curator[dashboard]'
+psnc dashboard pipeline.db
+```
 
 ## Contributing to PhysicsNeMo Curator
 
