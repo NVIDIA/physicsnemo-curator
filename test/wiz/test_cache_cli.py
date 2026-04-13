@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 import pytest
 
 click = pytest.importorskip("click", reason="click not installed (install wiz extra)")
+pytest.importorskip("rich", reason="rich not installed (install wiz extra)")
 
 from click.testing import CliRunner  # noqa: E402
 
