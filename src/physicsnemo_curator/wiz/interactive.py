@@ -474,6 +474,8 @@ def run_interactive() -> None:  # noqa: C901, PLR0912, PLR0915
 
     summary_table.add_row("Source items processed:", f"[cyan]{n}[/cyan]")
     summary_table.add_row("Outputs written:", f"[green]{total_outputs}[/green]")
+    if pipeline.track_metrics and pipeline.db_path is not None:
+        summary_table.add_row("Pipeline DB:", f"[dim]{pipeline.db_path}[/dim]")
 
     console.print(
         Panel(
