@@ -202,7 +202,7 @@ mod tests {
     /// Create a minimal `.aselmdb` file with the given rows for testing.
     ///
     /// Writes `nextid`, `deleted_ids`, and the data rows as
-    /// zlib-compressed JSON, mimicking the ase-db-backends format.
+    /// zlib-compressed JSON, mimicking the ASE LMDB format.
     fn create_test_aselmdb(dir: &Path, name: &str, rows: &[(i64, &str)]) -> std::path::PathBuf {
         let db_path = dir.join(name);
 

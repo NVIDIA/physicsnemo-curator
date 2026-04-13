@@ -17,17 +17,14 @@ representing atomic and molecular systems as graphs.
 uv sync --group atm
 ```
 
-Required packages: ``nvalchemi``, ``ase>=3.26.0``, ``ase-db-backends>=0.10.0``,
-``torch``.
+Required packages: ``nvalchemi``, ``ase>=3.26.0``, ``torch``.
 
 ## Components
 
 ### ASELMDBSource
 
 {class}`~physicsnemo_curator.domains.atm.sources.aselmdb.ASELMDBSource` reads
-`.aselmdb` database files produced by
-[ASE database backends](https://github.com/NVIDIA/ase-db-backends) and
-yields {class}`~nvalchemi.data.AtomicData` instances.
+`.aselmdb` database files and yields {class}`~nvalchemi.data.AtomicData` instances.
 
 Each pipeline index corresponds to one `.aselmdb` file.  The generator
 iterates over every row in that database, converting each
@@ -258,5 +255,4 @@ The `atm` domain depends on:
 |---------|---------|
 | [nvalchemi](https://nvidia.github.io/nvalchemi-toolkit/) | `AtomicData` model and Zarr I/O backends |
 | [ase](https://wiki.fysik.dtu.dk/ase/) | Atomic Simulation Environment (Atoms objects) |
-| [ase-db-backends](https://github.com/NVIDIA/ase-db-backends) | LMDB storage backend for ASE databases |
 | [torch](https://pytorch.org/) | Tensor operations (required by nvalchemi) |

@@ -42,7 +42,6 @@ References
 - OMol25 dataset: https://huggingface.co/facebook/OMol25
 - OMol25 paper: Levine et al., arXiv:2505.08762 (2025)
 - nvalchemi toolkit: https://nvidia.github.io/nvalchemi-toolkit/
-- ASE database backends: https://github.com/NVIDIA/ase-db-backends
 """
 
 # %%

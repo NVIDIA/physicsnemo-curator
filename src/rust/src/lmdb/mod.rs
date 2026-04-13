@@ -4,8 +4,7 @@
 
 //! ASE LMDB reader module.
 //!
-//! Reads `.aselmdb` files produced by the
-//! [ase-db-backends](https://github.com/NVIDIA/ase-db-backends) package.
+//! Reads `.aselmdb` files in the ASE LMDB format.
 //! Each value is zlib-compressed JSON using ASE's custom encoding for
 //! NumPy arrays (`__ndarray__` markers).
 //!

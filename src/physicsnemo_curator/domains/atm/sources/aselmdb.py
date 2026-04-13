@@ -16,8 +16,7 @@
 
 """ASE LMDB data source for atomic/molecular pipelines.
 
-Reads ``.aselmdb`` files produced by `ASE database backends
-<https://github.com/NVIDIA/ase-db-backends>`_ and yields
+Reads ``.aselmdb`` files and yields
 :class:`~nvalchemi.data.AtomicData` objects for use in curator pipelines.
 
 This source is designed for datasets stored in the ASE LMDB format, such
@@ -55,7 +54,6 @@ References
   Dataset and Evaluations", arXiv:2512.23117 (2025).
   https://arxiv.org/abs/2512.23117
 - fairchem toolkit: https://github.com/facebookresearch/fairchem
-- ASE database backends: https://github.com/NVIDIA/ase-db-backends
 
 Examples
 --------
@@ -337,8 +335,7 @@ class ASELMDBSource(Source["AtomicData"]):
     :class:`~nvalchemi.data.AtomicData` per row.
 
     This source is compatible with any dataset stored in the ``.aselmdb``
-    format produced by `ase-db-backends
-    <https://github.com/NVIDIA/ase-db-backends>`_, including local extracts
+    format, including local extracts
     of the `OMol25 <https://huggingface.co/facebook/OMol25>`_ and
     `OPoly26 <https://arxiv.org/abs/2512.23117>`_ datasets.
 

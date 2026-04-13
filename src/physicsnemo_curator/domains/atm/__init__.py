@@ -18,7 +18,7 @@
 
 Provides pipeline components for reading, transforming, and writing
 :class:`~nvalchemi.data.AtomicData` objects.  Requires the ``atm``
-dependency group (nvalchemi, ase, ase-db-backends, torch).
+dependency group (nvalchemi, ase, torch).
 
 This module registers its components with the global
 :data:`~physicsnemo_curator.core.registry.registry` at import time.
