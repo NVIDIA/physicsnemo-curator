@@ -3744,6 +3744,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fsspec" },
+    { name = "tqdm" },
 ]
 
 [package.optional-dependencies]
@@ -3868,6 +3869,7 @@ requires-dist = [
     { name = "tensordict", marker = "extra == 'mesh'" },
     { name = "torch", marker = "extra == 'atm'" },
     { name = "torch", marker = "extra == 'mesh'" },
+    { name = "tqdm", specifier = ">=4.0" },
     { name = "tqdm", marker = "extra == 'mesh'" },
     { name = "warp-lang", marker = "extra == 'mesh'" },
     { name = "xarray", marker = "extra == 'da'", specifier = ">=2024.1" },

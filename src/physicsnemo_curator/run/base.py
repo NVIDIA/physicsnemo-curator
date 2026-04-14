@@ -247,6 +247,12 @@ def make_progress_bar(total: int, *, enabled: bool, desc: str = "run_pipeline") 
 
         return tqdm(total=total, desc=desc, unit="item")
     except ImportError:
+        import warnings
+
+        warnings.warn(
+            "progress=True was requested but tqdm is not installed. Install tqdm for progress bars: pip install tqdm",
+            stacklevel=2,
+        )
         return None
 
 
@@ -295,6 +301,13 @@ class WorkerProgressDisplay:
 
             self._tqdm_cls = tqdm
         except ImportError:
+            import warnings
+
+            warnings.warn(
+                "progress=True was requested but tqdm is not installed. "
+                "Install tqdm for progress bars: pip install tqdm",
+                stacklevel=3,
+            )
             return
 
         # Position 0: overall bar
