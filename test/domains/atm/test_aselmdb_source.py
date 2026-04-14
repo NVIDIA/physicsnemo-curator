@@ -16,14 +16,13 @@
 
 """Tests for ASELMDBSource.
 
-Unit tests use mock ASE LMDB databases to avoid requiring real data.
+Unit tests use real ASE LMDB databases generated via ``_write_mock_aselmdb_files``.
 E2E tests generate real ASE LMDB databases on the fly via ``_create_real_aselmdb``.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -37,14 +36,33 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _write_mock_aselmdb_files(root: pathlib.Path, n_files: int = 3, n_rows: int = 5) -> None:
-    """Create mock .aselmdb files for unit testing.
+def _write_mock_aselmdb_files(root: pathlib.Path, n_files: int = 3, n_rows_per_file: int = 5) -> None:
+    """Create real .aselmdb files for unit testing.
 
-    These are empty files — the actual database reads are mocked at the
-    ``_read_aselmdb_rows`` level.
+    Unlike the old approach of writing empty mock files, we now need real
+    LMDB files because the source counts rows at construction time.
     """
+    from ase import Atoms
+
+    from physicsnemo_curator.domains.atm.sources.aselmdb import (
+        _atoms_to_row_dict,
+        _write_aselmdb,
+    )
+
+    rng = np.random.default_rng(42)
     for i in range(n_files):
-        (root / f"data{i:04d}.aselmdb").write_bytes(b"mock")
+        db_path = root / f"data{i:04d}.aselmdb"
+        rows: list[dict[str, object]] = []
+        for r_idx in range(n_rows_per_file):
+            atoms = Atoms(
+                numbers=[6, 8],
+                positions=rng.random((2, 3)) * 10.0,
+                cell=[10.0, 10.0, 10.0],
+                pbc=True,
+            )
+            row = _atoms_to_row_dict(atoms, row_id=r_idx + 1)
+            rows.append(row)
+        _write_aselmdb(db_path, rows)
 
 
 def _write_mock_metadata(root: pathlib.Path, n_atoms: int = 100) -> None:
@@ -54,45 +72,6 @@ def _write_mock_metadata(root: pathlib.Path, n_atoms: int = 100) -> None:
         natoms=np.array([n_atoms, n_atoms + 1]),
         data_ids=np.array([0, 1]),
     )
-
-
-def _make_mock_atoms() -> MagicMock:
-    """Create a mock ASE Atoms-like object suitable for AtomicData.from_atoms."""
-    atoms = MagicMock()
-    atoms.get_atomic_numbers.return_value = np.array([6, 8, 1])
-    atoms.get_positions.return_value = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    # AtomicData.from_atoms calls get_cell().array.reshape(1,3,3), so the
-    # mock must provide a Cell-like object with an .array attribute.
-    cell_mock = MagicMock()
-    cell_mock.array = np.eye(3) * 10.0
-    cell_mock.__array__ = lambda self: np.eye(3) * 10.0
-    atoms.get_cell.return_value = cell_mock
-    atoms.get_pbc.return_value = np.array([True, True, True])
-    atoms.get_masses.return_value = np.array([12.011, 15.999, 1.008])
-    atoms.numbers = np.array([6, 8, 1])
-    atoms.positions = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    atoms.info = {}
-    atoms.arrays = {
-        "numbers": np.array([6, 8, 1]),
-        "positions": np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
-    }
-    atoms.calc = None
-    atoms.constraints = []
-    return atoms
-
-
-def _make_mock_row() -> MagicMock:
-    """Create a mock database row with a .toatoms() method."""
-    row = MagicMock()
-    row.toatoms.return_value = _make_mock_atoms()
-    return row
-
-
-def _make_mock_db(n_rows: int = 5) -> MagicMock:
-    """Create a mock ASE database connection."""
-    db = MagicMock()
-    db.select.return_value = [_make_mock_row() for _ in range(n_rows)]
-    return db
 
 
 def _create_real_aselmdb(
@@ -183,20 +162,34 @@ class TestASELMDBSourceUnit:
 
 @pytest.mark.requires("atm")
 class TestASELMDBSourceLocal:
-    """Tests against local mock data with mocked ASE database."""
+    """Tests against local data with real LMDB files."""
 
     @pytest.fixture(autouse=True)
     def _setup(self, tmp_path: pathlib.Path) -> None:
         self.mock_root = tmp_path / "mock_data"
         self.mock_root.mkdir()
-        _write_mock_aselmdb_files(self.mock_root, n_files=3)
+        # 3 files with 5 rows each = 15 total structures
+        _write_mock_aselmdb_files(self.mock_root, n_files=3, n_rows_per_file=5)
         _write_mock_metadata(self.mock_root)
 
     def test_len(self) -> None:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
-        assert len(source) == 3
+        # 3 files * 5 rows each = 15 structures
+        assert len(source) == 15
+
+    def test_num_files(self) -> None:
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
+
+        source = ASELMDBSource(data_dir=str(self.mock_root))
+        assert source.num_files == 3
+
+    def test_row_counts(self) -> None:
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
+
+        source = ASELMDBSource(data_dir=str(self.mock_root))
+        assert source.row_counts == [5, 5, 5]
 
     def test_no_aselmdb_files_raises(self, tmp_path: pathlib.Path) -> None:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
@@ -225,66 +218,50 @@ class TestASELMDBSourceLocal:
 
         no_meta = tmp_path / "no_meta"
         no_meta.mkdir()
-        _write_mock_aselmdb_files(no_meta, n_files=2)
+        _write_mock_aselmdb_files(no_meta, n_files=2, n_rows_per_file=3)
         source = ASELMDBSource(data_dir=str(no_meta))
-        assert len(source) == 2
+        # 2 files * 3 rows = 6 structures
+        assert len(source) == 6
         assert source.metadata == {}
 
-    @patch("physicsnemo_curator.domains.atm.sources.aselmdb._read_aselmdb_rows")
-    def test_getitem_yields_atomic_data(self, mock_read: MagicMock) -> None:
+    def test_getitem_yields_single_atomic_data(self) -> None:
         from nvalchemi.data import AtomicData
 
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
-        # Return 3 minimal row dicts that _atomic_data_from_row can consume.
-        mock_read.return_value = [
-            {
-                "id": i + 1,
-                "unique_id": f"uid{i}",
-                "ctime": 0.0,
-                "mtime": 0.0,
-                "user": "",
-                "data": {},
-                "key_value_pairs": {},
-                "numbers": np.array([6, 8, 1], dtype=np.int64),
-                "positions": np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64),
-                "pbc": np.array([False, False, False]),
-                "cell": np.zeros((3, 3), dtype=np.float64),
-            }
-            for i in range(3)
-        ]
-
         source = ASELMDBSource(data_dir=str(self.mock_root))
+        # Get structure at index 0
         items = list(source[0])
-        assert len(items) == 3
-        for item in items:
-            assert isinstance(item, AtomicData)
+        assert len(items) == 1
+        assert isinstance(items[0], AtomicData)
 
-    @patch("physicsnemo_curator.domains.atm.sources.aselmdb._read_aselmdb_rows")
-    def test_negative_index(self, mock_read: MagicMock) -> None:
+    def test_getitem_spans_files(self) -> None:
+        from nvalchemi.data import AtomicData
+
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
-        mock_read.return_value = [
-            {
-                "id": i + 1,
-                "unique_id": f"uid{i}",
-                "ctime": 0.0,
-                "mtime": 0.0,
-                "user": "",
-                "data": {},
-                "key_value_pairs": {},
-                "numbers": np.array([6, 8, 1], dtype=np.int64),
-                "positions": np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64),
-                "pbc": np.array([False, False, False]),
-                "cell": np.zeros((3, 3), dtype=np.float64),
-            }
-            for i in range(2)
-        ]
+        source = ASELMDBSource(data_dir=str(self.mock_root))
+        # Index 0-4 are in file 0, 5-9 in file 1, 10-14 in file 2
+        # Get structure at index 5 (first in second file)
+        items = list(source[5])
+        assert len(items) == 1
+        assert isinstance(items[0], AtomicData)
+
+        # Get structure at index 14 (last in third file)
+        items = list(source[14])
+        assert len(items) == 1
+        assert isinstance(items[0], AtomicData)
+
+    def test_negative_index(self) -> None:
+        from nvalchemi.data import AtomicData
+
+        from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
-        # source[-1] should be same as source[2] (last of 3 files)
+        # source[-1] should be same as source[14] (last of 15 structures)
         items_neg = list(source[-1])
-        assert len(items_neg) == 2
+        assert len(items_neg) == 1
+        assert isinstance(items_neg[0], AtomicData)
 
     def test_index_out_of_bounds(self) -> None:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
@@ -316,8 +293,12 @@ class TestASELMDBSourceLocal:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.mock_root))
+        # Index 0 is in file 0
         rel = source.relative_path(0)
         assert rel == "data0000.aselmdb"
+        # Index 5 is in file 1
+        rel = source.relative_path(5)
+        assert rel == "data0001.aselmdb"
 
     def test_relative_path_nested(self, tmp_path: pathlib.Path) -> None:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
@@ -326,11 +307,14 @@ class TestASELMDBSourceLocal:
         nested_root.mkdir()
         sub = nested_root / "split_a"
         sub.mkdir()
-        (sub / "run01.aselmdb").write_bytes(b"mock")
-        (sub / "run02.aselmdb").write_bytes(b"mock")
+        _write_mock_aselmdb_files(sub, n_files=2, n_rows_per_file=3)
+        # Rename files to match test expectations
+        (sub / "data0000.aselmdb").rename(sub / "run01.aselmdb")
+        (sub / "data0001.aselmdb").rename(sub / "run02.aselmdb")
 
         source = ASELMDBSource(data_dir=str(nested_root), file_pattern="**/*.aselmdb")
-        assert len(source) == 2
+        # 2 files * 3 rows = 6 structures
+        assert len(source) == 6
         rel = source.relative_path(0)
         assert rel == "split_a/run01.aselmdb"
 
@@ -339,18 +323,21 @@ class TestASELMDBSourceLocal:
 
         flat_root = tmp_path / "flat"
         flat_root.mkdir()
-        (flat_root / "a.aselmdb").write_bytes(b"mock")
+        _write_mock_aselmdb_files(flat_root, n_files=1, n_rows_per_file=2)
+        (flat_root / "data0000.aselmdb").rename(flat_root / "a.aselmdb")
+
         sub = flat_root / "nested"
         sub.mkdir()
-        (sub / "b.aselmdb").write_bytes(b"mock")
+        _write_mock_aselmdb_files(sub, n_files=1, n_rows_per_file=2)
+        (sub / "data0000.aselmdb").rename(sub / "b.aselmdb")
 
-        # Default pattern finds both
+        # Default pattern finds both = 4 structures
         source_all = ASELMDBSource(data_dir=str(flat_root))
-        assert len(source_all) == 2
+        assert len(source_all) == 4
 
-        # Flat pattern finds only top-level
+        # Flat pattern finds only top-level = 2 structures
         source_flat = ASELMDBSource(data_dir=str(flat_root), file_pattern="*.aselmdb")
-        assert len(source_flat) == 1
+        assert len(source_flat) == 2
         assert source_flat.relative_path(0) == "a.aselmdb"
 
     def test_file_pattern_param(self) -> None:
@@ -399,7 +386,9 @@ class TestASELMDBSourceE2E:
         self.source = ASELMDBSource(data_dir=str(self.db_dir))
 
     def test_discovers_files(self) -> None:
-        assert len(self.source) == 3
+        # 3 files with 5 rows each = 15 total structures
+        assert len(self.source) == 15
+        assert self.source.num_files == 3
 
     def test_reads_first_item(self) -> None:
         from nvalchemi.data import AtomicData
@@ -408,9 +397,19 @@ class TestASELMDBSourceE2E:
         assert isinstance(item, AtomicData)
         assert item.num_nodes > 0
 
-    def test_yields_multiple_items(self) -> None:
+    def test_yields_single_item(self) -> None:
+        # Each index should yield exactly one structure
         items = list(self.source[0])
-        assert len(items) == 5
+        assert len(items) == 1
+
+    def test_iterate_all_structures(self) -> None:
+        from nvalchemi.data import AtomicData
+
+        # Iterate all 15 structures
+        for i in range(len(self.source)):
+            items = list(self.source[i])
+            assert len(items) == 1
+            assert isinstance(items[0], AtomicData)
 
 
 # ---------------------------------------------------------------------------
@@ -426,7 +425,7 @@ class TestASELMDBSourceBackend:
     def _setup(self, tmp_path: pathlib.Path) -> None:
         self.mock_root = tmp_path / "mock_data"
         self.mock_root.mkdir()
-        _write_mock_aselmdb_files(self.mock_root, n_files=2)
+        _write_mock_aselmdb_files(self.mock_root, n_files=2, n_rows_per_file=3)
 
     def test_default_backend_is_python(self) -> None:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
@@ -497,19 +496,21 @@ class TestASELMDBSourceRustBackend:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
-        items = list(source[0])
-        assert len(items) == 4
+        # 2 files * 4 rows = 8 total structures
+        assert len(source) == 8
+        assert source.num_files == 2
 
-    def test_rust_yields_atomic_data(self) -> None:
+    def test_rust_yields_single_atomic_data(self) -> None:
         from nvalchemi.data import AtomicData
 
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
-        for ad in source[0]:
-            assert isinstance(ad, AtomicData)
-            assert ad.atomic_numbers is not None
-            assert ad.positions is not None
+        items = list(source[0])
+        assert len(items) == 1
+        assert isinstance(items[0], AtomicData)
+        assert items[0].atomic_numbers is not None
+        assert items[0].positions is not None
 
     def test_rust_captures_energy(self) -> None:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
@@ -546,11 +547,10 @@ class TestASELMDBSourceRustBackend:
         src_py = ASELMDBSource(data_dir=str(self.db_dir), backend="python")
         src_rs = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
 
-        items_py = list(src_py[0])
-        items_rs = list(src_rs[0])
-        assert len(items_py) == len(items_rs)
-
-        for ad_py, ad_rs in zip(items_py, items_rs, strict=True):
+        # Compare first few structures
+        for i in range(min(4, len(src_py))):
+            ad_py = next(src_py[i])
+            ad_rs = next(src_rs[i])
             assert torch.equal(ad_py.atomic_numbers, ad_rs.atomic_numbers)
             assert torch.allclose(ad_py.positions, ad_rs.positions, atol=1e-5)
 
@@ -574,11 +574,12 @@ class TestASELMDBSourceRustBackend:
         from physicsnemo_curator.domains.atm.sources.aselmdb import ASELMDBSource
 
         source = ASELMDBSource(data_dir=str(self.db_dir), backend="rust")
-        assert len(source) == 2
-        items_0 = list(source[0])
-        items_1 = list(source[1])
-        assert len(items_0) == 4
-        assert len(items_1) == 4
+        # 2 files * 4 rows = 8 total structures
+        assert len(source) == 8
+        assert source.num_files == 2
+        # Access structures from both files
+        _ = next(source[0])  # file 0, row 0
+        _ = next(source[4])  # file 1, row 0
 
 
 # ---------------------------------------------------------------------------

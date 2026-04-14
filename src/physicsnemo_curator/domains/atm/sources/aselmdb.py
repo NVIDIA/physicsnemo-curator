@@ -128,6 +128,110 @@ def _decode_ndarray_markers(obj: object) -> object:
     return obj
 
 
+def _count_aselmdb_rows(db_path: pathlib.Path) -> int:
+    """Count data rows in a ``.aselmdb`` file without parsing values.
+
+    Opens the LMDB environment and counts keys that are numeric row IDs,
+    skipping reserved keys (``nextid``, ``deleted_ids``, ``metadata``).
+    This is much faster than reading all rows since it only iterates keys.
+
+    Parameters
+    ----------
+    db_path : pathlib.Path
+        Path to the ``.aselmdb`` file.
+
+    Returns
+    -------
+    int
+        Number of data rows (structures) in the file.
+    """
+    import lmdb as lmdb_lib
+
+    env = lmdb_lib.open(str(db_path), readonly=True, subdir=False, lock=False)
+    count = 0
+    try:
+        with env.begin(write=False) as txn:
+            cursor = txn.cursor()
+            for key_bytes, _ in cursor:
+                key_str = bytes(key_bytes).decode("utf-8")
+                if key_str in _RESERVED_LMDB_KEYS:
+                    continue
+                try:
+                    int(key_str)
+                    count += 1
+                except ValueError:
+                    continue
+    finally:
+        env.close()
+    return count
+
+
+def _read_aselmdb_row_at(db_path: pathlib.Path, row_index: int) -> dict[str, object]:
+    """Read a single row from a ``.aselmdb`` file by index.
+
+    Opens the LMDB environment, iterates to the *row_index*-th data row
+    (skipping reserved keys), and returns the parsed row dict.
+
+    Parameters
+    ----------
+    db_path : pathlib.Path
+        Path to the ``.aselmdb`` file.
+    row_index : int
+        Zero-based index of the row to read (among data rows only).
+
+    Returns
+    -------
+    dict[str, object]
+        Row dict with ``__ndarray__`` markers replaced by NumPy arrays
+        and a synthetic ``"id"`` key added.
+
+    Raises
+    ------
+    IndexError
+        If *row_index* is out of range.
+    """
+    import json
+    import zlib
+
+    import lmdb as lmdb_lib
+
+    env = lmdb_lib.open(str(db_path), readonly=True, subdir=False, lock=False)
+    try:
+        with env.begin(write=False) as txn:
+            cursor = txn.cursor()
+            # Collect valid (row_id, key_bytes, val_bytes) tuples, then sort
+            valid_rows: list[tuple[int, bytes, bytes]] = []
+            for key_bytes, val_bytes in cursor:
+                key_str = bytes(key_bytes).decode("utf-8")
+                if key_str in _RESERVED_LMDB_KEYS:
+                    continue
+                try:
+                    row_id = int(key_str)
+                except ValueError:
+                    continue
+                valid_rows.append((row_id, bytes(key_bytes), bytes(val_bytes)))
+
+            # Sort by row_id for deterministic ordering
+            valid_rows.sort(key=lambda x: x[0])
+
+            if row_index < 0 or row_index >= len(valid_rows):
+                msg = f"Row index {row_index} out of range for file with {len(valid_rows)} rows."
+                raise IndexError(msg)
+
+            row_id, _, val_bytes = valid_rows[row_index]
+            json_bytes = zlib.decompress(val_bytes)
+            raw: dict[str, object] = json.loads(json_bytes)
+            decoded = _decode_ndarray_markers(raw)
+            if not isinstance(decoded, dict):
+                msg = f"Decoded row is not a dict: {type(decoded)}"
+                raise TypeError(msg)
+            row_dict: dict[str, object] = {str(k): v for k, v in decoded.items()}
+            row_dict["id"] = row_id
+            return row_dict
+    finally:
+        env.close()
+
+
 def _read_aselmdb_rows(db_path: pathlib.Path) -> list[dict[str, object]]:
     """Read all data rows from a ``.aselmdb`` file using pure Python.
 
@@ -669,6 +773,23 @@ class ASELMDBSource(Source["AtomicData"]):
             self._backend,
         )
 
+        # Build cumulative offset index for flat structure-level indexing.
+        # _cumulative_counts[i] = total structures in files 0..i-1
+        # So _cumulative_counts[0] = 0, _cumulative_counts[1] = count of file 0, etc.
+        self._row_counts: list[int] = []
+        self._cumulative_counts: list[int] = [0]
+        logger.info("Counting structures in %d files...", len(self._db_files))
+        for db_path in self._db_files:
+            count = _count_aselmdb_rows(db_path)
+            self._row_counts.append(count)
+            self._cumulative_counts.append(self._cumulative_counts[-1] + count)
+        self._total_structures = self._cumulative_counts[-1]
+        logger.info(
+            "Indexed %d total structures across %d files",
+            self._total_structures,
+            len(self._db_files),
+        )
+
         # Load optional metadata.
         self._metadata: dict[str, np.ndarray] = {}
         meta_path = pathlib.Path(metadata_path) if metadata_path else self._data_dir / "metadata.npz"
@@ -680,21 +801,25 @@ class ASELMDBSource(Source["AtomicData"]):
     # -- Source interface -----------------------------------------------------
 
     def __len__(self) -> int:
-        """Return the number of ``.aselmdb`` files discovered."""
-        return len(self._db_files)
+        """Return the total number of structures across all files."""
+        return self._total_structures
 
     def __getitem__(self, index: int) -> Generator[AtomicData]:
-        """Yield :class:`~nvalchemi.data.AtomicData` for every row in the *index*-th database.
+        """Yield the *index*-th :class:`~nvalchemi.data.AtomicData` structure.
+
+        Uses flat indexing across all files: index 0 is the first structure
+        in the first file, and indices continue sequentially through all
+        files.
 
         Parameters
         ----------
         index : int
-            Zero-based file index (supports negative indexing).
+            Zero-based structure index (supports negative indexing).
 
         Yields
         ------
         AtomicData
-            One atomic data object per database row.
+            A single atomic data object.
 
         Raises
         ------
@@ -704,16 +829,46 @@ class ASELMDBSource(Source["AtomicData"]):
         if index < 0:
             index += len(self)
         if index < 0 or index >= len(self):
-            msg = f"Index {index} out of range for source with {len(self)} items."
+            msg = f"Index {index} out of range for source with {len(self)} structures."
             raise IndexError(msg)
 
-        db_path = self._db_files[index]
-        logger.debug("Opening database: %s (backend=%s)", db_path, self._backend)
+        # Binary search to find which file contains this index
+        file_index = self._find_file_for_index(index)
+        row_index = index - self._cumulative_counts[file_index]
+
+        db_path = self._db_files[file_index]
+        logger.debug(
+            "Reading structure %d from file %d (%s), row %d",
+            index,
+            file_index,
+            db_path.name,
+            row_index,
+        )
 
         if self._backend == "rust":
-            yield from self._read_rust(db_path)
+            yield self._read_single_rust(db_path, row_index)
         else:
-            yield from self._read_python(db_path)
+            yield self._read_single_python(db_path, row_index)
+
+    def _find_file_for_index(self, index: int) -> int:
+        """Find which file contains the given global structure index.
+
+        Uses binary search on the cumulative counts.
+
+        Parameters
+        ----------
+        index : int
+            Global structure index.
+
+        Returns
+        -------
+        int
+            File index (0-based).
+        """
+        import bisect
+
+        # bisect_right returns insertion point; subtract 1 to get file index
+        return bisect.bisect_right(self._cumulative_counts, index) - 1
 
     # -- Backend implementations ----------------------------------------------
 
@@ -762,6 +917,50 @@ class ASELMDBSource(Source["AtomicData"]):
         for row in rows:
             yield _atomic_data_from_row(row)
 
+    def _read_single_python(self, db_path: pathlib.Path, row_index: int) -> AtomicData:
+        """Read a single row using a pure-Python LMDB reader.
+
+        Parameters
+        ----------
+        db_path : pathlib.Path
+            Path to the ``.aselmdb`` file.
+        row_index : int
+            Zero-based row index within this file.
+
+        Returns
+        -------
+        AtomicData
+            The atomic data object for the requested row.
+        """
+        row = _read_aselmdb_row_at(db_path, row_index)
+        return _atomic_data_from_row(row)
+
+    def _read_single_rust(self, db_path: pathlib.Path, row_index: int) -> AtomicData:
+        """Read a single row using the native Rust LMDB reader.
+
+        Currently reads all rows and indexes into them. A future optimization
+        could add a Rust function to read a single row by index.
+
+        Parameters
+        ----------
+        db_path : pathlib.Path
+            Path to the ``.aselmdb`` file.
+        row_index : int
+            Zero-based row index within this file.
+
+        Returns
+        -------
+        AtomicData
+            The atomic data object for the requested row.
+        """
+        from physicsnemo_curator._lib.lmdb import read_lmdb
+
+        rows = read_lmdb(str(db_path))
+        if row_index < 0 or row_index >= len(rows):
+            msg = f"Row index {row_index} out of range for file with {len(rows)} rows."
+            raise IndexError(msg)
+        return _atomic_data_from_row(rows[row_index])
+
     # -- Properties -----------------------------------------------------------
 
     @property
@@ -785,6 +984,22 @@ class ASELMDBSource(Source["AtomicData"]):
         return dict(self._metadata)
 
     @property
+    def num_files(self) -> int:
+        """Return the number of ``.aselmdb`` files discovered."""
+        return len(self._db_files)
+
+    @property
+    def row_counts(self) -> list[int]:
+        """Return the number of structures in each file.
+
+        Returns
+        -------
+        list[int]
+            List where ``row_counts[i]`` is the structure count in the *i*-th file.
+        """
+        return list(self._row_counts)
+
+    @property
     def root(self) -> pathlib.Path:
         """Return the root directory of this source.
 
@@ -796,7 +1011,7 @@ class ASELMDBSource(Source["AtomicData"]):
         return self._root
 
     def relative_path(self, index: int) -> str:
-        """Return the path of the *index*-th file relative to the root.
+        """Return the relative path of the file containing structure *index*.
 
         This is used by sinks (e.g.
         :class:`~physicsnemo_curator.domains.atm.sinks.zarr_writer.AtomicDataZarrSink`)
@@ -806,11 +1021,17 @@ class ASELMDBSource(Source["AtomicData"]):
         Parameters
         ----------
         index : int
-            Zero-based file index.
+            Zero-based structure index (global across all files).
 
         Returns
         -------
         str
             POSIX-style relative path (e.g. ``"subdir/data.aselmdb"``).
         """
-        return self._db_files[index].relative_to(self._root).as_posix()
+        if index < 0:
+            index += len(self)
+        if index < 0 or index >= len(self):
+            msg = f"Index {index} out of range for source with {len(self)} structures."
+            raise IndexError(msg)
+        file_index = self._find_file_for_index(index)
+        return self._db_files[file_index].relative_to(self._root).as_posix()
