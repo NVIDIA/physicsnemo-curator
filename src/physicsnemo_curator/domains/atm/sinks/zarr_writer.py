@@ -150,9 +150,16 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
         self._source: Source[AtomicData] | None = None
 
         # Track which store paths have been created (for write vs append).
+        # In single-store mode, check existence at construction time so that
+        # all workers (which receive pickled copies) start in append mode.
         self._existing_stores: set[str] = set()
         if self._naming_template is None and self._output_path.exists():
             self._existing_stores.add(str(self._output_path))
+            logger.warning(
+                "Zarr store already exists at %s; new data will be appended. "
+                "Delete the store first if you want a fresh dataset.",
+                self._output_path,
+            )
 
     def set_source(self, source: Source[AtomicData]) -> None:
         """Inject the pipeline source for ``{relpath}``/``{stem}`` resolution.
@@ -258,11 +265,23 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
             String key identifying which store this batch targets,
             used to track write-vs-append state.
         """
-        if store_key in self._existing_stores:
+        # Check filesystem to handle multi-worker race conditions.
+        # In-memory tracking (_existing_stores) is per-process and can miss
+        # stores created by other workers. Fall back to append if store exists.
+        store_exists = store_key in self._existing_stores or pathlib.Path(store_key).exists()
+        if store_exists:
             writer.append(batch)
-        else:
-            writer.write(batch)
             self._existing_stores.add(store_key)
+        else:
+            try:
+                writer.write(batch)
+                self._existing_stores.add(store_key)
+            except FileExistsError:
+                # Another worker created the store between our check and write.
+                # Fall back to append mode.
+                logger.debug("Store %s created by another worker; switching to append", store_key)
+                writer.append(batch)
+                self._existing_stores.add(store_key)
         logger.debug("Flushed batch of %d items to %s", len(batch), store_key)
 
     # -- Properties -----------------------------------------------------------
