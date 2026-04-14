@@ -558,11 +558,6 @@ class ASELMDBSource(Source["AtomicData"]):
     An optional ``metadata.npz`` file (same directory or explicit path) is
     loaded eagerly if present.  It is not required for operation.
 
-    When paired with a sink that supports directory mirroring (e.g.
-    :class:`~physicsnemo_curator.domains.atm.sinks.zarr_writer.AtomicDataZarrSink`
-    with a *naming_template*), the :meth:`relative_path` method allows the
-    output to reproduce the input directory layout.
-
     Parameters
     ----------
     data_dir : str
