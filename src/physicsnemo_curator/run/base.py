@@ -135,8 +135,12 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
 
     For each filter that has a ``flush`` method and an ``_output_path``
     attribute, this function temporarily swaps the output path to a
-    shard-specific path (``{stem}_shard_{index:06d}{suffix}``) before
+    worker-specific path (``{stem}_worker_{pid}{suffix}``) before
     flushing, then restores the original path.
+
+    Using worker PID (instead of index) ensures all indices processed by
+    the same worker append to a single file, reducing output file count
+    when running with parallel workers.
 
     After flushing, any filter artifacts (reported via
     :meth:`~Filter.artifacts`) are recorded in the pipeline store when
@@ -147,10 +151,13 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
     pipeline : Pipeline
         The pipeline whose filters should be flushed.
     index : int
-        The source index that was just processed (used to generate
-        unique shard filenames).
+        The source index that was just processed (used for artifact
+        tracking).
     """
+    import os
     import pathlib
+
+    pid = os.getpid()
 
     for i_f, f in enumerate(pipeline.filters):
         if not (hasattr(f, "flush") and hasattr(f, "_output_path")):
@@ -158,8 +165,8 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
 
         original = f._output_path  # noqa: SLF001
         p = pathlib.Path(str(original))
-        shard_path = p.parent / f"{p.stem}_shard_{index:06d}{p.suffix}"
-        f._output_path = shard_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
+        worker_path = p.parent / f"{p.stem}_worker_{pid}{p.suffix}"
+        f._output_path = worker_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
         try:
             f.flush()  # ty: ignore[call-non-callable]
         finally:

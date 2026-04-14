@@ -126,6 +126,11 @@ class MomentsFilter(Filter["xr.DataArray"]):
         arrays: ``mean``, ``variance``, ``skewness``, ``min``, ``max``,
         ``count``.
 
+        If the output store already exists (e.g., from a previous flush in
+        the same worker process), the statistics are merged using Chan's
+        parallel Welford algorithm. This enables worker-level aggregation
+        when running pipelines in parallel.
+
         Returns
         -------
         str or None
@@ -137,11 +142,18 @@ class MomentsFilter(Filter["xr.DataArray"]):
 
         self._output_path.mkdir(parents=True, exist_ok=True)
 
-        # Build xarray Dataset for each variable and write to Zarr
+        # Build xarray Dataset for each variable and write/merge to Zarr
         for var_name, acc in self._accumulators.items():
-            stats = acc.finalize()
+            new_stats = acc.finalize()
             group_path = self._output_path / var_name
-            stats.to_zarr(str(group_path), mode="w", zarr_format=3)
+
+            # Merge with existing data if it exists (worker-level aggregation)
+            if group_path.exists():
+                existing_stats = xr.open_zarr(str(group_path))
+                merged_stats = _merge_moment_datasets([existing_stats, new_stats])
+                merged_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
+            else:
+                new_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
 
         path = str(self._output_path)
         self._accumulators.clear()

@@ -553,6 +553,11 @@ class MeshQualityFilter(Filter["Mesh"]):
     def flush(self) -> str | None:
         """Write accumulated quality report to the Parquet file.
 
+        If the output file already exists (e.g., from a previous flush in
+        the same worker process), the new rows are appended to the existing
+        file. This enables worker-level aggregation when running pipelines
+        in parallel.
+
         Returns
         -------
         str or None
@@ -567,9 +572,17 @@ class MeshQualityFilter(Filter["Mesh"]):
             for col_name in columns:
                 columns[col_name].append(row.get(col_name))  # type: ignore[arg-type]
 
-        table = pa.table(columns, schema=_QUALITY_SCHEMA)
+        new_table = pa.table(columns, schema=_QUALITY_SCHEMA)
         self._output_path.parent.mkdir(parents=True, exist_ok=True)
-        pq.write_table(table, str(self._output_path))
+
+        # Append to existing file if it exists (worker-level aggregation)
+        if self._output_path.exists():
+            existing_table = pq.read_table(str(self._output_path))
+            combined_table = pa.concat_tables([existing_table, new_table])
+            pq.write_table(combined_table, str(self._output_path))
+        else:
+            pq.write_table(new_table, str(self._output_path))
+
         path = str(self._output_path)
         self._rows.clear()
         self._last_artifacts = [path]
