@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 import holoviews as hv
 import panel as pn
+from bokeh.models import HoverTool
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -46,24 +47,10 @@ STAT_COLUMNS: list[str] = [
     "n_components",
 ]
 
-# All columns to include in hover tooltip
+# Minimal columns for hover tooltip (just axis values and index for lookup)
 TOOLTIP_COLUMNS: list[str] = [
     "index",
     "field_key",
-    "level",
-    "component",
-    "n_values",
-    "n_components",
-    "mean",
-    "std",
-    "var",
-    "min",
-    "max",
-    "median",
-    "abs_mean",
-    "abs_max",
-    "skewness",
-    "kurtosis",
 ]
 
 
@@ -175,21 +162,29 @@ class AtomicStatsScatterWidget:
             if filtered_df.empty:
                 return hv.Points([]).opts(title="No data matches filters")
 
-            # Build hover tooltip columns
-            hover_cols = [c for c in TOOLTIP_COLUMNS if c in filtered_df.columns]
-
-            # Create scatter plot
+            # Create scatter plot with index and field_key for tooltip
             points = hv.Points(
                 filtered_df,
                 kdims=[x_col, y_col],
-                vdims=[c for c in hover_cols if c not in [x_col, y_col]],
+                vdims=["index", "field_key"],
+            )
+
+            # Custom hover tool showing just x/y values and indices
+            hover = HoverTool(
+                tooltips=[
+                    (x_col, "@{" + x_col + "}{0.4f}"),
+                    (y_col, "@{" + y_col + "}{0.4f}"),
+                    ("index", "@index"),
+                    ("field", "@field_key"),
+                ],
+                point_policy="follow_mouse",
             )
 
             # Apply styling - use responsive sizing
             points = points.opts(
                 color="#1f77b4",  # Solid blue color
                 size=8,
-                tools=["hover", "pan", "wheel_zoom", "box_zoom", "reset"],
+                tools=[hover, "pan", "wheel_zoom", "box_zoom", "reset"],
                 responsive=True,
                 min_height=400,
                 xlabel=x_col,
