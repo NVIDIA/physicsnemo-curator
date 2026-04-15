@@ -18,10 +18,43 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+import pandas as pd
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 pytest.importorskip("panel")
 pytest.importorskip("holoviews")
+
+
+@pytest.fixture
+def mock_stats_parquet(tmp_path: Path) -> str:
+    """Create a mock AtomicStatsFilter parquet file."""
+    df = pd.DataFrame(
+        {
+            "field_key": ["positions", "positions", "positions", "forces", "energies"],
+            "level": ["node", "node", "node", "node", "system"],
+            "component": [0, 1, 2, 0, -1],
+            "n_values": [100, 100, 100, 100, 10],
+            "n_components": [3, 3, 3, 3, 1],
+            "mean": [0.5, 1.2, -0.3, 0.01, -150.5],
+            "std": [0.1, 0.2, 0.15, 0.005, 10.2],
+            "var": [0.01, 0.04, 0.0225, 0.000025, 104.04],
+            "min": [0.2, 0.8, -0.7, -0.02, -180.0],
+            "max": [0.9, 1.6, 0.1, 0.05, -120.0],
+            "median": [0.5, 1.2, -0.3, 0.01, -150.0],
+            "abs_mean": [0.5, 1.2, 0.3, 0.01, 150.5],
+            "abs_max": [0.9, 1.6, 0.7, 0.05, 180.0],
+            "skewness": [0.1, -0.2, 0.3, 0.0, -0.5],
+            "kurtosis": [0.05, 0.1, -0.1, 0.0, 0.2],
+        }
+    )
+    path = tmp_path / "stats.parquet"
+    df.to_parquet(path)
+    return str(path)
 
 
 class TestAtomicStatsScatterWidget:
@@ -46,3 +79,16 @@ class TestAtomicStatsScatterWidget:
 
         assert isinstance(result, pn.pane.Markdown)
         assert "No AtomicStatsFilter artifacts" in result.object
+
+    def test_panel_with_data(self, mock_stats_parquet: str) -> None:
+        """Widget returns a Row with sidebar and plot when data is provided."""
+        import panel as pn
+
+        from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
+
+        widget = AtomicStatsScatterWidget()
+        result = widget.panel([mock_stats_parquet])
+
+        # Should return a Row layout (sidebar + plot area)
+        assert isinstance(result, pn.Row)
+        assert len(result) == 2  # sidebar and plot area
