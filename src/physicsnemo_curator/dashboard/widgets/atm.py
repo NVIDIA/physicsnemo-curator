@@ -45,9 +45,6 @@ STAT_COLUMNS: list[str] = [
     "n_components",
 ]
 
-# Categorical columns available for color-by
-COLOR_BY_OPTIONS: list[str] = ["level", "field_key", "component"]
-
 # All columns to include in hover tooltip
 TOOLTIP_COLUMNS: list[str] = [
     "field_key",
@@ -72,8 +69,7 @@ class AtomicStatsScatterWidget:
     """Interactive scatter plot widget for AtomicStatsFilter parquet output.
 
     Displays a scatter plot where users can select X/Y axes from available
-    statistics columns, color points by categorical dimensions, and filter
-    by level (node/edge/system/extra).
+    statistics columns and filter by level (node/edge/system/extra) and field.
     """
 
     name: str = "Atomic Statistics Scatter"
@@ -117,11 +113,6 @@ class AtomicStatsScatterWidget:
             options=STAT_COLUMNS,
             value="std",
         )
-        color_select = pn.widgets.Select(
-            name="Color by",
-            options=COLOR_BY_OPTIONS,
-            value="level",
-        )
         available_levels = df["level"].unique().tolist() if "level" in df.columns else []
         level_filter = pn.widgets.CheckBoxGroup(
             name="Filter Levels",
@@ -129,33 +120,49 @@ class AtomicStatsScatterWidget:
             value=available_levels,
         )
 
+        # Field key filter dropdown
+        available_fields = sorted(df["field_key"].unique().tolist()) if "field_key" in df.columns else []
+        field_filter = pn.widgets.MultiSelect(
+            name="Fields",
+            options=available_fields,
+            value=available_fields,
+            size=min(8, len(available_fields)),
+        )
+
         # Create sidebar
         sidebar = pn.Column(
             "### Controls",
             x_select,
             y_select,
-            color_select,
             "---",
+            "### Filter by Level",
             level_filter,
-            width=180,
+            "---",
+            "### Filter by Field",
+            field_filter,
+            width=200,
         )
 
         # Create reactive plot
         @pn.depends(  # ty: ignore[invalid-argument-type]
             x_select.param.value,
             y_select.param.value,
-            color_select.param.value,
             level_filter.param.value,
+            field_filter.param.value,
         )
         def update_plot(
             x_col: str,
             y_col: str,
-            color_col: str,
             selected_levels: list[str],
+            selected_fields: list[str],
         ) -> hv.Points:
             """Update scatter plot based on widget selections."""
             # Filter by selected levels
             filtered_df = df[df["level"].isin(selected_levels)] if selected_levels and "level" in df.columns else df
+
+            # Filter by selected fields
+            if selected_fields and "field_key" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["field_key"].isin(selected_fields)]
 
             if filtered_df.empty:
                 return hv.Points([]).opts(title="No data matches filters")
@@ -167,22 +174,19 @@ class AtomicStatsScatterWidget:
             points = hv.Points(
                 filtered_df,
                 kdims=[x_col, y_col],
-                vdims=[color_col] + [c for c in hover_cols if c not in [x_col, y_col, color_col]],
+                vdims=[c for c in hover_cols if c not in [x_col, y_col]],
             )
 
-            # Apply styling
+            # Apply styling - use responsive sizing
             points = points.opts(
-                color=color_col,
-                cmap="Category10",
+                color="#1f77b4",  # Solid blue color
                 size=8,
                 tools=["hover", "pan", "wheel_zoom", "box_zoom", "reset"],
-                width=600,
-                height=450,
+                responsive=True,
+                min_height=400,
                 xlabel=x_col,
                 ylabel=y_col,
                 title=f"{y_col} vs {x_col}",
-                legend_position="right",
-                show_legend=True,
             )
 
             return points
