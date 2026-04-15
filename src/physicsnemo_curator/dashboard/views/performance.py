@@ -27,7 +27,7 @@ import panel as pn
 if TYPE_CHECKING:
     from physicsnemo_curator.dashboard.data import DashboardStore
 
-hv.extension("bokeh")
+hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
 
 
 def _timeline_scatter(store: DashboardStore) -> pn.Column:

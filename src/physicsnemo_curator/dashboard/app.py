@@ -45,7 +45,7 @@ class DashboardApp:
         self.store = DashboardStore(db_path)
         self.widget_registry = WidgetRegistry()
         self._tabs: pn.Tabs | None = None
-        self._periodic: pn.state.PeriodicCallback | None = None  # type: ignore[name-defined]
+        self._periodic: pn.state.PeriodicCallback | None = None  # type: ignore[name-defined]  # ty: ignore[unresolved-attribute]
 
     def _build_tabs(self) -> pn.Tabs:
         """Build the tab layout.
