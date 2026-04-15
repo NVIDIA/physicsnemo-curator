@@ -29,8 +29,9 @@ if TYPE_CHECKING:
 # Initialize Holoviews with Bokeh backend
 hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
 
-# Statistics columns available for scatter plot axes
+# Statistics columns available for scatter plot axes (index is added dynamically)
 STAT_COLUMNS: list[str] = [
+    "index",
     "mean",
     "std",
     "var",
@@ -47,6 +48,7 @@ STAT_COLUMNS: list[str] = [
 
 # All columns to include in hover tooltip
 TOOLTIP_COLUMNS: list[str] = [
+    "index",
     "field_key",
     "level",
     "component",
@@ -102,6 +104,10 @@ class AtomicStatsScatterWidget:
         if df is None or df.empty:
             return pn.pane.Markdown("*Could not read any Atomic Statistics artifacts.*")
 
+        # Add index column from DataFrame index for lookup
+        df = df.reset_index(drop=True)
+        df["index"] = df.index
+
         # Create widgets
         x_select = pn.widgets.Select(
             name="X-Axis",
@@ -129,7 +135,7 @@ class AtomicStatsScatterWidget:
             size=min(8, len(available_fields)),
         )
 
-        # Create sidebar
+        # Create sidebar with scrolling to prevent overlap
         sidebar = pn.Column(
             "### Controls",
             x_select,
@@ -140,7 +146,9 @@ class AtomicStatsScatterWidget:
             "---",
             "### Filter by Field",
             field_filter,
-            width=200,
+            width=220,
+            sizing_mode="fixed",
+            scroll=True,
         )
 
         # Create reactive plot
@@ -194,7 +202,12 @@ class AtomicStatsScatterWidget:
         # Wrap in HoloViews pane
         plot_pane = pn.pane.HoloViews(update_plot, sizing_mode="stretch_both")
 
-        return pn.Row(sidebar, plot_pane, sizing_mode="stretch_both")
+        # Use FlexBox layout to prevent overlap
+        return pn.Row(
+            sidebar,
+            plot_pane,
+            sizing_mode="stretch_both",
+        )
 
     def _load_data(self, artifact_paths: list[str]) -> pd.DataFrame | None:
         """Load and concatenate parquet files.
