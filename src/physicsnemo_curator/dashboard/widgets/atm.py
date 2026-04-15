@@ -122,7 +122,7 @@ class AtomicStatsScatterWidget:
             size=min(8, len(available_fields)),
         )
 
-        # Create sidebar with scrolling to prevent overlap
+        # Create sidebar - use fixed width, stretch height
         sidebar = pn.Column(
             "### Controls",
             x_select,
@@ -133,9 +133,9 @@ class AtomicStatsScatterWidget:
             "---",
             "### Filter by Field",
             field_filter,
-            width=220,
-            sizing_mode="fixed",
-            scroll=True,
+            width=200,
+            min_width=200,
+            max_width=200,
         )
 
         # Create reactive plot
@@ -180,13 +180,13 @@ class AtomicStatsScatterWidget:
                 point_policy="follow_mouse",
             )
 
-            # Apply styling - use responsive sizing
+            # Apply styling - use stretch_width with fixed height
             points = points.opts(
                 color="#1f77b4",  # Solid blue color
                 size=8,
                 tools=[hover, "pan", "wheel_zoom", "box_zoom", "reset"],
                 responsive=True,
-                min_height=400,
+                height=500,
                 xlabel=x_col,
                 ylabel=y_col,
                 title=f"{y_col} vs {x_col}",
@@ -194,14 +194,14 @@ class AtomicStatsScatterWidget:
 
             return points
 
-        # Wrap in HoloViews pane
-        plot_pane = pn.pane.HoloViews(update_plot, sizing_mode="stretch_both")
+        # Wrap in HoloViews pane - stretch width only
+        plot_pane = pn.pane.HoloViews(update_plot, sizing_mode="stretch_width", height=500)
 
-        # Use FlexBox layout to prevent overlap
+        # Use Row with FlexBox - sidebar fixed, plot stretches
         return pn.Row(
             sidebar,
             plot_pane,
-            sizing_mode="stretch_both",
+            sizing_mode="stretch_width",
         )
 
     def _load_data(self, artifact_paths: list[str]) -> pd.DataFrame | None:
