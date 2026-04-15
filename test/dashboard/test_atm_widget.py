@@ -92,3 +92,18 @@ class TestAtomicStatsScatterWidget:
         # Should return a Row layout (sidebar + plot area)
         assert isinstance(result, pn.Row)
         assert len(result) == 2  # sidebar and plot area
+
+    def test_panel_contains_scatter_plot(self, mock_stats_parquet: str) -> None:
+        """Widget contains a Holoviews scatter plot."""
+        import panel as pn
+
+        from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
+
+        widget = AtomicStatsScatterWidget()
+        result = widget.panel([mock_stats_parquet])
+
+        # The second element should be a Column containing the plot
+        assert isinstance(result, pn.Row)
+        plot_area = result[1]
+        # Should contain a HoloViews pane
+        assert isinstance(plot_area, (pn.pane.HoloViews, pn.Column))

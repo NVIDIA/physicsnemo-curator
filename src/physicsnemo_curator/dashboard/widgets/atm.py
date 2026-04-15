@@ -20,10 +20,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import holoviews as hv
 import panel as pn
 
 if TYPE_CHECKING:
     import pandas as pd
+
+# Initialize Holoviews with Bokeh backend
+hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
 
 # Statistics columns available for scatter plot axes
 STAT_COLUMNS: list[str] = [
@@ -43,6 +47,25 @@ STAT_COLUMNS: list[str] = [
 
 # Categorical columns available for color-by
 COLOR_BY_OPTIONS: list[str] = ["level", "field_key", "component"]
+
+# All columns to include in hover tooltip
+TOOLTIP_COLUMNS: list[str] = [
+    "field_key",
+    "level",
+    "component",
+    "n_values",
+    "n_components",
+    "mean",
+    "std",
+    "var",
+    "min",
+    "max",
+    "median",
+    "abs_mean",
+    "abs_max",
+    "skewness",
+    "kurtosis",
+]
 
 
 class AtomicStatsScatterWidget:
@@ -83,13 +106,91 @@ class AtomicStatsScatterWidget:
         if df is None or df.empty:
             return pn.pane.Markdown("*Could not read any AtomicStatsFilter artifacts.*")
 
-        # Create sidebar with controls
-        sidebar = self._create_sidebar(df)
+        # Create widgets
+        x_select = pn.widgets.Select(
+            name="X-Axis",
+            options=STAT_COLUMNS,
+            value="mean",
+        )
+        y_select = pn.widgets.Select(
+            name="Y-Axis",
+            options=STAT_COLUMNS,
+            value="std",
+        )
+        color_select = pn.widgets.Select(
+            name="Color by",
+            options=COLOR_BY_OPTIONS,
+            value="level",
+        )
+        available_levels = df["level"].unique().tolist() if "level" in df.columns else []
+        level_filter = pn.widgets.CheckBoxGroup(
+            name="Filter Levels",
+            options=available_levels,
+            value=available_levels,
+        )
 
-        # Create placeholder for plot area
-        plot_area = pn.pane.Markdown("*Scatter plot placeholder*")
+        # Create sidebar
+        sidebar = pn.Column(
+            "### Controls",
+            x_select,
+            y_select,
+            color_select,
+            "---",
+            level_filter,
+            width=180,
+        )
 
-        return pn.Row(sidebar, plot_area, sizing_mode="stretch_both")
+        # Create reactive plot
+        @pn.depends(  # ty: ignore[invalid-argument-type]
+            x_select.param.value,
+            y_select.param.value,
+            color_select.param.value,
+            level_filter.param.value,
+        )
+        def update_plot(
+            x_col: str,
+            y_col: str,
+            color_col: str,
+            selected_levels: list[str],
+        ) -> hv.Points:
+            """Update scatter plot based on widget selections."""
+            # Filter by selected levels
+            filtered_df = df[df["level"].isin(selected_levels)] if selected_levels and "level" in df.columns else df
+
+            if filtered_df.empty:
+                return hv.Points([]).opts(title="No data matches filters")
+
+            # Build hover tooltip columns
+            hover_cols = [c for c in TOOLTIP_COLUMNS if c in filtered_df.columns]
+
+            # Create scatter plot
+            points = hv.Points(
+                filtered_df,
+                kdims=[x_col, y_col],
+                vdims=[color_col] + [c for c in hover_cols if c not in [x_col, y_col, color_col]],
+            )
+
+            # Apply styling
+            points = points.opts(
+                color=color_col,
+                cmap="Category10",
+                size=8,
+                tools=["hover", "pan", "wheel_zoom", "box_zoom", "reset"],
+                width=600,
+                height=450,
+                xlabel=x_col,
+                ylabel=y_col,
+                title=f"{y_col} vs {x_col}",
+                legend_position="right",
+                show_legend=True,
+            )
+
+            return points
+
+        # Wrap in HoloViews pane
+        plot_pane = pn.pane.HoloViews(update_plot, sizing_mode="stretch_both")
+
+        return pn.Row(sidebar, plot_pane, sizing_mode="stretch_both")
 
     def _load_data(self, artifact_paths: list[str]) -> pd.DataFrame | None:
         """Load and concatenate parquet files.
@@ -117,55 +218,3 @@ class AtomicStatsScatterWidget:
             return None
 
         return pd.concat(frames, ignore_index=True)
-
-    def _create_sidebar(self, df: pd.DataFrame) -> pn.viewable.Viewable:
-        """Create sidebar with axis selectors and filters.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            The loaded data.
-
-        Returns
-        -------
-        pn.viewable.Viewable
-            A Panel Column containing control widgets.
-        """
-        # X-axis selector
-        x_select = pn.widgets.Select(
-            name="X-Axis",
-            options=STAT_COLUMNS,
-            value="mean",
-        )
-
-        # Y-axis selector
-        y_select = pn.widgets.Select(
-            name="Y-Axis",
-            options=STAT_COLUMNS,
-            value="std",
-        )
-
-        # Color-by selector
-        color_select = pn.widgets.Select(
-            name="Color by",
-            options=COLOR_BY_OPTIONS,
-            value="level",
-        )
-
-        # Level filter checkboxes
-        available_levels = df["level"].unique().tolist() if "level" in df.columns else []
-        level_filter = pn.widgets.CheckBoxGroup(
-            name="Filter Levels",
-            options=available_levels,
-            value=available_levels,
-        )
-
-        return pn.Column(
-            "### Controls",
-            x_select,
-            y_select,
-            color_select,
-            "---",
-            level_filter,
-            width=180,
-        )
