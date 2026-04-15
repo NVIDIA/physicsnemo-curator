@@ -1,0 +1,124 @@
+<h2>Atomic Stats Scatter Widget Layout</h2>
+<p class="subtitle">Choose the overall layout for the scatter plot widget</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Controls Above Plot</h3>
+      <p>Axis selectors and color-by dropdown in a horizontal row above the scatter plot</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 16px;">
+          <div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #666;">X-Axis:</span>
+              <select style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <option>mean</option>
+              </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #666;">Y-Axis:</span>
+              <select style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <option>std</option>
+              </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #666;">Color by:</span>
+              <select style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <option>level</option>
+              </select>
+            </div>
+          </div>
+          <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; height: 250px; display: flex; align-items: center; justify-content: center; color: #6c757d;">
+            Scatter Plot (Holoviews/Bokeh)<br/>
+            <span style="font-size: 12px;">(hover shows tooltip with all stats)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Controls in Sidebar</h3>
+      <p>Axis selectors and filters in a left sidebar, plot takes remaining space</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 16px;">
+          <div style="display: flex; gap: 16px;">
+            <div style="width: 140px; padding: 12px; background: #f1f3f4; border-radius: 8px;">
+              <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">X-Axis</div>
+                <select style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+                  <option>mean</option>
+                </select>
+              </div>
+              <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Y-Axis</div>
+                <select style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+                  <option>std</option>
+                </select>
+              </div>
+              <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Color by</div>
+                <select style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+                  <option>level</option>
+                </select>
+              </div>
+              <div>
+                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Filter Level</div>
+                <div style="font-size: 11px;">
+                  <label><input type="checkbox" checked> node</label><br>
+                  <label><input type="checkbox" checked> edge</label><br>
+                  <label><input type="checkbox" checked> system</label>
+                </div>
+              </div>
+            </div>
+            <div style="flex: 1; background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; min-height: 200px; display: flex; align-items: center; justify-content: center; color: #6c757d;">
+              Scatter Plot
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Tabbed with Table View</h3>
+      <p>Tabs to switch between scatter plot and data table, controls above both</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 16px;">
+          <div style="display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #666;">X-Axis:</span>
+              <select style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <option>mean</option>
+              </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #666;">Y-Axis:</span>
+              <select style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <option>std</option>
+              </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; color: #666;">Color by:</span>
+              <select style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <option>level</option>
+              </select>
+            </div>
+          </div>
+          <div style="display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 12px;">
+            <div style="padding: 8px 16px; background: #fff; border: 1px solid #dee2e6; border-bottom: none; border-radius: 4px 4px 0 0; font-size: 13px; font-weight: 500;">Scatter</div>
+            <div style="padding: 8px 16px; color: #666; font-size: 13px;">Table</div>
+          </div>
+          <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; height: 180px; display: flex; align-items: center; justify-content: center; color: #6c757d;">
+            Scatter Plot / Data Table
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

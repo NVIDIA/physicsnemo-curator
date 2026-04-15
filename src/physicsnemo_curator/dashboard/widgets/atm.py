@@ -77,7 +77,7 @@ class AtomicStatsScatterWidget:
     """
 
     name: str = "Atomic Statistics Scatter"
-    filter_name: str = "AtomicStatsFilter"
+    filter_name: str = "Atomic Statistics"
 
     def panel(
         self,
@@ -99,12 +99,12 @@ class AtomicStatsScatterWidget:
             A Panel Row containing sidebar controls and scatter plot.
         """
         if not artifact_paths:
-            return pn.pane.Markdown("*No AtomicStatsFilter artifacts found.*")
+            return pn.pane.Markdown("*No Atomic Statistics artifacts found.*")
 
         # Load data
         df = self._load_data(artifact_paths)
         if df is None or df.empty:
-            return pn.pane.Markdown("*Could not read any AtomicStatsFilter artifacts.*")
+            return pn.pane.Markdown("*Could not read any Atomic Statistics artifacts.*")
 
         # Create widgets
         x_select = pn.widgets.Select(

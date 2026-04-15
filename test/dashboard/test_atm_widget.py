@@ -66,7 +66,7 @@ class TestAtomicStatsScatterWidget:
 
         widget = AtomicStatsScatterWidget()
         assert widget.name == "Atomic Statistics Scatter"
-        assert widget.filter_name == "AtomicStatsFilter"
+        assert widget.filter_name == "Atomic Statistics"
 
     def test_panel_empty_artifacts(self) -> None:
         """Widget returns message when no artifacts provided."""
@@ -78,7 +78,7 @@ class TestAtomicStatsScatterWidget:
         result = widget.panel([])
 
         assert isinstance(result, pn.pane.Markdown)
-        assert "No AtomicStatsFilter artifacts" in result.object
+        assert "No Atomic Statistics artifacts" in result.object
 
     def test_panel_with_data(self, mock_stats_parquet: str) -> None:
         """Widget returns a Row with sidebar and plot when data is provided."""
@@ -117,7 +117,7 @@ class TestWidgetRegistry:
         from physicsnemo_curator.dashboard.widgets import WidgetRegistry
 
         registry = WidgetRegistry()
-        provider = registry.get("AtomicStatsFilter")
+        provider = registry.get("Atomic Statistics")
 
         assert provider is not None
         assert provider.name == "Atomic Statistics Scatter"
