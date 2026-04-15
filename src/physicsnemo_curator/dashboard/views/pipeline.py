@@ -267,17 +267,80 @@ def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.Column:
         width=150,
     )
 
+    # Pagination controls
+    page_size_select = pn.widgets.Select(
+        name="Page Size",
+        options=[20, 50, 100],
+        value=20,
+        width=100,
+    )
+    page_input = pn.widgets.IntInput(
+        name="Page",
+        value=1,
+        start=1,
+        end=1,
+        width=80,
+    )
+    page_info = pn.pane.Markdown("", width=200)
+
     # Reactive table and detail area
     table_pane = pn.Column(sizing_mode="stretch_width")
     detail_pane = pn.Column(sizing_mode="stretch_width")
 
-    def _update(event: object = None) -> None:  # noqa: ARG001
-        """Update the index table and detail view based on query."""
+    # Track filtered data for pagination
+    _state: dict[str, object] = {"filtered_df": None, "total_pages": 1}
+
+    def _update_table() -> None:
+        """Update the table display with current page."""
+        filtered = _state["filtered_df"]
+        if filtered is None or not hasattr(filtered, "empty") or filtered.empty:
+            table_pane.clear()
+            table_pane.append(pn.pane.Markdown("*No matching indices.*"))
+            page_info.object = ""
+            return
+
+        # Calculate pagination
+        page_size = page_size_select.value
+        total_rows = len(filtered)  # ty: ignore[invalid-argument-type]
+        total_pages = max(1, (total_rows + page_size - 1) // page_size)
+        _state["total_pages"] = total_pages
+
+        # Clamp page to valid range
+        page_input.end = total_pages
+        current_page = min(max(1, page_input.value), total_pages)
+        if page_input.value != current_page:
+            page_input.value = current_page
+
+        # Slice for current page
+        start_idx = (current_page - 1) * page_size
+        end_idx = start_idx + page_size
+        page_df = filtered.iloc[start_idx:end_idx]  # ty: ignore[unresolved-attribute]
+
+        # Update info
+        start_row = start_idx + 1
+        end_row = min(end_idx, total_rows)
+        page_info.object = f"**{start_row}-{end_row}** of **{total_rows}**"
+
+        # Update table
+        table_pane.clear()
+        display_cols = ["index", "status", "wall_time_s", "peak_memory_mb"]
+        table_pane.append(
+            pn.pane.DataFrame(
+                page_df[display_cols].round(3),
+                index=False,
+                sizing_mode="stretch_width",
+            )
+        )
+
+    def _update_filter(event: object = None) -> None:  # noqa: ARG001
+        """Update filtered data based on query and status."""
         df = store.index_df
         if df.empty:
+            _state["filtered_df"] = None
             table_pane.clear()
             table_pane.append(pn.pane.Markdown("*No data available.*"))
             detail_pane.clear()
+            page_info.object = ""
             return
 
         # Parse index query
@@ -290,19 +353,11 @@ def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.Column:
         if status != "all":
             filtered = filtered[filtered["status"] == status]
 
-        # Update table
-        table_pane.clear()
-        if filtered.empty:
-            table_pane.append(pn.pane.Markdown("*No matching indices.*"))
-        else:
-            display_cols = ["index", "status", "wall_time_s", "peak_memory_mb"]
-            table_pane.append(
-                pn.pane.DataFrame(
-                    filtered[display_cols].round(3),
-                    index=False,
-                    sizing_mode="stretch_width",
-                )
-            )
+        _state["filtered_df"] = filtered
+
+        # Reset to page 1 when filter changes
+        page_input.value = 1
+        _update_table()
 
         # Update detail view
         detail_pane.clear()
@@ -312,20 +367,53 @@ def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.Column:
         else:
             detail_pane.append(_aggregate_artifacts(store, registry))
 
+    def _on_page_change(event: object = None) -> None:  # noqa: ARG001
+        """Handle page or page size changes."""
+        _update_table()
+
     # Wire up callbacks
-    query_input.param.watch(_update, "value")
-    status_filter.param.watch(_update, "value")
-    store.param.watch(_update, "selected_index")
-    store.param.watch(_update, "refresh")
+    query_input.param.watch(_update_filter, "value")
+    status_filter.param.watch(_update_filter, "value")
+    store.param.watch(_update_filter, "selected_index")
+    store.param.watch(_update_filter, "refresh")
+    page_size_select.param.watch(_on_page_change, "value")
+    page_input.param.watch(_on_page_change, "value")
 
     # Initial render
-    _update()
+    _update_filter()
+
+    # Pagination buttons
+    prev_btn = pn.widgets.Button(name="<", width=40, button_type="default")
+    next_btn = pn.widgets.Button(name=">", width=40, button_type="default")
+
+    # Pagination row
+    pagination_row = pn.Row(
+        page_size_select,
+        prev_btn,
+        page_input,
+        next_btn,
+        page_info,
+        align="center",
+    )
+
+    # Wire up prev/next buttons
+    def _prev_page(event: object) -> None:  # noqa: ARG001
+        if page_input.value > 1:
+            page_input.value -= 1
+
+    def _next_page(event: object) -> None:  # noqa: ARG001
+        if page_input.value < _state["total_pages"]:
+            page_input.value += 1
+
+    prev_btn.on_click(_prev_page)
+    next_btn.on_click(_next_page)
 
     return pn.Column(
         pn.pane.Markdown("## Pipeline"),
         structure,
         pn.layout.Divider(),
         pn.Row(query_input, status_filter),
+        pagination_row,
         table_pane,
         pn.layout.Divider(),
         detail_pane,
