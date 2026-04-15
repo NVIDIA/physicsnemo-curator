@@ -206,14 +206,16 @@ def _aggregate_artifacts(
     components.append(pn.pane.Markdown("### All Artifacts"))
 
     for filter_name, paths in all_artifacts.items():
-        components.append(pn.pane.Markdown(f"**{filter_name}** ({len(paths)} files)"))
+        # Get unique file names only (not full paths which may have duplicates per index)
+        unique_paths = sorted(set(paths))
+        components.append(pn.pane.Markdown(f"**{filter_name}** ({len(unique_paths)} unique files)"))
 
-        # Show a preview table of artifact paths
-        artifact_df = pd.DataFrame({"path": paths})
+        # Show unique artifact paths only
+        artifact_df = pd.DataFrame({"path": unique_paths})
         components.append(pn.pane.DataFrame(artifact_df, index=False, sizing_mode="stretch_width"))
 
         # Preview content for Parquet files
-        parquet_paths = [p for p in paths if p.endswith(".parquet")]
+        parquet_paths = [p for p in unique_paths if p.endswith(".parquet")]
         if parquet_paths:
             try:
                 preview = pd.read_parquet(parquet_paths[0]).head(20)
@@ -226,7 +228,7 @@ def _aggregate_artifacts(
         widget = registry.get(filter_name)
         if widget is not None:
             try:
-                components.append(widget.panel(paths, selected_index=None))
+                components.append(widget.panel(unique_paths, selected_index=None))
             except Exception as exc:  # noqa: BLE001
                 components.append(pn.pane.Markdown(f"*Widget error: {exc}*"))
 
