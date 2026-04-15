@@ -22,7 +22,7 @@ Suitable for CPU-bound workloads that benefit from true parallelism.
 
 from __future__ import annotations
 
-from concurrent.futures import Future, ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from physicsnemo_curator.run.base import (
@@ -107,20 +107,40 @@ class ProcessPoolBackend(RunBackend):
             with ProcessPoolExecutor(**executor_kwargs) as executor:
                 future_to_idx: dict[Future[list[str]], int] = {}
                 future_to_slot: dict[Future[list[str]], int] = {}
+                pending: set[Future[list[str]]] = set()
 
-                for pos, idx in enumerate(indices):
-                    fut_single: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, idx))
-                    future_to_idx[fut_single] = idx
-                    slot = pos % n_jobs
-                    future_to_slot[fut_single] = slot
-                    if pos < n_jobs:
-                        display.worker_start(slot, idx)
+                # Submit initial batch (one per worker)
+                next_submit = 0
+                for slot in range(min(n_jobs, len(indices))):
+                    idx = indices[next_submit]
+                    fut: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, idx))
+                    future_to_idx[fut] = idx
+                    future_to_slot[fut] = slot
+                    pending.add(fut)
+                    display.worker_start(slot, idx)
+                    next_submit += 1
 
-                for future in as_completed(future_to_idx):
-                    idx = future_to_idx[future]
-                    slot = future_to_slot[future]
-                    result_map[idx] = future.result()
-                    display.worker_done(slot)
+                # Process completions and submit new tasks
+                while pending:
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        idx = future_to_idx[future]
+                        slot = future_to_slot[future]
+                        result_map[idx] = future.result()
+
+                        # Submit next task to this slot if available
+                        if next_submit < len(indices):
+                            next_idx = indices[next_submit]
+                            fut_next: Future[list[str]] = executor.submit(
+                                process_single_index_packed, (pipeline, next_idx)
+                            )
+                            future_to_idx[fut_next] = next_idx
+                            future_to_slot[fut_next] = slot
+                            pending.add(fut_next)
+                            display.worker_start(slot, next_idx)
+                            next_submit += 1
+                        else:
+                            display.worker_done(slot)
         finally:
             display.close()
 
