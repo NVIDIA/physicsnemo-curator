@@ -128,6 +128,9 @@ class ProcessPoolBackend(RunBackend):
                         slot = future_to_slot[future]
                         result_map[idx] = future.result()
 
+                        # Update progress bar for completed item
+                        display.complete_item()
+
                         # Submit next task to this slot if available
                         if next_submit < len(indices):
                             next_idx = indices[next_submit]

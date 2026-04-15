@@ -263,7 +263,7 @@ _MAX_WORKER_BARS = 8
 class WorkerProgressDisplay:
     """Multi-line progress display showing per-worker activity.
 
-    Renders an overall progress bar plus one bar per active worker
+    Renders an overall progress bar plus optionally one bar per active worker
     (up to :data:`_MAX_WORKER_BARS`).  Falls back gracefully when
     *tqdm* is not installed or progress is disabled.
 
@@ -277,6 +277,9 @@ class WorkerProgressDisplay:
         Whether to show progress at all.
     desc : str
         Description label for the overall bar.
+    show_worker_bars : bool
+        Whether to show per-worker progress bars. Defaults to False
+        to avoid console conflicts with multiple processes.
     """
 
     def __init__(
@@ -286,9 +289,11 @@ class WorkerProgressDisplay:
         *,
         enabled: bool = True,
         desc: str = "run_pipeline",
+        show_worker_bars: bool = False,
     ) -> None:
         self._enabled = enabled
-        self._n_display = min(n_workers, _MAX_WORKER_BARS)
+        self._show_worker_bars = show_worker_bars
+        self._n_display = min(n_workers, _MAX_WORKER_BARS) if show_worker_bars else 0
         self._main_bar: Any = None
         self._worker_bars: list[Any] = []
         self._tqdm_cls: Any = None
@@ -319,16 +324,17 @@ class WorkerProgressDisplay:
             leave=True,
         )
 
-        # Positions 1..n_display: per-worker bars
-        for w in range(self._n_display):
-            bar = tqdm(
-                total=0,
-                desc=f"  Worker {w}",
-                bar_format="  {desc}",
-                position=w + 1,
-                leave=False,
-            )
-            self._worker_bars.append(bar)
+        # Positions 1..n_display: per-worker bars (only if requested)
+        if show_worker_bars:
+            for w in range(self._n_display):
+                bar = tqdm(
+                    total=0,
+                    desc=f"  Worker {w}",
+                    bar_format="  {desc}",
+                    position=w + 1,
+                    leave=False,
+                )
+                self._worker_bars.append(bar)
 
     @property
     def active(self) -> bool:
@@ -351,15 +357,13 @@ class WorkerProgressDisplay:
             bar.refresh()
 
     def worker_done(self, worker_id: int) -> None:
-        """Mark a worker as idle and update the overall bar.
+        """Mark a worker as idle (does NOT update main bar - use complete_item).
 
         Parameters
         ----------
         worker_id : int
             Zero-based worker identifier.
         """
-        if self._main_bar is not None:
-            self._main_bar.update(1)
         if worker_id < self._n_display and self._worker_bars:
             bar = self._worker_bars[worker_id]
             bar.set_description_str(f"  Worker {worker_id}: idle")

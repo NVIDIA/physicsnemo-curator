@@ -110,6 +110,7 @@ class ThreadPoolBackend(RunBackend):
             slot = _get_slot()
             display.worker_start(slot, idx)
             result = process_single_index(pipeline, idx)
+            display.complete_item()
             display.worker_done(slot)
             return result
 

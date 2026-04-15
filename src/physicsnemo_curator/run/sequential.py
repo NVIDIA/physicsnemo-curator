@@ -80,6 +80,7 @@ class SequentialBackend(RunBackend):
                 display.worker_start(0, idx)
                 results.append(pipeline[idx])
                 _flush_filters(pipeline, idx)
+                display.complete_item()
                 display.worker_done(0)
         finally:
             display.close()
