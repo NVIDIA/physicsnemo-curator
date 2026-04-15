@@ -34,3 +34,15 @@ class TestAtomicStatsScatterWidget:
         widget = AtomicStatsScatterWidget()
         assert widget.name == "Atomic Statistics Scatter"
         assert widget.filter_name == "AtomicStatsFilter"
+
+    def test_panel_empty_artifacts(self) -> None:
+        """Widget returns message when no artifacts provided."""
+        import panel as pn
+
+        from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
+
+        widget = AtomicStatsScatterWidget()
+        result = widget.panel([])
+
+        assert isinstance(result, pn.pane.Markdown)
+        assert "No AtomicStatsFilter artifacts" in result.object

@@ -51,4 +51,7 @@ class AtomicStatsScatterWidget:
         pn.viewable.Viewable
             A Panel Row containing sidebar controls and scatter plot.
         """
+        if not artifact_paths:
+            return pn.pane.Markdown("*No AtomicStatsFilter artifacts found.*")
+
         return pn.pane.Markdown("*Widget not yet implemented.*")
