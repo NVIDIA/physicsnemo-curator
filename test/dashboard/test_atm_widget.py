@@ -107,3 +107,17 @@ class TestAtomicStatsScatterWidget:
         plot_area = result[1]
         # Should contain a HoloViews pane
         assert isinstance(plot_area, (pn.pane.HoloViews, pn.Column))
+
+
+class TestWidgetRegistry:
+    """Tests for AtomicStatsScatterWidget registration."""
+
+    def test_widget_registered(self) -> None:
+        """AtomicStatsScatterWidget is registered in WidgetRegistry."""
+        from physicsnemo_curator.dashboard.widgets import WidgetRegistry
+
+        registry = WidgetRegistry()
+        provider = registry.get("AtomicStatsFilter")
+
+        assert provider is not None
+        assert provider.name == "Atomic Statistics Scatter"

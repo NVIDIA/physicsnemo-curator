@@ -86,3 +86,10 @@ class WidgetRegistry:
             self.register(MeanFilterWidget())
         except Exception:  # noqa: BLE001
             logger.debug("MeanFilterWidget not available", exc_info=True)
+
+        try:
+            from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
+
+            self.register(AtomicStatsScatterWidget())
+        except Exception:  # noqa: BLE001
+            logger.debug("AtomicStatsScatterWidget not available", exc_info=True)
