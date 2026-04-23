@@ -22,16 +22,15 @@ Suitable for I/O-bound workloads where the GIL is not a bottleneck.
 
 from __future__ import annotations
 
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from physicsnemo_curator.run.base import (
     RunBackend,
     RunConfig,
-    WorkerProgressDisplay,
     process_single_index,
 )
+from physicsnemo_curator.run.progress_monitor import start_progress_monitor
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -87,45 +86,13 @@ class ThreadPoolBackend(RunBackend):
         if "max_workers" not in executor_kwargs:
             executor_kwargs["max_workers"] = n_jobs
 
-        display = WorkerProgressDisplay(
-            total=len(indices),
-            n_workers=n_jobs,
-            enabled=config.progress,
-        )
-
-        # Map worker threads to display slots
-        _slot_lock = threading.Lock()
-        _thread_slots: dict[int, int] = {}
-        _next_slot = [0]
-
-        def _get_slot() -> int:
-            tid = threading.get_ident()
-            with _slot_lock:
-                if tid not in _thread_slots:
-                    _thread_slots[tid] = _next_slot[0]
-                    _next_slot[0] += 1
-                return _thread_slots[tid]
-
-        def _process_tracked(idx: int) -> list[str]:
-            slot = _get_slot()
-            display.worker_start(slot, idx)
-            result = process_single_index(pipeline, idx)
-            display.complete_item()
-            display.worker_done(slot)
-            return result
-
-        # Use as_completed so the main bar updates as soon as each
-        # future finishes rather than waiting for ordered completion.
         result_map: dict[int, list[str]] = {}
-        try:
-            with ThreadPoolExecutor(**executor_kwargs) as executor:
-                future_to_idx = {executor.submit(_process_tracked, idx): idx for idx in indices}
+        with start_progress_monitor(pipeline, config), ThreadPoolExecutor(**executor_kwargs) as executor:
+            future_to_idx = {executor.submit(process_single_index, pipeline, idx): idx for idx in indices}
 
-                for future in as_completed(future_to_idx):
-                    idx = future_to_idx[future]
-                    result_map[idx] = future.result()
-        finally:
-            display.close()
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                result_map[idx] = future.result()
 
         # Return results in original index order
         return [result_map[idx] for idx in indices]
