@@ -98,3 +98,13 @@ class MeanFilterWidget:
         header = pn.pane.Markdown(f"### MeanFilter — All Indices ({len(df)} rows)")
         table = pn.pane.DataFrame(df, index=False, sizing_mode="stretch_width")
         return pn.Column(header, table)
+
+    def layout_hints(self) -> dict[str, int]:
+        """Declare grid space preferences.
+
+        Returns
+        -------
+        dict[str, int]
+            Grid column and row span.
+        """
+        return {"cols": 6, "rows": 2}

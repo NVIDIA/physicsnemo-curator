@@ -29,7 +29,7 @@ class WidgetProvider(Protocol):
     """Protocol for filter-specific artifact visualization widgets.
 
     Implementations must declare *name* and *filter_name* class attributes
-    and implement a :meth:`panel` method that returns a Panel component.
+    and implement :meth:`panel` and :meth:`layout_hints` methods.
     """
 
     name: str
@@ -56,5 +56,16 @@ class WidgetProvider(Protocol):
         -------
         pn.viewable.Viewable
             A Panel component (pane, widget, row, column, etc.).
+        """
+        ...
+
+    def layout_hints(self) -> dict[str, int]:
+        """Declare grid space preferences for GridStack placement.
+
+        Returns
+        -------
+        dict[str, int]
+            ``cols``: number of GridStack columns to span (1-12).
+            ``rows``: number of GridStack rows to span (1+).
         """
         ...

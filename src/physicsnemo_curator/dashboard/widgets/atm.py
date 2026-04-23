@@ -230,3 +230,13 @@ class AtomicStatsScatterWidget:
             return None
 
         return pd.concat(frames, ignore_index=True)
+
+    def layout_hints(self) -> dict[str, int]:
+        """Declare grid space preferences.
+
+        Returns
+        -------
+        dict[str, int]
+            Grid column and row span.
+        """
+        return {"cols": 12, "rows": 3}

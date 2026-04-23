@@ -108,6 +108,19 @@ class TestAtomicStatsScatterWidget:
         # Should contain a HoloViews pane
         assert isinstance(plot_area, (pn.pane.HoloViews, pn.Column))
 
+    def test_layout_hints(self) -> None:
+        """Widget declares grid layout hints."""
+        from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
+
+        widget = AtomicStatsScatterWidget()
+        hints = widget.layout_hints()
+
+        assert isinstance(hints, dict)
+        assert "cols" in hints
+        assert "rows" in hints
+        assert 1 <= hints["cols"] <= 12
+        assert hints["rows"] >= 1
+
 
 class TestWidgetRegistry:
     """Tests for AtomicStatsScatterWidget registration."""
@@ -121,3 +134,18 @@ class TestWidgetRegistry:
 
         assert provider is not None
         assert provider.name == "Atomic Statistics Scatter"
+
+
+class TestMeanFilterWidget:
+    """Tests for MeanFilterWidget."""
+
+    def test_layout_hints(self) -> None:
+        """Widget declares grid layout hints."""
+        from physicsnemo_curator.dashboard.widgets.mesh import MeanFilterWidget
+
+        widget = MeanFilterWidget()
+        hints = widget.layout_hints()
+
+        assert isinstance(hints, dict)
+        assert hints["cols"] == 6
+        assert hints["rows"] == 2
