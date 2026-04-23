@@ -20,6 +20,13 @@ from __future__ import annotations
 
 import panel as pn
 
+try:
+    import panel_material_ui as pmui
+except ImportError as exc:
+    raise ImportError(
+        "panel-material-ui is required for the dashboard. Install it with: pip install 'physicsnemo-curator[dashboard]'"
+    ) from exc
+
 from physicsnemo_curator.dashboard.data import DashboardStore
 from physicsnemo_curator.dashboard.views.overview import overview_tab
 from physicsnemo_curator.dashboard.views.performance import performance_tab
@@ -32,6 +39,8 @@ class DashboardApp:
 
     Creates a 3-tab Panel application (Overview, Pipeline, Performance)
     backed by a :class:`DashboardStore` and auto-refreshes on a timer.
+    Uses ``panel-material-ui`` for Material Design theming and
+    ``pn.GridStack`` for draggable tile layouts within each tab.
     """
 
     def __init__(self, db_path: str) -> None:
@@ -44,35 +53,48 @@ class DashboardApp:
         """
         self.store = DashboardStore(db_path)
         self.widget_registry = WidgetRegistry()
-        self._tabs: pn.Tabs | None = None
+        self._page: pmui.Page | None = None
         self._periodic: pn.state.PeriodicCallback | None = None  # type: ignore[name-defined]  # ty: ignore[unresolved-attribute]
 
-    def _build_tabs(self) -> pn.Tabs:
-        """Build the tab layout.
+    def _build_app(self) -> pmui.Page:
+        """Build the application shell with Material UI theming.
 
         Returns
         -------
-        pn.Tabs
-            The 3-tab dashboard layout.
+        pmui.Page
+            The themed dashboard page.
         """
-        return pn.Tabs(
+        pn.extension("gridstack")
+
+        tabs = pmui.Tabs(
             ("Overview", overview_tab(self.store)),
             ("Pipeline", pipeline_tab(self.store, self.widget_registry)),
             ("Performance", performance_tab(self.store)),
-            sizing_mode="stretch_width",
         )
 
-    def servable(self) -> pn.Tabs:
-        """Return the Panel Tabs object for embedding in notebooks.
+        page = pmui.Page(
+            main=[tabs],
+            title="PhysicsNeMo Curator",
+            theme_toggle=True,
+            theme_config={
+                "palette": {
+                    "primary": {"main": "#76b900"},  # NVIDIA green
+                }
+            },
+        )
+        return page
+
+    def servable(self) -> pmui.Page:
+        """Return the Page object for embedding in notebooks.
 
         Returns
         -------
-        pn.Tabs
-            The dashboard tabs, ready for ``panel.servable()``.
+        pmui.Page
+            The dashboard page, ready for ``panel.servable()``.
         """
-        if self._tabs is None:
-            self._tabs = self._build_tabs()
-        return self._tabs
+        if self._page is None:
+            self._page = self._build_app()
+        return self._page
 
     def serve(self, port: int = 5006, open_browser: bool = True) -> None:
         """Start the Panel server.
@@ -84,15 +106,15 @@ class DashboardApp:
         open_browser : bool
             Whether to open a browser window on launch.
         """
-        if self._tabs is None:
-            self._tabs = self._build_tabs()
+        if self._page is None:
+            self._page = self._build_app()
 
         # Set up auto-refresh
         def _refresh() -> None:
             self.store.param.trigger("refresh")
 
         pn.serve(
-            self._tabs,
+            self._page,
             port=port,
             show=open_browser,
             title="PhysicsNeMo Curator Dashboard",
