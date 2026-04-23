@@ -14,18 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for AtomicStatsScatterWidget."""
+"""Tests for filter dashboard widgets and WidgetRegistry."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import pandas as pd
 import pytest
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+pd = pytest.importorskip("pandas")
 pytest.importorskip("panel")
 pytest.importorskip("holoviews")
 
