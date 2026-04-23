@@ -60,7 +60,7 @@ class ExecutionScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Yield title, progress bar, and status label."""
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         total = len(app.state.pipeline) if app.state.pipeline else 0
 
         yield Static("Executing Pipeline...", id="exec-title")
@@ -79,21 +79,21 @@ class ExecutionScreen(Screen[None]):
         list[list[str]]
             Output paths from each pipeline index.
         """
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         pipeline = app.state.pipeline
-        n = len(pipeline)
+        n = len(pipeline)  # ty: ignore[invalid-argument-type]
         all_paths: list[list[str]] = []
         start = time.monotonic()
 
         for i in range(n):
-            paths = pipeline[i]
+            paths = pipeline[i]  # ty: ignore[not-subscriptable]
             all_paths.append(paths)
             elapsed = time.monotonic() - start
             # Post UI updates via call_from_thread
             self.app.call_from_thread(self._update_progress, i + 1, n, elapsed)
 
         # Flush stateful filters
-        for f in pipeline.filters:
+        for f in pipeline.filters:  # ty: ignore[unresolved-attribute]
             if hasattr(f, "flush"):
                 flush = getattr(f, "flush")  # noqa: B009
                 flush()
@@ -122,7 +122,7 @@ class ExecutionScreen(Screen[None]):
         if event.state == WorkerState.SUCCESS:
             from physicsnemo_curator.wiz.screens.result import ResultScreen
 
-            app: CuratorApp = self.app  # type: ignore[assignment]
+            app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
             all_paths = event.worker.result
             app.push_screen(ResultScreen(all_paths=all_paths))
 

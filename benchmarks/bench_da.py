@@ -214,7 +214,7 @@ class TimeZarrSinkWrite:
 
     def time_write(self, n_lat):
         """Write a single DataArray via ZarrSink."""
-        self.sink(iter([self.da]), 0)  # ty: ignore[invalid-argument-type]
+        self.sink(iter([self.da]), 0)
 
     def teardown(self, n_lat):
         """Remove temporary directory."""
@@ -240,7 +240,7 @@ class TimeNetCDF4SinkWrite:
 
     def time_write(self, n_lat):
         """Write a single DataArray via NetCDF4Sink."""
-        self.sink(iter([self.da]), 0)  # ty: ignore[invalid-argument-type]
+        self.sink(iter([self.da]), 0)
 
     def teardown(self, n_lat):
         """Remove temporary directory."""
@@ -269,11 +269,11 @@ class TimeSinkComparison:
 
     def time_zarr(self, n_lat):
         """Write via ZarrSink."""
-        self.zarr_sink(iter([self.da]), 0)  # ty: ignore[invalid-argument-type]
+        self.zarr_sink(iter([self.da]), 0)
 
     def time_netcdf4(self, n_lat):
         """Write via NetCDF4Sink."""
-        self.nc_sink(iter([self.da]), 0)  # ty: ignore[invalid-argument-type]
+        self.nc_sink(iter([self.da]), 0)
 
     def teardown(self, n_lat):
         """Remove temporary directories."""

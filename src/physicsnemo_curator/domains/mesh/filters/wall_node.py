@@ -91,7 +91,7 @@ def _compute_keep_mask(
         Boolean mask of shape ``(N,)`` — ``True`` for nodes to keep.
     """
     # Stack displacements: (T, N, 3).
-    disp_stack = torch.stack([point_data[k] for k in disp_keys], dim=0)  # ty: ignore[invalid-argument-type]  # TensorDict subscript returns Tensor at runtime
+    disp_stack = torch.stack([point_data[k] for k in disp_keys], dim=0)
     # Reference is first timestep.
     variation = (disp_stack - disp_stack[0:1]).abs()  # (T, N, 3)
     max_variation = variation.amax(dim=(0, 2))  # (N,)
@@ -160,8 +160,8 @@ def _filter_tensordict(
     idx = torch.from_numpy(np.where(mask)[0] if mask.dtype == np.bool_ else mask).long()
     filtered: dict[str, torch.Tensor] = {}
     for key in td.keys():  # noqa: SIM118
-        filtered[key] = td[key][idx]  # ty: ignore[invalid-assignment]  # TensorDict subscript returns Tensor at runtime
-    return TensorDict(filtered, batch_size=[new_size])  # ty: ignore[invalid-argument-type]  # TensorDict accepts dict at runtime
+        filtered[key] = td[key][idx]
+    return TensorDict(filtered, batch_size=[new_size])
 
 
 class WallNodeFilter(Filter["Mesh"]):

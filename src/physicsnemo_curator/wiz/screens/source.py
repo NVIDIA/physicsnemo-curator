@@ -73,7 +73,7 @@ class SourceScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Yield step label, source selector, param form, and nav buttons."""
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         submodule = app.state.submodule
         sources = registry.sources(submodule)
 
@@ -91,7 +91,7 @@ class SourceScreen(Screen[None]):
         if event.select.id != "source-select":
             return
 
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         container = self.query_one("#param-container", VerticalScroll)
         container.remove_children()
 
@@ -125,7 +125,7 @@ class SourceScreen(Screen[None]):
         if event.button.id != "next-btn":
             return
 
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
 
         select = self.query_one("#source-select", Select)
         if select.value is Select.BLANK:

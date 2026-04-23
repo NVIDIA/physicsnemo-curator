@@ -46,7 +46,7 @@ class WidgetRegistry:
             A :class:`~physicsnemo_curator.core.base.Filter` subclass
             whose ``dashboard_panel`` classmethod returns non-None.
         """
-        self._filter_classes[filter_cls.name] = filter_cls
+        self._filter_classes[filter_cls.name] = filter_cls  # ty: ignore[unresolved-attribute]
 
     def get_panel(
         self,
@@ -73,7 +73,7 @@ class WidgetRegistry:
         cls = self._filter_classes.get(filter_name)
         if cls is None:
             return None
-        return cls.dashboard_panel(artifact_paths, selected_index)
+        return cls.dashboard_panel(artifact_paths, selected_index)  # ty: ignore[unresolved-attribute]
 
     def get_layout_hints(self, filter_name: str) -> dict[str, int]:
         """Look up layout hints for a filter name.
@@ -91,7 +91,7 @@ class WidgetRegistry:
         cls = self._filter_classes.get(filter_name)
         if cls is None:
             return {"cols": 6, "rows": 2}
-        return cls.dashboard_layout_hints()
+        return cls.dashboard_layout_hints()  # ty: ignore[unresolved-attribute]
 
     def list_providers(self) -> dict[str, str]:
         """Return a mapping of filter name to filter name for all registered widgets.

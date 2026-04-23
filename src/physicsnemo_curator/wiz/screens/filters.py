@@ -75,7 +75,7 @@ class FilterScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Yield filter selection list, param area, and nav buttons."""
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         submodule = app.state.submodule
         filters = registry.filters(submodule)
 
@@ -95,7 +95,7 @@ class FilterScreen(Screen[None]):
 
     def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
         """Rebuild parameter forms when selection changes."""
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         container = self.query_one("#filter-params", VerticalScroll)
         container.remove_children()
 
@@ -141,7 +141,7 @@ class FilterScreen(Screen[None]):
         if event.button.id != "next-btn":
             return
 
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         filters = registry.filters(app.state.submodule)
 
         # Get selected filters (may be empty — that's fine)

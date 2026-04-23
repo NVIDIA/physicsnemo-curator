@@ -54,7 +54,7 @@ class DashboardApp:
         self.store = DashboardStore(db_path)
         self.widget_registry = WidgetRegistry()
         self._page: pmui.Page | None = None
-        self._periodic: pn.state.PeriodicCallback | None = None  # type: ignore[name-defined]  # ty: ignore[unresolved-attribute]
+        self._periodic: pn.state.PeriodicCallback | None = None  # type: ignore[name-defined]
 
     def _build_app(self) -> pmui.Page:
         """Build the application shell with Material UI theming.

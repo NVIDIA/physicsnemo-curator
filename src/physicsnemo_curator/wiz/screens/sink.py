@@ -74,7 +74,7 @@ class SinkScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Yield step label, sink selector, param form, and nav buttons."""
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         submodule = app.state.submodule
         sinks = registry.sinks(submodule)
 
@@ -92,7 +92,7 @@ class SinkScreen(Screen[None]):
         if event.select.id != "sink-select":
             return
 
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         container = self.query_one("#param-container", VerticalScroll)
         container.remove_children()
 
@@ -126,7 +126,7 @@ class SinkScreen(Screen[None]):
         if event.button.id != "next-btn":
             return
 
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         select = self.query_one("#sink-select", Select)
         if select.value is Select.BLANK:
             self.notify("Please select a sink", severity="warning")
@@ -164,7 +164,7 @@ class SinkScreen(Screen[None]):
 
         # Build the full pipeline
         pipeline = Pipeline(
-            source=app.state.source_instance,
+            source=app.state.source_instance,  # ty: ignore[invalid-argument-type]
             filters=app.state.filter_instances,
             sink=sink_instance,
         )

@@ -80,7 +80,7 @@ class WelcomeScreen(Screen[None]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle mode selection."""
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
 
         if event.button.id == "build-btn":
             app.state.mode = "build"
@@ -94,7 +94,7 @@ class WelcomeScreen(Screen[None]):
                 load_input.styles.display = "block"
                 load_input.focus()
             else:
-                load_input.styles.display = "none"
+                load_input.styles.display = "none"  # ty: ignore[invalid-assignment]
 
         elif event.button.id == "cache-btn":
             from physicsnemo_curator.wiz.screens.cache import CacheScreen
@@ -105,7 +105,7 @@ class WelcomeScreen(Screen[None]):
         """Load a pipeline file and push the summary screen."""
         from physicsnemo_curator.core.serialization import load_pipeline
 
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         path = event.value.strip()
         if not path:
             return

@@ -65,7 +65,7 @@ class ResultScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Yield result summary and action buttons."""
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         pipeline = app.state.pipeline
         n = len(pipeline) if pipeline else 0
         total_outputs = sum(len(p) for p in self._all_paths)
@@ -88,7 +88,7 @@ class ResultScreen(Screen[None]):
         if event.button.id == "new-btn":
             from physicsnemo_curator.wiz.screens.welcome import WelcomeScreen
 
-            app: CuratorApp = self.app  # type: ignore[assignment]
+            app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
             app.state.reset()
             # Clear the screen stack and start fresh
             while len(self.app.screen_stack) > 1:

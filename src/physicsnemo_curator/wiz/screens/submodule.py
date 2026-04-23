@@ -113,7 +113,7 @@ class SubmoduleScreen(Screen[None]):
         if event.button.id != "next-btn":
             return
 
-        app: CuratorApp = self.app  # type: ignore[assignment]
+        app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         select = self.query_one("#submodule-select", Select)
         value = select.value
 
