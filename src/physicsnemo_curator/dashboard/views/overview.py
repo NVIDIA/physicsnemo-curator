@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import panel as pn
+import panel_material_ui as pmui
 
 if TYPE_CHECKING:
     from physicsnemo_curator.dashboard.data import DashboardStore
@@ -210,7 +211,7 @@ def _error_log(store: DashboardStore) -> pn.Column:
     )
 
 
-def overview_tab(store: DashboardStore) -> pn.Column:
+def overview_tab(store: DashboardStore) -> pn.GridStack:
     """Build the Overview tab layout.
 
     Parameters
@@ -220,19 +221,17 @@ def overview_tab(store: DashboardStore) -> pn.Column:
 
     Returns
     -------
-    pn.Column
-        Complete overview tab content.
+    pn.GridStack
+        GridStack layout with draggable, resizable tiles.
     """
-    return pn.Column(
-        _summary_cards(store),
-        pn.layout.Divider(),
-        _worker_table(store),
-        pn.layout.Divider(),
-        pn.Row(
-            _pipeline_info(store),
-            _recent_files(store),
-            sizing_mode="stretch_width",
-        ),
-        _error_log(store),
-        sizing_mode="stretch_width",
+    gstack = pn.GridStack(sizing_mode="stretch_both", min_height=600, allow_drag=True, allow_resize=True)
+
+    gstack[0, 0:12] = pmui.Paper(_summary_cards(store), elevation=2)
+    gstack[1:3, 0:6] = pmui.Paper(_worker_table(store), elevation=2)
+    gstack[1:3, 6:12] = pmui.Paper(
+        pn.Column(_pipeline_info(store), _recent_files(store)),
+        elevation=2,
     )
+    gstack[3:5, 0:12] = pmui.Paper(_error_log(store), elevation=2)
+
+    return gstack
