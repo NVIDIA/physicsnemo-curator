@@ -14,19 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""CLI subcommand for launching the dashboard."""
+"""Utilities for resolving and launching the pipeline metrics dashboard.
+
+Provides :func:`resolve_db_path` for resolving a database path from a file
+path, pipeline file, or hash prefix, and :func:`launch_dashboard` as the
+top-level entry point.
+"""
 
 from __future__ import annotations
 
 import json
 import pathlib
 
-import click
-
 _PIPELINE_SUFFIXES = {".yaml", ".yml", ".json"}
 
 
-def _resolve_db_path(db_path: str) -> str:
+def resolve_db_path(db_path: str) -> str:
     """Resolve *db_path* to a database file path.
 
     Resolution order:
@@ -50,7 +53,7 @@ def _resolve_db_path(db_path: str) -> str:
 
     Raises
     ------
-    click.BadParameter
+    ValueError
         If no matching database is found or the prefix is ambiguous.
     """
     p = pathlib.Path(db_path)
@@ -59,7 +62,7 @@ def _resolve_db_path(db_path: str) -> str:
     if p.exists() and p.suffix not in _PIPELINE_SUFFIXES:
         return str(p)
 
-    # 2. Pipeline file → compute config hash → look up .db
+    # 2. Pipeline file -> compute config hash -> look up .db
     if p.exists() and p.suffix.lower() in _PIPELINE_SUFFIXES:
         return _resolve_from_pipeline_file(p)
 
@@ -69,16 +72,16 @@ def _resolve_db_path(db_path: str) -> str:
     cache_dir = default_cache_dir()
     if not cache_dir.is_dir():
         msg = f"'{db_path}' is not an existing file and cache dir {cache_dir} does not exist"
-        raise click.BadParameter(msg)
+        raise ValueError(msg)
 
     matches = list(cache_dir.glob(f"{db_path}*.db"))
     if len(matches) == 0:
         msg = f"No database matching '{db_path}' in {cache_dir}"
-        raise click.BadParameter(msg)
+        raise ValueError(msg)
     if len(matches) > 1:
         stems = ", ".join(m.stem[:8] for m in matches)
         msg = f"Ambiguous prefix '{db_path}', matches: {stems}"
-        raise click.BadParameter(msg)
+        raise ValueError(msg)
 
     return str(matches[0])
 
@@ -98,7 +101,7 @@ def _resolve_from_pipeline_file(path: pathlib.Path) -> str:
 
     Raises
     ------
-    click.BadParameter
+    ValueError
         If the file cannot be parsed or no matching DB exists.
     """
     from physicsnemo_curator.core.cache import default_cache_dir
@@ -112,17 +115,17 @@ def _resolve_from_pipeline_file(path: pathlib.Path) -> str:
                 import yaml
             except ImportError as exc:
                 msg = "PyYAML is required to read pipeline YAML files. Install with: pip install pyyaml"
-                raise click.BadParameter(msg) from exc
+                raise ValueError(msg) from exc
             config = yaml.safe_load(text)
         else:
             config = json.loads(text)
     except (OSError, json.JSONDecodeError) as exc:
         msg = f"Cannot read pipeline file '{path}': {exc}"
-        raise click.BadParameter(msg) from exc
+        raise ValueError(msg) from exc
 
     if not isinstance(config, dict):
         msg = f"Pipeline file '{path}' does not contain a valid config dict"
-        raise click.BadParameter(msg)
+        raise ValueError(msg)
 
     # Strip serialization-only keys before hashing (matches _pipeline_config output)
     config.pop("version", None)
@@ -131,29 +134,27 @@ def _resolve_from_pipeline_file(path: pathlib.Path) -> str:
     db_name = f"{hash_[:16]}.db"
 
     cache_dir = default_cache_dir()
-    db_path = cache_dir / db_name
-    if not db_path.exists():
+    db_path_resolved = cache_dir / db_name
+    if not db_path_resolved.exists():
         msg = f"No database for pipeline '{path.name}' (hash {hash_[:16]}) in {cache_dir}"
-        raise click.BadParameter(msg)
+        raise ValueError(msg)
 
-    return str(db_path)
+    return str(db_path_resolved)
 
 
-@click.command("dashboard")
-@click.argument("db_path")
-@click.option("--port", default=5006, type=int, help="Server port.")
-@click.option("--no-browser", is_flag=True, help="Don't open a browser window.")
-def dashboard_cmd(db_path: str, port: int, no_browser: bool) -> None:
-    r"""Launch the pipeline metrics dashboard.
+def launch_dashboard(db_path: str, *, port: int = 5006, open_browser: bool = True) -> None:
+    """Resolve *db_path* and launch the dashboard.
 
-    DB_PATH can be:
-
-    \b
-    - A path to a PipelineStore .db file
-    - A path to a serialized pipeline (.yaml / .json)
-    - A hash prefix to look up in the cache directory
+    Parameters
+    ----------
+    db_path : str
+        File path, pipeline file path, or hash prefix.
+    port : int
+        Server port (default ``5006``).
+    open_browser : bool
+        Whether to open a browser window (default ``True``).
     """
-    resolved = _resolve_db_path(db_path)
+    resolved = resolve_db_path(db_path)
     from physicsnemo_curator.dashboard import launch
 
-    launch(resolved, port=port, open_browser=not no_browser)
+    launch(resolved, port=port, open_browser=open_browser)
