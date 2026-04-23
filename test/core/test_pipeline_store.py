@@ -536,6 +536,57 @@ class TestWorkerTracking:
         workers = store.active_workers()
         assert len(workers) == 0
 
+    def test_completed_count_starts_at_zero(self, store) -> None:
+        """New workers have completed_count=0."""
+        store.register_worker("w1", 10, "h1")
+        workers = store.active_workers()
+        assert workers[0]["completed_count"] == 0
+
+    def test_finish_index_increments_completed_count(self, store) -> None:
+        """Each call to worker_finish_index increments completed_count."""
+        store.register_worker("w1", 10, "h1")
+        store.worker_start_index("w1", 0)
+        store.worker_finish_index("w1")
+        store.worker_start_index("w1", 1)
+        store.worker_finish_index("w1")
+        workers = store.active_workers()
+        assert workers[0]["completed_count"] == 2
+
+    def test_completed_count_independent_per_worker(self, store) -> None:
+        """Each worker tracks its own completed_count."""
+        store.register_worker("w1", 10, "h1")
+        store.register_worker("w2", 11, "h2")
+        store.worker_start_index("w1", 0)
+        store.worker_finish_index("w1")
+        store.worker_start_index("w1", 1)
+        store.worker_finish_index("w1")
+        store.worker_start_index("w2", 2)
+        store.worker_finish_index("w2")
+        workers = store.active_workers()
+        w_map = {w["worker_id"]: w for w in workers}
+        assert w_map["w1"]["completed_count"] == 2
+        assert w_map["w2"]["completed_count"] == 1
+
+    def test_invocation_id_stored(self, store) -> None:
+        """Workers store their invocation_id."""
+        store.register_worker("w1", 10, "h1", invocation_id="inv-abc")
+        workers = store.active_workers()
+        assert workers[0]["invocation_id"] == "inv-abc"
+
+    def test_invocation_id_none_by_default(self, store) -> None:
+        """Workers without invocation_id have None."""
+        store.register_worker("w1", 10, "h1")
+        workers = store.active_workers()
+        assert workers[0]["invocation_id"] is None
+
+    def test_active_workers_filter_by_invocation(self, store) -> None:
+        """active_workers filters by invocation_id when provided."""
+        store.register_worker("w1", 10, "h1", invocation_id="inv-1")
+        store.register_worker("w2", 11, "h2", invocation_id="inv-2")
+        workers = store.active_workers(invocation_id="inv-1")
+        assert len(workers) == 1
+        assert workers[0]["worker_id"] == "w1"
+
 
 class TestOutputFileLookup:
     """Tests for output_files table and reverse-lookup methods."""

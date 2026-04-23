@@ -333,6 +333,7 @@ class Pipeline[T]:
     db_dir: pathlib.Path | None = None
     _store: PipelineStore | None = field(default=None, init=False, repr=False, compare=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
+    invocation_id: str | None = field(default=None, init=False, repr=False, compare=False)
 
     def filter(self, f: Filter[T]) -> Pipeline[T]:
         """Return a new pipeline with an additional filter appended.
@@ -465,7 +466,7 @@ class Pipeline[T]:
 
         # --- Worker registration ---
         worker_id = _get_worker_id()
-        store.register_worker(worker_id, os.getpid(), socket.gethostname())
+        store.register_worker(worker_id, os.getpid(), socket.gethostname(), invocation_id=self.invocation_id)
         store.worker_start_index(worker_id, index)
 
         # Checkpoint hit — return cached paths

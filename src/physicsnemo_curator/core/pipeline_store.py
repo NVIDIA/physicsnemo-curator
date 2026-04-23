@@ -569,13 +569,15 @@ CREATE TABLE IF NOT EXISTS stage_metrics (
 );
 
 CREATE TABLE IF NOT EXISTS workers (
-    worker_id      TEXT    PRIMARY KEY,
-    run_id         INTEGER NOT NULL,
-    pid            INTEGER NOT NULL,
-    hostname       TEXT    NOT NULL,
-    started_at     TEXT    NOT NULL,
-    last_heartbeat TEXT    NOT NULL,
-    current_index  INTEGER,
+    worker_id       TEXT    PRIMARY KEY,
+    run_id          INTEGER NOT NULL,
+    pid             INTEGER NOT NULL,
+    hostname        TEXT    NOT NULL,
+    started_at      TEXT    NOT NULL,
+    last_heartbeat  TEXT    NOT NULL,
+    current_index   INTEGER,
+    completed_count INTEGER NOT NULL DEFAULT 0,
+    invocation_id   TEXT,
     FOREIGN KEY (run_id) REFERENCES pipeline_runs (run_id)
 );
 
@@ -741,6 +743,14 @@ class PipelineStore:
         conn = self._connect()
         try:
             conn.executescript(_SCHEMA_SQL)
+
+            # Migrate: add new columns to workers table if missing
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(workers)").fetchall()}
+            if "completed_count" not in cols:
+                conn.execute("ALTER TABLE workers ADD COLUMN completed_count INTEGER NOT NULL DEFAULT 0")
+            if "invocation_id" not in cols:
+                conn.execute("ALTER TABLE workers ADD COLUMN invocation_id TEXT")
+            conn.commit()
 
             # Atomically insert if not exists, then SELECT to get run_id.
             # This avoids the TOCTOU race where two threads both see no
@@ -1173,7 +1183,7 @@ class PipelineStore:
 
     # -- Worker progress tracking ------------------------------------------------
 
-    def register_worker(self, worker_id: str, pid: int, hostname: str) -> None:
+    def register_worker(self, worker_id: str, pid: int, hostname: str, invocation_id: str | None = None) -> None:
         """Register a worker or update its heartbeat if already known.
 
         Parameters
@@ -1184,15 +1194,19 @@ class PipelineStore:
             OS process ID of the worker.
         hostname : str
             Hostname of the machine running the worker.
+        invocation_id : str | None, optional
+            Unique identifier for this ``run_pipeline`` invocation.
+            Used to partition workers when the same pipeline is run
+            concurrently with different index sets.
         """
         now = datetime.now(tz=UTC).isoformat()
         conn = self._connect()
         try:
             conn.execute(
                 "INSERT OR IGNORE INTO workers "
-                "(worker_id, run_id, pid, hostname, started_at, last_heartbeat, current_index) "
-                "VALUES (?, ?, ?, ?, ?, ?, NULL)",
-                (worker_id, self._run_id, pid, hostname, now, now),
+                "(worker_id, run_id, pid, hostname, started_at, last_heartbeat, current_index, invocation_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
+                (worker_id, self._run_id, pid, hostname, now, now, invocation_id),
             )
             conn.execute(
                 "UPDATE workers SET last_heartbeat = ? WHERE worker_id = ?",
@@ -1235,29 +1249,42 @@ class PipelineStore:
         conn = self._connect()
         try:
             conn.execute(
-                "UPDATE workers SET current_index = NULL, last_heartbeat = ? WHERE worker_id = ?",
+                "UPDATE workers SET current_index = NULL, last_heartbeat = ?,"
+                " completed_count = completed_count + 1 WHERE worker_id = ?",
                 (now, worker_id),
             )
             conn.commit()
         finally:
             conn.close()
 
-    def active_workers(self) -> list[dict[str, Any]]:
+    def active_workers(self, invocation_id: str | None = None) -> list[dict[str, Any]]:
         """Return all workers registered for this pipeline run.
+
+        Parameters
+        ----------
+        invocation_id : str | None, optional
+            If provided, only return workers from this invocation.
 
         Returns
         -------
         list[dict[str, Any]]
             List of worker dictionaries with keys: ``worker_id``, ``pid``,
-            ``hostname``, ``started_at``, ``last_heartbeat``, ``current_index``.
+            ``hostname``, ``started_at``, ``last_heartbeat``, ``current_index``,
+            ``completed_count``, ``invocation_id``.
         """
         conn = self._connect()
         try:
-            rows = conn.execute(
-                "SELECT worker_id, pid, hostname, started_at, last_heartbeat, current_index "
-                "FROM workers WHERE run_id = ? ORDER BY started_at",
-                (self._run_id,),
-            ).fetchall()
+            query = (
+                "SELECT worker_id, pid, hostname, started_at, last_heartbeat, current_index,"
+                " completed_count, invocation_id "
+                "FROM workers WHERE run_id = ?"
+            )
+            params: list[Any] = [self._run_id]
+            if invocation_id is not None:
+                query += " AND invocation_id = ?"
+                params.append(invocation_id)
+            query += " ORDER BY started_at"
+            rows = conn.execute(query, params).fetchall()
             return [
                 {
                     "worker_id": r[0],
@@ -1266,6 +1293,8 @@ class PipelineStore:
                     "started_at": r[3],
                     "last_heartbeat": r[4],
                     "current_index": r[5],
+                    "completed_count": r[6],
+                    "invocation_id": r[7],
                 }
                 for r in rows
             ]
