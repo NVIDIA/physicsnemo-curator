@@ -212,3 +212,50 @@ class TestMeanFilterWidget:
         assert isinstance(hints, dict)
         assert hints["cols"] == 6
         assert hints["rows"] == 2
+
+
+@pytest.fixture
+def mock_mean_parquet(tmp_path: Path) -> str:
+    """Create a mock MeanFilter parquet file."""
+    df = pd.DataFrame(
+        {
+            "n_points": [100, 200],
+            "n_cells": [50, 100],
+            "point_data/velocity": [1.5, 2.3],
+            "point_data/pressure": [101.3, 99.8],
+        }
+    )
+    path = tmp_path / "means.parquet"
+    df.to_parquet(path)
+    return str(path)
+
+
+@pytest.mark.skipif(not _has_torch, reason="torch not installed")
+class TestMeanFilterDashboard:
+    """Tests for MeanFilter dashboard classmethods."""
+
+    def test_dashboard_panel_empty_artifacts(self) -> None:
+        """Returns Markdown message when no artifacts provided."""
+        import panel as pn
+
+        from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+
+        result = MeanFilter.dashboard_panel([])
+        assert isinstance(result, pn.pane.Markdown)
+        assert "No Mean Statistics artifacts" in result.object
+
+    def test_dashboard_panel_overview_mode(self, mock_mean_parquet: str) -> None:
+        """Returns a Column with header and table in overview mode."""
+        import panel as pn
+
+        from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+
+        result = MeanFilter.dashboard_panel([mock_mean_parquet])
+        assert isinstance(result, pn.Column)
+
+    def test_dashboard_layout_hints(self) -> None:
+        """Returns half-width, 2-row layout."""
+        from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
+
+        hints = MeanFilter.dashboard_layout_hints()
+        assert hints == {"cols": 6, "rows": 2}

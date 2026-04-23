@@ -25,7 +25,7 @@ is yielded unchanged (pass-through).
 from __future__ import annotations
 
 import pathlib
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -244,3 +244,82 @@ class MeanFilter(Filter["Mesh"]):
                     row[f"cell_data/{key}"] = mean_val
 
         return row
+
+    @classmethod
+    def dashboard_panel(
+        cls,
+        artifact_paths: list[str],
+        selected_index: int | None = None,
+    ) -> Any:
+        """Return a visualization of mean statistics artifacts.
+
+        In overview mode (no selected index), displays a table of all
+        rows.  In drill-down mode, shows a bar chart for the selected
+        index and highlights its row in the table.
+
+        Parameters
+        ----------
+        artifact_paths : list[str]
+            Paths to Parquet files produced by this filter.
+        selected_index : int or None
+            Currently selected pipeline index, if any.
+
+        Returns
+        -------
+        pn.viewable.Viewable or None
+            A Panel Column with table and optional bar chart, or a
+            Markdown message if no data is available.
+        """
+        import pandas as pd
+        import panel as pn
+
+        if not artifact_paths:
+            return pn.pane.Markdown("*No Mean Statistics artifacts found.*")
+
+        frames = []
+        for path in artifact_paths:
+            try:
+                frames.append(pd.read_parquet(path))
+            except Exception:  # noqa: BLE001
+                continue
+
+        if not frames:
+            return pn.pane.Markdown("*Could not read any Mean Statistics artifacts.*")
+
+        df = pd.concat(frames, ignore_index=True)
+        field_cols = [c for c in df.columns if "/" in c]
+
+        if selected_index is not None and selected_index < len(df):
+            row = df.iloc[selected_index]
+            field_values = {col: row[col] for col in field_cols if pd.notna(row[col])}
+
+            if field_values:
+                bar_df = pd.DataFrame({"field": list(field_values.keys()), "mean": list(field_values.values())})
+                bar_plot = pn.pane.DataFrame(bar_df, index=False, sizing_mode="stretch_width")
+            else:
+                bar_plot = pn.pane.Markdown("*No field data for this index.*")
+
+            header = pn.pane.Markdown(f"### Mean Statistics — Index {selected_index}")
+            table = pn.pane.DataFrame(
+                df.style.apply(
+                    lambda x: ["background: #e6f3ff" if x.name == selected_index else "" for _ in x],
+                    axis=1,
+                ),
+                sizing_mode="stretch_width",
+            )
+            return pn.Column(header, bar_plot, "---", "#### All Indices", table)
+
+        header = pn.pane.Markdown(f"### Mean Statistics — All Indices ({len(df)} rows)")
+        table = pn.pane.DataFrame(df, index=False, sizing_mode="stretch_width")
+        return pn.Column(header, table)
+
+    @classmethod
+    def dashboard_layout_hints(cls) -> dict[str, int]:
+        """Declare grid space for the mean statistics widget.
+
+        Returns
+        -------
+        dict[str, int]
+            Half width (6 columns), 2 rows tall.
+        """
+        return {"cols": 6, "rows": 2}
