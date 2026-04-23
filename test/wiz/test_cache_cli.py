@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the psnc cache CLI commands."""
+"""Tests for the CacheScreen in the Textual wizard app."""
 
 from __future__ import annotations
 
@@ -24,16 +24,22 @@ from datetime import UTC, datetime
 
 import pytest
 
-click = pytest.importorskip("click", reason="click not installed (install wiz extra)")
-pytest.importorskip("rich", reason="rich not installed (install wiz extra)")
-
-from click.testing import CliRunner  # noqa: E402
-
-from physicsnemo_curator.wiz import main  # noqa: E402
+from physicsnemo_curator.wiz.app import CuratorApp
+from physicsnemo_curator.wiz.screens.cache import CacheScreen
 
 
 def _create_fake_db(db_path, source_name="TestSource", sink_name="TestSink"):
-    """Create a minimal pipeline DB for CLI testing."""
+    """Create a minimal pipeline DB for testing.
+
+    Parameters
+    ----------
+    db_path : pathlib.Path
+        Path to the .db file.
+    source_name : str
+        Source name in the config.
+    sink_name : str
+        Sink name in the config.
+    """
     config = {
         "source": {"class": source_name, "module": "test", "name": source_name, "description": "test", "params": {}},
         "filters": [],
@@ -64,65 +70,46 @@ def _create_fake_db(db_path, source_name="TestSource", sink_name="TestSink"):
     conn.close()
 
 
-class TestCachePath:
-    """Tests for psnc cache path."""
+class TestCacheScreen:
+    """Tests for CacheScreen using Textual's pilot API."""
 
-    def test_prints_cache_dir(self, monkeypatch, tmp_path):
-        """Prints the resolved cache directory."""
+    @pytest.mark.asyncio
+    async def test_empty_cache(self, monkeypatch, tmp_path):
+        """DataTable shows no rows when cache is empty."""
         monkeypatch.setenv("PSNC_CACHE_DIR", str(tmp_path))
-        runner = CliRunner()
-        result = runner.invoke(main, ["cache", "path"])
-        assert result.exit_code == 0
-        assert str(tmp_path) in result.output
+        app = CuratorApp()
+        async with app.run_test() as pilot:
+            app.push_screen(CacheScreen())
+            await pilot.pause()
+            table = app.screen.query_one("#cache-table")
+            assert table.row_count == 0
 
-
-class TestCacheList:
-    """Tests for psnc cache list."""
-
-    def test_empty_cache(self, monkeypatch, tmp_path):
-        """Shows message when no databases exist."""
-        monkeypatch.setenv("PSNC_CACHE_DIR", str(tmp_path))
-        runner = CliRunner()
-        result = runner.invoke(main, ["cache", "list"])
-        assert result.exit_code == 0
-        assert "No cached databases" in result.output
-
-    def test_lists_databases(self, monkeypatch, tmp_path):
-        """Lists databases with metadata."""
+    @pytest.mark.asyncio
+    async def test_lists_databases(self, monkeypatch, tmp_path):
+        """DataTable shows rows for cached databases."""
         monkeypatch.setenv("PSNC_CACHE_DIR", str(tmp_path))
         _create_fake_db(tmp_path / "abc12345.db", source_name="VTKSource")
-        runner = CliRunner()
-        result = runner.invoke(main, ["cache", "list"])
-        assert result.exit_code == 0
-        assert "VTKSource" in result.output
+        app = CuratorApp()
+        async with app.run_test() as pilot:
+            app.push_screen(CacheScreen())
+            await pilot.pause()
+            table = app.screen.query_one("#cache-table")
+            assert table.row_count == 1
 
-
-class TestCacheRm:
-    """Tests for psnc cache rm."""
-
-    def test_rm_by_hash(self, monkeypatch, tmp_path):
-        """Removes database by hash prefix."""
-        monkeypatch.setenv("PSNC_CACHE_DIR", str(tmp_path))
-        _create_fake_db(tmp_path / "abc12345.db")
-        runner = CliRunner()
-        result = runner.invoke(main, ["cache", "rm", "abc1"])
-        assert result.exit_code == 0
-        assert "Removed 1" in result.output
-        assert not (tmp_path / "abc12345.db").exists()
-
-    def test_rm_all(self, monkeypatch, tmp_path):
-        """--all removes all databases."""
+    @pytest.mark.asyncio
+    async def test_remove_all(self, monkeypatch, tmp_path):
+        """Remove All button clears all databases."""
         monkeypatch.setenv("PSNC_CACHE_DIR", str(tmp_path))
         _create_fake_db(tmp_path / "abc.db")
         _create_fake_db(tmp_path / "def.db")
-        runner = CliRunner()
-        result = runner.invoke(main, ["cache", "rm", "--all", "-y"])
-        assert result.exit_code == 0
-        assert "Removed 2" in result.output
-
-    def test_rm_no_args_fails(self, monkeypatch, tmp_path):
-        """Fails when no hash prefixes or flags given."""
-        monkeypatch.setenv("PSNC_CACHE_DIR", str(tmp_path))
-        runner = CliRunner()
-        result = runner.invoke(main, ["cache", "rm"])
-        assert result.exit_code != 0
+        app = CuratorApp()
+        async with app.run_test() as pilot:
+            app.push_screen(CacheScreen())
+            await pilot.pause()
+            table = app.screen.query_one("#cache-table")
+            assert table.row_count == 2
+            # Click Remove All
+            await pilot.click("#rm-all-btn")
+            await pilot.pause()
+            table = app.screen.query_one("#cache-table")
+            assert table.row_count == 0
