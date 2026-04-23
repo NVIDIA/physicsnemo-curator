@@ -27,9 +27,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from physicsnemo_curator.run.base import (
     RunBackend,
     RunConfig,
-    WorkerProgressDisplay,
     _flush_filters,
 )
+from physicsnemo_curator.run.progress_monitor import start_progress_monitor
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -68,21 +68,10 @@ class SequentialBackend(RunBackend):
         """
         indices = config.indices if config.indices is not None else list(range(len(pipeline)))
 
-        display = WorkerProgressDisplay(
-            total=len(indices),
-            n_workers=1,
-            enabled=config.progress,
-        )
-
         results: list[list[str]] = []
-        try:
+        with start_progress_monitor(pipeline, config):
             for idx in indices:
-                display.worker_start(0, idx)
                 results.append(pipeline[idx])
                 _flush_filters(pipeline, idx)
-                display.complete_item()
-                display.worker_done(0)
-        finally:
-            display.close()
 
         return results
