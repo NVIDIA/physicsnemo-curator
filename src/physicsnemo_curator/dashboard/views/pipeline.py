@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 import panel as pn
+import panel_material_ui as pmui
 
 if TYPE_CHECKING:
     from physicsnemo_curator.dashboard.data import DashboardStore
@@ -235,7 +236,7 @@ def _aggregate_artifacts(
     return pn.Column(*components, sizing_mode="stretch_width")
 
 
-def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.Column:
+def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.GridStack:
     """Build the Pipeline tab layout.
 
     Parameters
@@ -247,8 +248,8 @@ def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.Column:
 
     Returns
     -------
-    pn.Column
-        Complete pipeline tab content.
+    pn.GridStack
+        GridStack layout with draggable, resizable tiles.
     """
     # Pipeline structure
     structure = _pipeline_structure(store)
@@ -408,14 +409,34 @@ def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.Column:
     prev_btn.on_click(_prev_page)
     next_btn.on_click(_next_page)
 
-    return pn.Column(
-        pn.pane.Markdown("## Pipeline"),
-        structure,
-        pn.layout.Divider(),
+    # Build query controls column
+    controls = pn.Column(
         pn.Row(query_input, status_filter),
         pagination_row,
-        table_pane,
-        pn.layout.Divider(),
-        detail_pane,
-        sizing_mode="stretch_width",
     )
+
+    # Build GridStack
+    gstack = pn.GridStack(sizing_mode="stretch_both", min_height=800, allow_drag=True, allow_resize=True)
+
+    gstack[0:2, 0:12] = pmui.Paper(structure, elevation=2)
+    gstack[2:3, 0:12] = pmui.Paper(controls, elevation=2)
+    gstack[3:5, 0:8] = pmui.Paper(table_pane, elevation=2)
+    gstack[3:5, 8:12] = pmui.Paper(detail_pane, elevation=2)
+
+    # Dynamic filter widget tiles
+    next_row = 5
+    all_artifacts = store.all_artifacts()
+    for filter_name, paths in all_artifacts.items():
+        widget = registry.get(filter_name)
+        if widget is not None:
+            hints = widget.layout_hints()
+            cols = hints.get("cols", 12)
+            rows = hints.get("rows", 2)
+            try:
+                tile = widget.panel(sorted(set(paths)), selected_index=None)
+                gstack[next_row : next_row + rows, 0:cols] = pmui.Paper(tile, elevation=2)
+                next_row += rows
+            except Exception:  # noqa: BLE001
+                pass
+
+    return gstack
