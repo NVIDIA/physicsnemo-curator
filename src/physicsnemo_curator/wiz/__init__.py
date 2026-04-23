@@ -14,50 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""CLI entry point for PhysicsNeMo Curator.
+"""Entry point for the PhysicsNeMo Curator interactive wizard.
 
-Run ``psnc`` to launch the interactive pipeline wizard (default).
-Run ``psnc cache list`` to manage cached pipeline databases.
-Run ``psnc dashboard <db_path>`` to open the metrics dashboard.
-
-Requires the ``psnc[wiz]`` extra (click, questionary, rich).
+Run ``psnc`` to launch the full-screen Textual TUI.
 """
 
 from __future__ import annotations
 
-import click
-from rich.console import Console
 
-from physicsnemo_curator.wiz.cache_cli import cache_group
-from physicsnemo_curator.wiz.interactive import run_interactive
+def main() -> None:
+    """Launch the Curator Textual wizard application."""
+    from physicsnemo_curator.wiz.app import CuratorApp
 
-# Shared console for colored output
-console = Console()
-
-
-@click.group(invoke_without_command=True)
-@click.version_option(package_name="physicsnemo-curator")
-@click.pass_context
-def main(ctx: click.Context) -> None:
-    """PhysicsNeMo Curator — interactive ETL pipeline toolkit."""
-    if ctx.invoked_subcommand is None:
-        run_interactive()
-
-
-@main.command("wizard")
-def wizard_cmd() -> None:
-    """Launch the interactive pipeline wizard."""
-    run_interactive()
-
-
-main.add_command(cache_group)
-
-# Lazily register the dashboard subcommand so that importing
-# physicsnemo_curator.dashboard (which requires panel) is deferred
-# until the user actually invokes the command.
-try:
-    from physicsnemo_curator.dashboard._cli import dashboard_cmd
-
-    main.add_command(dashboard_cmd)
-except ImportError:
-    pass
+    CuratorApp().run()
