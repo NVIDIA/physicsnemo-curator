@@ -141,6 +141,24 @@ class TestWidgetRegistry:
         assert provider.name == "Atomic Statistics Scatter"
 
 
+class TestFilterDashboardDefaults:
+    """Tests for Filter base class dashboard defaults."""
+
+    def test_dashboard_panel_returns_none(self) -> None:
+        """Base Filter.dashboard_panel() returns None."""
+        from physicsnemo_curator.core.base import Filter
+
+        result = Filter.dashboard_panel([], selected_index=None)
+        assert result is None
+
+    def test_dashboard_layout_hints_defaults(self) -> None:
+        """Base Filter.dashboard_layout_hints() returns sensible defaults."""
+        from physicsnemo_curator.core.base import Filter
+
+        hints = Filter.dashboard_layout_hints()
+        assert hints == {"cols": 6, "rows": 2}
+
+
 class TestMeanFilterWidget:
     """Tests for MeanFilterWidget."""
 

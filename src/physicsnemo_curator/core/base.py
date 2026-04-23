@@ -237,6 +237,48 @@ class Filter[T](ABC):
         """
         return []
 
+    @classmethod
+    def dashboard_panel(
+        cls,
+        artifact_paths: list[str],
+        selected_index: int | None = None,
+    ) -> Any:
+        """Return a Panel component visualizing this filter's artifacts.
+
+        Override in subclasses to provide a custom dashboard widget.
+        The default returns ``None`` (no widget).  Panel is only needed
+        at runtime when a subclass actually imports it inside the method
+        body — the base class has no Panel dependency.
+
+        Parameters
+        ----------
+        artifact_paths : list[str]
+            Paths to artifact files produced by the filter.
+        selected_index : int or None
+            Currently selected pipeline index, if any.
+
+        Returns
+        -------
+        pn.viewable.Viewable or None
+            A Panel component, or ``None`` if this filter has no widget.
+        """
+        return None
+
+    @classmethod
+    def dashboard_layout_hints(cls) -> dict[str, int]:
+        """Declare grid space preferences for dashboard GridStack placement.
+
+        Override in subclasses to customize.  The default spans half the
+        grid width and 2 rows.
+
+        Returns
+        -------
+        dict[str, int]
+            ``cols``: number of GridStack columns to span (1–12).
+            ``rows``: number of GridStack rows to span (1+).
+        """
+        return {"cols": 6, "rows": 2}
+
 
 # ---------------------------------------------------------------------------
 # Sink
