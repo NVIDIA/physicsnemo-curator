@@ -168,12 +168,12 @@ def _artifact_detail(
             components.append(pn.pane.Markdown(paths_md))
 
             # Render widget if available
-            widget = registry.get(filter_name)
-            if widget is not None:
-                try:
-                    components.append(widget.panel(artifact_paths, selected_index=selected_index))
-                except Exception as exc:  # noqa: BLE001
-                    components.append(pn.pane.Markdown(f"*Widget error: {exc}*"))
+            try:
+                widget_panel = registry.get_panel(filter_name, artifact_paths, selected_index=selected_index)
+                if widget_panel is not None:
+                    components.append(widget_panel)
+            except Exception as exc:  # noqa: BLE001
+                components.append(pn.pane.Markdown(f"*Widget error: {exc}*"))
     else:
         components.append(pn.pane.Markdown("*No filter artifacts.*"))
 
@@ -226,12 +226,12 @@ def _aggregate_artifacts(
                 pass
 
         # Render widget if available
-        widget = registry.get(filter_name)
-        if widget is not None:
-            try:
-                components.append(widget.panel(unique_paths, selected_index=None))
-            except Exception as exc:  # noqa: BLE001
-                components.append(pn.pane.Markdown(f"*Widget error: {exc}*"))
+        try:
+            widget_panel = registry.get_panel(filter_name, unique_paths, selected_index=None)
+            if widget_panel is not None:
+                components.append(widget_panel)
+        except Exception as exc:  # noqa: BLE001
+            components.append(pn.pane.Markdown(f"*Widget error: {exc}*"))
 
     return pn.Column(*components, sizing_mode="stretch_width")
 
@@ -427,16 +427,15 @@ def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.GridStac
     next_row = 5
     all_artifacts = store.all_artifacts()
     for filter_name, paths in all_artifacts.items():
-        widget = registry.get(filter_name)
-        if widget is not None:
-            hints = widget.layout_hints()
-            cols = hints.get("cols", 12)
-            rows = hints.get("rows", 2)
-            try:
-                tile = widget.panel(sorted(set(paths)), selected_index=None)
+        try:
+            tile = registry.get_panel(filter_name, sorted(set(paths)), selected_index=None)
+            if tile is not None:
+                hints = registry.get_layout_hints(filter_name)
+                cols = hints.get("cols", 12)
+                rows = hints.get("rows", 2)
                 gstack[next_row : next_row + rows, 0:cols] = pmui.Paper(tile, elevation=2)
                 next_row += rows
-            except Exception:  # noqa: BLE001
-                pass
+        except Exception:  # noqa: BLE001
+            pass
 
     return gstack

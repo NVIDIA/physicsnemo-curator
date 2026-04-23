@@ -14,82 +14,111 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Widget registry for filter-specific artifact visualizations."""
+"""Widget registry mapping filter names to filter classes with dashboard widgets."""
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from physicsnemo_curator.dashboard.widgets.base import WidgetProvider
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class WidgetRegistry:
-    """Registry mapping filter names to their visualization widgets.
+    """Registry mapping filter names to filter classes for dashboard widgets.
 
-    Built-in widgets are auto-discovered on construction.  Additional
-    widgets can be registered at runtime via :meth:`register`.
+    Filters that override :meth:`~physicsnemo_curator.core.base.Filter.dashboard_panel`
+    are auto-discovered on construction.  Additional filter classes can be
+    registered at runtime via :meth:`register`.
     """
 
     def __init__(self) -> None:
-        """Initialize the registry and discover built-in widgets."""
-        self._providers: dict[str, WidgetProvider] = {}
+        """Initialize the registry and discover built-in filter widgets."""
+        self._filter_classes: dict[str, type] = {}
         self._auto_discover()
 
-    def register(self, provider: WidgetProvider) -> None:
-        """Register a widget provider for a filter name.
+    def register(self, filter_cls: type) -> None:
+        """Register a filter class that provides a dashboard widget.
 
         Parameters
         ----------
-        provider : WidgetProvider
-            Widget provider instance to register.
+        filter_cls : type
+            A :class:`~physicsnemo_curator.core.base.Filter` subclass
+            whose ``dashboard_panel`` classmethod returns non-None.
         """
-        self._providers[provider.filter_name] = provider
+        self._filter_classes[filter_cls.name] = filter_cls
 
-    def get(self, filter_name: str) -> WidgetProvider | None:
-        """Look up a widget provider by filter name.
+    def get_panel(
+        self,
+        filter_name: str,
+        artifact_paths: list[str],
+        selected_index: int | None = None,
+    ) -> Any:
+        """Look up a filter class by name and render its dashboard widget.
 
         Parameters
         ----------
         filter_name : str
-            The filter class name (e.g. ``'MeanFilter'``).
+            The filter's ``name`` class variable (as stored in the DB).
+        artifact_paths : list[str]
+            Paths to artifact files produced by the filter.
+        selected_index : int or None
+            Currently selected pipeline index, if any.
 
         Returns
         -------
-        WidgetProvider or None
-            The registered provider, or ``None`` if not found.
+        pn.viewable.Viewable or None
+            The rendered widget, or ``None`` if no widget is registered.
         """
-        return self._providers.get(filter_name)
+        cls = self._filter_classes.get(filter_name)
+        if cls is None:
+            return None
+        return cls.dashboard_panel(artifact_paths, selected_index)
+
+    def get_layout_hints(self, filter_name: str) -> dict[str, int]:
+        """Look up layout hints for a filter name.
+
+        Parameters
+        ----------
+        filter_name : str
+            The filter's ``name`` class variable.
+
+        Returns
+        -------
+        dict[str, int]
+            Grid column and row span preferences.
+        """
+        cls = self._filter_classes.get(filter_name)
+        if cls is None:
+            return {"cols": 6, "rows": 2}
+        return cls.dashboard_layout_hints()
 
     def list_providers(self) -> dict[str, str]:
-        """Return a mapping of filter name to widget display name.
+        """Return a mapping of filter name to filter name for all registered widgets.
 
         Returns
         -------
         dict[str, str]
-            ``{filter_name: widget.name}`` for all registered widgets.
+            ``{filter_name: filter_name}`` for all registered filters.
         """
-        return {k: v.name for k, v in self._providers.items()}
+        return {name: name for name in self._filter_classes}
 
     def _auto_discover(self) -> None:
-        """Register built-in widgets.
+        """Import known filter classes with dashboard widgets.
 
         Imports are deferred so the registry works even when optional
         domain dependencies are not installed.
         """
         try:
-            from physicsnemo_curator.dashboard.widgets.mesh import MeanFilterWidget
+            from physicsnemo_curator.domains.atm.filters.stats import AtomicStatsFilter
 
-            self.register(MeanFilterWidget())
+            self.register(AtomicStatsFilter)
         except Exception:  # noqa: BLE001
-            logger.debug("MeanFilterWidget not available", exc_info=True)
+            logger.debug("AtomicStatsFilter not available", exc_info=True)
 
         try:
-            from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
+            from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 
-            self.register(AtomicStatsScatterWidget())
+            self.register(MeanFilter)
         except Exception:  # noqa: BLE001
-            logger.debug("AtomicStatsScatterWidget not available", exc_info=True)
+            logger.debug("MeanFilter not available", exc_info=True)

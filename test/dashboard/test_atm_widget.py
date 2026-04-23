@@ -29,6 +29,13 @@ if TYPE_CHECKING:
 pytest.importorskip("panel")
 pytest.importorskip("holoviews")
 
+try:
+    import torch  # noqa: F401
+
+    _has_torch = True
+except ModuleNotFoundError:
+    _has_torch = False
+
 
 @pytest.fixture
 def mock_stats_parquet(tmp_path: Path) -> str:
@@ -57,96 +64,43 @@ def mock_stats_parquet(tmp_path: Path) -> str:
     return str(path)
 
 
-class TestAtomicStatsScatterWidget:
-    """Tests for AtomicStatsScatterWidget."""
-
-    def test_instantiation(self) -> None:
-        """Widget can be instantiated."""
-        from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
-
-        widget = AtomicStatsScatterWidget()
-        assert widget.name == "Atomic Statistics Scatter"
-        assert widget.filter_name == "Atomic Statistics"
-
-    def test_panel_empty_artifacts(self) -> None:
-        """Widget returns message when no artifacts provided."""
-        import panel as pn
-
-        from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
-
-        widget = AtomicStatsScatterWidget()
-        result = widget.panel([])
-
-        assert isinstance(result, pn.pane.Markdown)
-        assert "No Atomic Statistics artifacts" in result.object
-
-    def test_panel_with_data(self, mock_stats_parquet: str) -> None:
-        """Widget returns a GridStack with Paper tiles when data is provided."""
-        import panel as pn
-
-        from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
-
-        widget = AtomicStatsScatterWidget()
-        result = widget.panel([mock_stats_parquet])
-
-        # Should return a GridStack layout (sidebar + plot area in Paper tiles)
-        assert isinstance(result, pn.GridStack)
-        assert len(result.objects) == 2  # sidebar and plot area
-
-    def test_panel_contains_scatter_plot(self, mock_stats_parquet: str) -> None:
-        """Widget contains a Holoviews scatter plot in a Paper tile."""
-        import panel as pn
-        import panel_material_ui as pmui
-
-        from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
-
-        widget = AtomicStatsScatterWidget()
-        result = widget.panel([mock_stats_parquet])
-
-        # The GridStack should contain Paper tiles
-        assert isinstance(result, pn.GridStack)
-        tiles = list(result.objects.values())
-        assert len(tiles) == 2
-        # Both tiles should be Paper components
-        assert all(isinstance(t, pmui.Paper) for t in tiles)
-        # Second Paper tile wraps the HoloViews plot pane
-        plot_tile = tiles[1]
-        assert isinstance(plot_tile.objects[0], (pn.pane.HoloViews, pn.Column))
-
-    def test_layout_hints(self) -> None:
-        """Widget declares grid layout hints."""
-        from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
-
-        widget = AtomicStatsScatterWidget()
-        hints = widget.layout_hints()
-
-        assert isinstance(hints, dict)
-        assert "cols" in hints
-        assert "rows" in hints
-        assert 1 <= hints["cols"] <= 12
-        assert hints["rows"] >= 1
-
-
 class TestWidgetRegistry:
-    """Tests for AtomicStatsScatterWidget registration."""
+    """Tests for the refactored WidgetRegistry."""
 
-    def test_widget_registered(self) -> None:
-        """AtomicStatsScatterWidget is registered in WidgetRegistry."""
+    @pytest.mark.skipif(not _has_torch, reason="torch not installed")
+    def test_auto_discovers_atomic_stats(self) -> None:
+        """Registry discovers AtomicStatsFilter."""
         from physicsnemo_curator.dashboard.widgets import WidgetRegistry
 
         registry = WidgetRegistry()
-        provider = registry.get("Atomic Statistics")
+        result = registry.get_panel("Atomic Statistics", [])
+        # Should return a Markdown (empty artifacts) rather than None (no widget)
+        assert result is not None
 
-        assert provider is not None
-        assert provider.name == "Atomic Statistics Scatter"
+    def test_returns_none_for_unknown(self) -> None:
+        """Registry returns None for unknown filter names."""
+        from physicsnemo_curator.dashboard.widgets import WidgetRegistry
 
+        registry = WidgetRegistry()
+        result = registry.get_panel("NonExistentFilter", [])
+        assert result is None
 
-try:
-    import torch  # noqa: F401
+    @pytest.mark.skipif(not _has_torch, reason="torch not installed")
+    def test_get_layout_hints(self) -> None:
+        """Registry returns layout hints for known filters."""
+        from physicsnemo_curator.dashboard.widgets import WidgetRegistry
 
-    _has_torch = True
-except ModuleNotFoundError:
-    _has_torch = False
+        registry = WidgetRegistry()
+        hints = registry.get_layout_hints("Atomic Statistics")
+        assert hints == {"cols": 12, "rows": 3}
+
+    def test_get_layout_hints_default(self) -> None:
+        """Registry returns default hints for unknown filters."""
+        from physicsnemo_curator.dashboard.widgets import WidgetRegistry
+
+        registry = WidgetRegistry()
+        hints = registry.get_layout_hints("UnknownFilter")
+        assert hints == {"cols": 6, "rows": 2}
 
 
 @pytest.mark.skipif(not _has_torch, reason="torch not installed")
@@ -197,21 +151,6 @@ class TestFilterDashboardDefaults:
 
         hints = Filter.dashboard_layout_hints()
         assert hints == {"cols": 6, "rows": 2}
-
-
-class TestMeanFilterWidget:
-    """Tests for MeanFilterWidget."""
-
-    def test_layout_hints(self) -> None:
-        """Widget declares grid layout hints."""
-        from physicsnemo_curator.dashboard.widgets.mesh import MeanFilterWidget
-
-        widget = MeanFilterWidget()
-        hints = widget.layout_hints()
-
-        assert isinstance(hints, dict)
-        assert hints["cols"] == 6
-        assert hints["rows"] == 2
 
 
 @pytest.fixture
