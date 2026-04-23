@@ -27,6 +27,7 @@ requires-python = ">=3.11"
 license = "Apache-2.0"
 dependencies = [
     "fsspec>=2023.1.0",
+    "textual>=1.0",
     "tqdm>=4.0",
 ]
 
