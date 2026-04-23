@@ -28,9 +28,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from physicsnemo_curator.run.base import (
     RunBackend,
     RunConfig,
-    WorkerProgressDisplay,
     process_single_index_packed,
 )
+from physicsnemo_curator.run.progress_monitor import start_progress_monitor
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -87,12 +87,6 @@ class ProcessPoolBackend(RunBackend):
         indices = config.indices if config.indices is not None else list(range(len(pipeline)))
         n_jobs = config.resolved_n_jobs
 
-        display = WorkerProgressDisplay(
-            total=len(indices),
-            n_workers=n_jobs,
-            enabled=config.progress,
-        )
-
         # Extract ProcessPoolExecutor-specific options
         executor_kwargs = {
             k: v
@@ -103,48 +97,32 @@ class ProcessPoolBackend(RunBackend):
             executor_kwargs["max_workers"] = n_jobs
 
         result_map: dict[int, list[str]] = {}
-        try:
-            with ProcessPoolExecutor(**executor_kwargs) as executor:
-                future_to_idx: dict[Future[list[str]], int] = {}
-                future_to_slot: dict[Future[list[str]], int] = {}
-                pending: set[Future[list[str]]] = set()
+        with start_progress_monitor(pipeline, config), ProcessPoolExecutor(**executor_kwargs) as executor:
+            pending: set[Future[list[str]]] = set()
+            future_to_idx: dict[Future[list[str]], int] = {}
 
-                # Submit initial batch (one per worker)
-                next_submit = 0
-                for slot in range(min(n_jobs, len(indices))):
-                    idx = indices[next_submit]
-                    fut: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, idx))
-                    future_to_idx[fut] = idx
-                    future_to_slot[fut] = slot
-                    pending.add(fut)
-                    display.worker_start(slot, idx)
-                    next_submit += 1
+            # Submit initial batch (one per worker)
+            next_submit = 0
+            for _ in range(min(n_jobs, len(indices))):
+                idx = indices[next_submit]
+                fut: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, idx))
+                future_to_idx[fut] = idx
+                pending.add(fut)
+                next_submit += 1
 
-                # Process completions and submit new tasks
-                while pending:
-                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
-                    for future in done:
-                        idx = future_to_idx[future]
-                        slot = future_to_slot[future]
-                        result_map[idx] = future.result()
+            # Process completions and submit new tasks
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    idx = future_to_idx[future]
+                    result_map[idx] = future.result()
 
-                        # Update progress bar for completed item
-                        display.complete_item()
-
-                        # Submit next task to this slot if available
-                        if next_submit < len(indices):
-                            next_idx = indices[next_submit]
-                            fut_next: Future[list[str]] = executor.submit(
-                                process_single_index_packed, (pipeline, next_idx)
-                            )
-                            future_to_idx[fut_next] = next_idx
-                            future_to_slot[fut_next] = slot
-                            pending.add(fut_next)
-                            display.worker_start(slot, next_idx)
-                            next_submit += 1
-                        else:
-                            display.worker_done(slot)
-        finally:
-            display.close()
+                    # Submit next task if available
+                    if next_submit < len(indices):
+                        next_idx = indices[next_submit]
+                        fut_next: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, next_idx))
+                        future_to_idx[fut_next] = next_idx
+                        pending.add(fut_next)
+                        next_submit += 1
 
         return [result_map[idx] for idx in indices]
