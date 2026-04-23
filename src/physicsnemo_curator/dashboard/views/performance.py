@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 import holoviews as hv
 import numpy as np
 import panel as pn
+import panel_material_ui as pmui
 
 if TYPE_CHECKING:
     from physicsnemo_curator.dashboard.data import DashboardStore
@@ -271,7 +272,7 @@ def _resource_summary(store: DashboardStore) -> pn.Column:
     return pn.Column(*components, sizing_mode="stretch_width")
 
 
-def performance_tab(store: DashboardStore) -> pn.Column:
+def performance_tab(store: DashboardStore) -> pn.GridStack:
     """Build the Performance tab layout.
 
     Parameters
@@ -281,14 +282,13 @@ def performance_tab(store: DashboardStore) -> pn.Column:
 
     Returns
     -------
-    pn.Column
-        Complete performance tab content.
+    pn.GridStack
+        GridStack layout with draggable, resizable tiles.
     """
-    return pn.Column(
-        _timeline_scatter(store),
-        pn.layout.Divider(),
-        _stage_breakdown(store),
-        pn.layout.Divider(),
-        _resource_summary(store),
-        sizing_mode="stretch_width",
-    )
+    gstack = pn.GridStack(sizing_mode="stretch_both", min_height=600, allow_drag=True, allow_resize=True)
+
+    gstack[0:3, 0:12] = pmui.Paper(_timeline_scatter(store), elevation=2)
+    gstack[3:5, 0:6] = pmui.Paper(_stage_breakdown(store), elevation=2)
+    gstack[3:5, 6:12] = pmui.Paper(_resource_summary(store), elevation=2)
+
+    return gstack
