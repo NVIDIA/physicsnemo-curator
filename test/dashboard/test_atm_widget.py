@@ -141,6 +141,46 @@ class TestWidgetRegistry:
         assert provider.name == "Atomic Statistics Scatter"
 
 
+try:
+    import torch  # noqa: F401
+
+    _has_torch = True
+except ModuleNotFoundError:
+    _has_torch = False
+
+
+@pytest.mark.skipif(not _has_torch, reason="torch not installed")
+class TestAtomicStatsFilterDashboard:
+    """Tests for AtomicStatsFilter dashboard classmethods."""
+
+    def test_dashboard_panel_empty_artifacts(self) -> None:
+        """Returns Markdown message when no artifacts provided."""
+        import panel as pn
+
+        from physicsnemo_curator.domains.atm.filters.stats import AtomicStatsFilter
+
+        result = AtomicStatsFilter.dashboard_panel([])
+        assert isinstance(result, pn.pane.Markdown)
+        assert "No Atomic Statistics artifacts" in result.object
+
+    def test_dashboard_panel_with_data(self, mock_stats_parquet: str) -> None:
+        """Returns a GridStack with Paper tiles when data is provided."""
+        import panel as pn
+
+        from physicsnemo_curator.domains.atm.filters.stats import AtomicStatsFilter
+
+        result = AtomicStatsFilter.dashboard_panel([mock_stats_parquet])
+        assert isinstance(result, pn.GridStack)
+        assert len(result.objects) == 2
+
+    def test_dashboard_layout_hints(self) -> None:
+        """Returns full-width, 3-row layout."""
+        from physicsnemo_curator.domains.atm.filters.stats import AtomicStatsFilter
+
+        hints = AtomicStatsFilter.dashboard_layout_hints()
+        assert hints == {"cols": 12, "rows": 3}
+
+
 class TestFilterDashboardDefaults:
     """Tests for Filter base class dashboard defaults."""
 
