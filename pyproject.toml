@@ -32,16 +32,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cli = [
-    "click>=8.0",
-    "questionary>=2.0",
-    "rich>=13.0",
-]
-wiz = [
-    "click>=8.0",
-    "questionary>=2.0",
-    "rich>=13.0",
-]
 loky = [
     "joblib>=1.3",
 ]
@@ -246,12 +236,10 @@ markers = [
     "integration: tests that touch the filesystem, network, or multiple components",
     "e2e: end-to-end pipeline tests (source → filters → sink)",
     "device: parametrised across compute devices (cpu, cuda)",
-    "requires(group): declares the dependency group needed (mesh, da, atm, cli, wiz, loky, dask, prefect)",
+    "requires(group): declares the dependency group needed (mesh, da, atm, loky, dask, prefect)",
     "mesh: tests requiring the mesh dependency group (auto-added by requires)",
     "da: tests requiring the da dependency group (auto-added by requires)",
     "atm: tests requiring the atm dependency group (auto-added by requires)",
-    "cli: tests requiring the cli dependency group (auto-added by requires)",
-    "wiz: tests requiring the wiz dependency group (auto-added by requires)",
     "loky: tests requiring the loky extra (joblib)",
     "dask: tests requiring the dask extra",
     "prefect: tests requiring the prefect extra",
