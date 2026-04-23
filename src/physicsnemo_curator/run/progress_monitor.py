@@ -66,19 +66,7 @@ class ProgressMonitor:
     """
 
     def __init__(self, store: Any, total: int, n_workers: int, invocation_id: str | None = None) -> None:
-        """Initialise the progress monitor.
-
-        Parameters
-        ----------
-        store : PipelineStore
-            Pipeline store for read-only polling.
-        total : int
-            Total indices to process.
-        n_workers : int
-            Number of parallel workers.
-        invocation_id : str | None
-            If set, filter workers by this invocation ID.
-        """
+        """Initialise the progress monitor."""
         from physicsnemo_curator.run.progress_app import PipelineProgressApp
 
         self._stop_event = threading.Event()

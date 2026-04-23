@@ -134,4 +134,4 @@ source_suffix = {
 suppress_warnings = ["config.cache"]
 
 # Exclude internal working documents from the Sphinx build.
-exclude_patterns = ["superpowers/**"]
+exclude_patterns = ["superpowers/**", "specs/**"]

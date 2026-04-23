@@ -34,48 +34,20 @@ if TYPE_CHECKING:
 
 @dataclass
 class WizardState:
-    """Mutable state shared between wizard screens.
+    """Mutable state shared between wizard screens."""
 
-    Attributes
-    ----------
-    mode : str | None
-        ``"build"`` or ``"load"``.
-    submodule : str | None
-        Selected submodule name.
-    source_cls : type | None
-        Selected source class.
-    source_kwargs : dict[str, Any]
-        User-supplied source parameters.
-    source_instance : Source | None
-        Constructed source instance.
-    filter_classes : list[type]
-        Selected filter classes (ordered).
-    filter_kwargs : list[dict[str, Any]]
-        User-supplied filter parameters (parallel to *filter_classes*).
-    filter_instances : list[Filter]
-        Constructed filter instances.
-    sink_cls : type | None
-        Selected sink class.
-    sink_kwargs : dict[str, Any]
-        User-supplied sink parameters.
-    sink_instance : Sink | None
-        Constructed sink instance.
-    pipeline : Pipeline | None
-        The fully assembled pipeline.
-    """
-
-    mode: str | None = None
-    submodule: str | None = None
-    source_cls: type | None = None
-    source_kwargs: dict[str, Any] = field(default_factory=dict)
-    source_instance: Source | None = None
-    filter_classes: list[type] = field(default_factory=list)
-    filter_kwargs: list[dict[str, Any]] = field(default_factory=list)
-    filter_instances: list[Filter] = field(default_factory=list)
-    sink_cls: type | None = None
-    sink_kwargs: dict[str, Any] = field(default_factory=dict)
-    sink_instance: Sink | None = None
-    pipeline: Pipeline | None = None
+    mode: str | None = None  #: ``"build"`` or ``"load"``.
+    submodule: str | None = None  #: Selected submodule name.
+    source_cls: type | None = None  #: Selected source class.
+    source_kwargs: dict[str, Any] = field(default_factory=dict)  #: User-supplied source parameters.
+    source_instance: Source | None = None  #: Constructed source instance.
+    filter_classes: list[type] = field(default_factory=list)  #: Selected filter classes (ordered).
+    filter_kwargs: list[dict[str, Any]] = field(default_factory=list)  #: User-supplied filter parameters.
+    filter_instances: list[Filter] = field(default_factory=list)  #: Constructed filter instances.
+    sink_cls: type | None = None  #: Selected sink class.
+    sink_kwargs: dict[str, Any] = field(default_factory=dict)  #: User-supplied sink parameters.
+    sink_instance: Sink | None = None  #: Constructed sink instance.
+    pipeline: Pipeline | None = None  #: The fully assembled pipeline.
 
     def reset(self) -> None:
         """Reset all fields to their defaults for a new wizard run."""
@@ -103,6 +75,7 @@ class CuratorApp(App[None]):
     BINDINGS = [("q", "quit", "Quit")]
 
     def __init__(self) -> None:
+        """Initialise the curator app and create an empty wizard state."""
         super().__init__()
         self.state = WizardState()
 

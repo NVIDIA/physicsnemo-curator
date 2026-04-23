@@ -59,17 +59,7 @@ class WorkerTile(Static):
     """
 
     def __init__(self, worker_id: str, pid: int, per_worker_total: int) -> None:
-        """Initialise a worker tile.
-
-        Parameters
-        ----------
-        worker_id : str
-            Unique worker identifier.
-        pid : int
-            OS process ID of the worker.
-        per_worker_total : int
-            Estimated total items for this worker.
-        """
+        """Initialise a worker tile."""
         super().__init__()
         self._worker_id = worker_id
         self._pid = pid
@@ -145,21 +135,7 @@ class PipelineProgressApp(App[None]):
         stop_event: Event,
         invocation_id: str | None = None,
     ) -> None:
-        """Initialise the progress app.
-
-        Parameters
-        ----------
-        store : PipelineStore
-            Pipeline store instance for polling.
-        total : int
-            Total number of indices.
-        n_workers : int
-            Number of expected workers.
-        stop_event : Event
-            Signals pipeline completion.
-        invocation_id : str | None
-            If set, filter workers by this invocation ID.
-        """
+        """Initialise the progress app."""
         super().__init__()
         self._store = store
         self._total = total
