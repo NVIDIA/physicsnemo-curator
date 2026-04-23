@@ -83,7 +83,7 @@ run_pipeline(
     n_jobs=1,          # Workers.  -1 = all CPUs.
     backend="auto",    # "auto", "sequential", "thread_pool", "process_pool", "loky", "dask", "prefect"
     indices=None,      # Subset of source indices, or None for all
-    progress=True,     # Show progress bar (tqdm / dask diagnostics)
+    progress=True,     # Show progress (Textual TUI for sequential, tqdm for parallel)
     **backend_kwargs,  # Extra args forwarded to the backend executor
 )
 ```

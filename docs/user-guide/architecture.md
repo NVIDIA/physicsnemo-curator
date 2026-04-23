@@ -198,7 +198,7 @@ instead of a manual loop:
 ```python
 from physicsnemo_curator import run_pipeline
 
-# Sequential with progress bar
+# Sequential with progress display
 results = run_pipeline(pipeline)
 
 # Parallel across all CPUs

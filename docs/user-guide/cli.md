@@ -1,19 +1,18 @@
 # Pipeline Wizard
 
-PhysicsNeMo Curator includes an interactive command-line wizard that guides
-you through building and executing a pipeline without writing code.
+PhysicsNeMo Curator includes an interactive full-screen wizard that guides
+you through building and executing a pipeline without writing code.  The
+wizard is a Textual TUI application with multi-screen navigation, keyboard
+shortcuts, and real-time progress tracking.
 
 ## Installation
 
+The wizard depends on [Textual](https://textual.textualize.io/), which is
+included as a core dependency — no extra installation step is needed:
+
 ```bash
-pip install physicsnemo-curator[wiz]
+pip install physicsnemo-curator
 ```
-
-This installs the required dependencies:
-
-- `click` — CLI framework
-- `questionary` — interactive prompts
-- `rich` — colored output and progress bars
 
 You also need the domain submodule installed (e.g. `pip install physicsnemo-curator[mesh]`).
 
@@ -23,104 +22,124 @@ You also need the domain submodule installed (e.g. `pip install physicsnemo-cura
 psnc
 ```
 
-The wizard displays a styled welcome banner and walks through the pipeline
-configuration with colored output and progress indicators.  You can either
-build a new pipeline interactively or load a previously saved one from YAML
-or JSON.
+The wizard launches a full-screen TUI and walks through the pipeline
+configuration across multiple screens.  You can navigate forward and backward
+with on-screen buttons or keyboard shortcuts.  You can either build a new
+pipeline interactively or load a previously saved one from YAML or JSON.
+
+### Welcome Screen
+
+The landing screen displays the PhysicsNeMo Curator branding and offers two
+entry paths:
+
+- **New Pipeline** — start building a pipeline from scratch
+- **Load Config** — load a previously saved pipeline from a YAML or JSON file
 
 ### 1. Select Submodule
 
-The CLI discovers registered submodules and shows which have their
+The wizard discovers registered submodules and shows which have their
 dependencies installed:
 
 ```text
-╭─────────────────────────────────────╮
-│   PhysicsNeMo Curator               │
-│   Interactive ETL Pipeline Wizard   │
-╰─────────────────────────────────────╯
-
-Step 1/5: Select Submodule
-? Select a submodule:
-  ▸ mesh — Mesh data curation (physicsnemo.mesh.Mesh)
-    da — DataArray data curation (xarray.DataArray) (not installed)
-    atm — Atomic data curation (nvalchemi.data.AtomicData) (not installed)
+┌─────────────────────────────────────────────┐
+│  Select Submodule                           │
+│                                             │
+│  ● mesh — Mesh data curation               │
+│  ○ da — DataArray data curation             │
+│  ○ atm — Atomic data curation (unavailable) │
+└─────────────────────────────────────────────┘
 ```
+
+Submodules whose dependencies are not installed are shown as unavailable.
 
 ### 2. Select Source
 
 Choose from the registered sources for the selected submodule:
 
 ```text
-Step 2/5: Select Source/Reader
-? Select a source/reader:
-  ▸ VTK Reader — Read VTK files (.vtk, .vtp, .vtu, .vts, .vtm)
+┌─────────────────────────────────────────────┐
+│  Select Source/Reader                       │
+│                                             │
+│  ● VTK Reader                               │
+│  ○ DrivAerML                                │
+│  ○ WindsorML                                │
+└─────────────────────────────────────────────┘
 ```
 
 You are then prompted for source-specific parameters (data location,
-conversion options):
+conversion options) through form fields:
 
 ```text
   Configure VTK Reader:
-  ? input_path (Path to file or directory): ./cfd_results/
-  ? manifold_dim (Target manifold dimension) [auto]: auto
-  ? point_source (Point source mode) [vertices]: vertices
-  ? warn_on_lost_data (Warn when data arrays are discarded) [True]:
+  input_path:     ./cfd_results/
+  manifold_dim:   auto
+  point_source:   vertices
   ✓ Found 42 item(s) in source
 ```
 
 ### 3. Select Filters
 
-Choose zero or more filters (multi-select with checkboxes):
+Choose zero or more filters with toggle switches:
 
 ```text
-Step 3/5: Select Filters
-? Select filters (space to toggle, enter to confirm):
-  ▸ ☑ Mean Statistics — Compute spatial means and save to Parquet
-  ✓ Selected 1 filter(s)
+┌─────────────────────────────────────────────┐
+│  Select Filters                             │
+│                                             │
+│  [✓] Mean Statistics                        │
+│  [ ] Precision Cast                         │
+│  [ ] Normalization                          │
+└─────────────────────────────────────────────┘
 ```
 
-Each selected filter's parameters are prompted in order.
+Each selected filter's parameters are prompted in order through inline forms.
 
 ### 4. Select Sink
 
 Choose the output writer:
 
 ```text
-Step 4/5: Select Sink/Writer
-? Select a sink:
-  ▸ PhysicsNeMo Mesh Writer — Save in native tensordict format
-  ✓ Configured sink: PhysicsNeMo Mesh Writer
+┌─────────────────────────────────────────────┐
+│  Select Sink/Writer                         │
+│                                             │
+│  ● PhysicsNeMo Mesh Writer                  │
+└─────────────────────────────────────────────┘
 ```
 
-### 5. Execute
+### 5. Summary & Execute
 
-The CLI builds the pipeline, displays a summary, and processes all items
-with an animated progress bar.  Stateful filters are flushed automatically
-after execution.
+The summary screen displays the full pipeline configuration for review
+before execution:
 
 ```text
-Step 5/5: Execute Pipeline
+  Pipeline Summary
+  ────────────────
+  Source:  VTK Reader (./cfd_results/)
+  Filter:  Mean Statistics → stats.parquet
+  Sink:    PhysicsNeMo Mesh Writer → ./output/
 
-╭──────────────────── Pipeline ────────────────────╮
-│ VTK Reader → Mean Statistics → Mesh Writer       │
-╰──────────────────────────────────────────────────╯
-
-⠋ Processing... ━━━━━━━━━━━━━━━━━━━━ 100% 42/42 ./output/mesh_0041_0
-
-• Statistics saved to stats.parquet
-
-╭─────────────── ✓ Complete ───────────────╮
-│ Source items processed:        42        │
-│ Outputs written:               42        │
-│ Database path:     ~/.cache/psnc/a1b2.db │
-╰──────────────────────────────────────────╯
+  42 items to process
 ```
+
+Pressing **Execute** launches the pipeline with a full-screen Textual
+progress display showing per-worker status, elapsed time, and a progress
+bar.
+
+### Result Screen
+
+After execution completes, the result screen displays:
+
+- Items processed, outputs written, errors encountered
+- Database path for the pipeline run
+- Options to open the dashboard, save the config, or exit
 
 ## Cache Management
 
 Pipeline databases are stored in `~/.cache/psnc/` by default (see
-{doc}`checkpointing` for how to change the location).  The `psnc cache`
-command group provides tools for inspecting and managing these databases.
+{doc}`checkpointing` for how to change the location).  The wizard includes
+a **Cache** screen accessible from the welcome screen that provides tools
+for inspecting and managing these databases.
+
+The `psnc cache` command group also provides CLI access:
 
 ### Show cache directory
 
@@ -176,22 +195,9 @@ The `--older-than` flag accepts human-readable durations:
 
 Examples: `30m`, `12h`, `7d`, `2w`.
 
-## Color Scheme
-
-The CLI uses a consistent color scheme throughout:
-
-| Element | Color |
-|---------|-------|
-| Branding | NVIDIA green |
-| Step headers | Blue |
-| Highlights | Cyan |
-| Success (✓) | Green |
-| Warnings (⚠) | Yellow |
-| Errors (✗) | Red |
-
 ## Programmatic Equivalent
 
-Everything the CLI does can be done in Python:
+Everything the wizard does can be done in Python:
 
 ```python
 from physicsnemo_curator import run_pipeline
@@ -205,7 +211,7 @@ pipeline = (
     .write(MeshSink(output_dir="./output/"))
 )
 
-# Sequential with progress bar (equivalent to CLI behaviour)
+# Sequential with progress display (equivalent to wizard behaviour)
 results = run_pipeline(pipeline)
 
 # Or parallel across multiple cores

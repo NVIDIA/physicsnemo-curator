@@ -68,17 +68,17 @@ make clean              # Remove build artifacts
 
 Defined in `pyproject.toml` under `[dependency-groups]`:
 
-- **dev**: ruff, ty, pytest, pytest-cov, pytest-benchmark, asv, pre-commit, interrogate, maturin
+- **dev**: ruff, ty, pytest, pytest-cov, pytest-benchmark, asv, pre-commit, interrogate, maturin, pytest-asyncio
 - **mesh**: nvidia-physicsnemo, pyvista, pyarrow, torch, warp-lang, s3fs, tqdm, tensordict, jaxtyping, huggingface_hub
 - **da**: xarray, earth2studio, zarr, gcsfs
 - **docs**: sphinx, nvidia-sphinx-theme, myst-parser, sphinx-autoapi, sphinx-autodoc-typehints, etc.
 
 Optional extras in `[project.optional-dependencies]`:
 
-- **cli**: click, questionary (for interactive CLI — entry point: `psnc`)
 - **loky**: joblib (for `run_pipeline` loky backend)
 - **dask**: dask (for `run_pipeline` dask backend)
 - **prefect**: prefect (for `run_pipeline` prefect backend)
+- **dashboard**: panel, panel-material-ui, holoviews, bokeh, pandas, pyarrow
 
 Install with: `uv sync --group dev` or `uv sync --group docs`
 

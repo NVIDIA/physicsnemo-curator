@@ -116,10 +116,10 @@ Inspect the pipeline structure and drill into individual indices:
 - **Index query** — filter by index range (e.g. `10-20`, `1,5,10`)
   or status (completed, error)
 - **Artifact inspection** — click an index to see its output files
-  and filter artifacts.  If a
-  {class}`~physicsnemo_curator.dashboard.widgets.base.WidgetProvider`
-  is registered for a filter, a rich visualization is shown inline
-  (e.g. a bar chart for MeanFilter Parquet files)
+  and filter artifacts.  If the filter class overrides
+  {meth}`~physicsnemo_curator.core.base.Filter.dashboard_panel`,
+  a rich visualization is shown inline (e.g. a scatter plot for
+  AtomicStatsFilter or a bar chart for MeanFilter Parquet files)
 - **Aggregate view** — when no index is selected, browse all
   artifacts grouped by filter name with Parquet previews
 
@@ -136,53 +136,58 @@ Timing and resource analysis:
 - **Resource summary** — memory distribution histogram, GPU memory
   histogram (if tracked), and a table of the 10 slowest indices
 
-## Widget Extension System
+## Filter Dashboard Widgets
 
-Filters that produce artifacts (Parquet, Zarr, etc.) can have custom
-visualizations in the Pipeline tab.  A built-in widget is provided for
-{class}`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter`.
+Filters that produce artifacts (Parquet, Zarr, etc.) can provide custom
+visualizations in the Pipeline tab.  Built-in widgets are provided for
+{class}`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter` and
+{class}`~physicsnemo_curator.domains.atm.filters.stats.AtomicStatsFilter`.
 
 ### Writing a custom widget
 
-Implement the
-{class}`~physicsnemo_curator.dashboard.widgets.base.WidgetProvider`
-protocol:
+Override two classmethods on your
+{class}`~physicsnemo_curator.core.base.Filter` subclass:
 
 ```python
-import panel as pn
+from __future__ import annotations
+
+from physicsnemo_curator.core.base import Filter
 
 
-class MyFilterWidget:
-    """Widget for visualizing MyFilter artifacts."""
+class MyFilter(Filter[MyDataType]):
+    """Filter with a custom dashboard visualization."""
 
-    name = "My Filter Stats"
-    filter_name = "MyFilter"  # must match the filter class name
+    name = "My Filter"
+    description = "Computes custom statistics"
 
-    def panel(
-        self,
+    @classmethod
+    def dashboard_panel(
+        cls,
         artifact_paths: list[str],
         selected_index: int | None = None,
-    ) -> pn.viewable.Viewable:
+    ) -> Any:
+        """Return a Panel viewable for the dashboard Pipeline tab."""
+        import panel as pn
+
         # Read artifacts, build visualization
         ...
         return pn.Column(...)
+
+    @classmethod
+    def dashboard_layout_hints(cls) -> dict[str, int]:
+        """Return GridStack layout hints for the tile."""
+        return {"sizing_mode": "stretch_width", "height": 400}
 ```
 
-### Registering a widget
+### Automatic discovery
 
-Register at runtime before launching the dashboard:
+The `WidgetRegistry` automatically discovers filters that override
+`dashboard_panel()` at import time.  No manual registration is needed —
+simply ensure your filter is importable and the dashboard will pick it up.
 
-```python
-from physicsnemo_curator.dashboard import DashboardApp
-
-app = DashboardApp("pipeline.db")
-app.widget_registry.register(MyFilterWidget())
-app.serve()
-```
-
-Or add auto-discovery to
-`physicsnemo_curator/dashboard/widgets/__init__.py` following the
-pattern of the built-in `MeanFilterWidget`.
+To add auto-discovery for a new filter, add its import to
+`physicsnemo_curator/dashboard/widgets/__init__.py` in the
+`_auto_discover()` function following the existing pattern.
 
 ## Live Monitoring
 

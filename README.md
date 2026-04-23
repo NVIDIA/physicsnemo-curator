@@ -118,9 +118,6 @@ pip install physicsnemo-curator[da]
 # Atomic domain (molecular dynamics)
 pip install physicsnemo-curator[atm]
 
-# Interactive Wizard
-pip install physicsnemo-curator[wiz]
-
 # Dashboard
 pip install physicsnemo-curator[dashboard]
 ```
@@ -128,22 +125,21 @@ pip install physicsnemo-curator[dashboard]
 ## CLI
 
 PhysicsNeMo Curator includes the `psnc` command-line tool with an
-interactive pipeline wizard.
+interactive full-screen pipeline wizard powered by Textual.
 
 ```bash
-pip install 'physicsnemo-curator[wiz]'
 psnc
 ```
 
 ### Wizard
 
-The `psnc` command (or `psnc wizard`) launches a guided workflow:
+The `psnc` command launches a full-screen TUI that guides you through:
 
 1. **Select submodule** — mesh, DataArray, or atomic
 2. **Select source** — dataset-specific reader
 3. **Select filters** — toggle any combination of filters
 4. **Select sink** — output format and destination
-5. **Execute** — runs the pipeline with a progress bar
+5. **Review & execute** — summary screen, then runs with Textual progress display
 
 ### Dashboard
 
