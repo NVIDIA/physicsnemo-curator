@@ -22,10 +22,16 @@ manage the pipeline database cache.
 
 from __future__ import annotations
 
-from textual.app import ComposeResult
+from typing import TYPE_CHECKING
+
 from textual.containers import Center, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Input, Static
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
+
+    from physicsnemo_curator.wiz.app import CuratorApp
 
 
 class WelcomeScreen(Screen[None]):
@@ -64,19 +70,16 @@ class WelcomeScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Yield the banner, mode buttons, and hidden load input."""
-        with Center():
-            with Vertical():
-                yield Static("PhysicsNeMo Curator", id="banner")
-                yield Static("Interactive ETL Pipeline Wizard", id="subtitle")
-                yield Button("Build a new pipeline", id="build-btn", classes="welcome-btn")
-                yield Button("Load a saved pipeline", id="load-btn", classes="welcome-btn")
-                yield Button("Manage cache", id="cache-btn", classes="welcome-btn")
-                yield Input(placeholder="Path to pipeline file (YAML / JSON)", id="load-input")
+        with Center(), Vertical():
+            yield Static("PhysicsNeMo Curator", id="banner")
+            yield Static("Interactive ETL Pipeline Wizard", id="subtitle")
+            yield Button("Build a new pipeline", id="build-btn", classes="welcome-btn")
+            yield Button("Load a saved pipeline", id="load-btn", classes="welcome-btn")
+            yield Button("Manage cache", id="cache-btn", classes="welcome-btn")
+            yield Input(placeholder="Path to pipeline file (YAML / JSON)", id="load-input")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle mode selection."""
-        from physicsnemo_curator.wiz.app import CuratorApp
-
         app: CuratorApp = self.app  # type: ignore[assignment]
 
         if event.button.id == "build-btn":
@@ -101,7 +104,6 @@ class WelcomeScreen(Screen[None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Load a pipeline file and push the summary screen."""
         from physicsnemo_curator.core.serialization import load_pipeline
-        from physicsnemo_curator.wiz.app import CuratorApp
 
         app: CuratorApp = self.app  # type: ignore[assignment]
         path = event.value.strip()

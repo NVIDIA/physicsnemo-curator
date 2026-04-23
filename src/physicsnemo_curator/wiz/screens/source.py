@@ -18,15 +18,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Input, Label, Select, Static
 
-from physicsnemo_curator.core.base import Param
 from physicsnemo_curator.core.registry import registry
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
+
+    from physicsnemo_curator.core.base import Param
+    from physicsnemo_curator.wiz.app import CuratorApp
 
 
 class SourceScreen(Screen[None]):
@@ -69,8 +73,6 @@ class SourceScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Yield step label, source selector, param form, and nav buttons."""
-        from physicsnemo_curator.wiz.app import CuratorApp
-
         app: CuratorApp = self.app  # type: ignore[assignment]
         submodule = app.state.submodule
         sources = registry.sources(submodule)
@@ -88,8 +90,6 @@ class SourceScreen(Screen[None]):
         """Rebuild the parameter form when source selection changes."""
         if event.select.id != "source-select":
             return
-
-        from physicsnemo_curator.wiz.app import CuratorApp
 
         app: CuratorApp = self.app  # type: ignore[assignment]
         container = self.query_one("#param-container", VerticalScroll)
@@ -124,8 +124,6 @@ class SourceScreen(Screen[None]):
 
         if event.button.id != "next-btn":
             return
-
-        from physicsnemo_curator.wiz.app import CuratorApp
 
         app: CuratorApp = self.app  # type: ignore[assignment]
 

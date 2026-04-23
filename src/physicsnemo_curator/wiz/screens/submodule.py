@@ -19,13 +19,18 @@
 from __future__ import annotations
 
 import importlib
+from typing import TYPE_CHECKING
 
-from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Select, Static
+from textual.widgets import Button, Select, Static
 
 from physicsnemo_curator.core.registry import registry
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
+
+    from physicsnemo_curator.wiz.app import CuratorApp
 
 # Map submodule names to their Python module paths so we can import them
 # on demand (triggering component registration).
@@ -107,8 +112,6 @@ class SubmoduleScreen(Screen[None]):
         """Handle Next button — validate and push SourceScreen."""
         if event.button.id != "next-btn":
             return
-
-        from physicsnemo_curator.wiz.app import CuratorApp
 
         app: CuratorApp = self.app  # type: ignore[assignment]
         select = self.query_one("#submodule-select", Select)

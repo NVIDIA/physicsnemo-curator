@@ -18,15 +18,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Collapsible, Input, Label, Select, SelectionList, Static
 
-from physicsnemo_curator.core.base import Param
 from physicsnemo_curator.core.registry import registry
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
+
+    from physicsnemo_curator.core.base import Param
+    from physicsnemo_curator.wiz.app import CuratorApp
 
 
 class FilterScreen(Screen[None]):
@@ -71,8 +75,6 @@ class FilterScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Yield filter selection list, param area, and nav buttons."""
-        from physicsnemo_curator.wiz.app import CuratorApp
-
         app: CuratorApp = self.app  # type: ignore[assignment]
         submodule = app.state.submodule
         filters = registry.filters(submodule)
@@ -93,8 +95,6 @@ class FilterScreen(Screen[None]):
 
     def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
         """Rebuild parameter forms when selection changes."""
-        from physicsnemo_curator.wiz.app import CuratorApp
-
         app: CuratorApp = self.app  # type: ignore[assignment]
         container = self.query_one("#filter-params", VerticalScroll)
         container.remove_children()
@@ -140,8 +140,6 @@ class FilterScreen(Screen[None]):
 
         if event.button.id != "next-btn":
             return
-
-        from physicsnemo_curator.wiz.app import CuratorApp
 
         app: CuratorApp = self.app  # type: ignore[assignment]
         filters = registry.filters(app.state.submodule)
