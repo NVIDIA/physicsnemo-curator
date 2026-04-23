@@ -81,7 +81,7 @@ class TestAtomicStatsScatterWidget:
         assert "No Atomic Statistics artifacts" in result.object
 
     def test_panel_with_data(self, mock_stats_parquet: str) -> None:
-        """Widget returns a Row with sidebar and plot when data is provided."""
+        """Widget returns a GridStack with Paper tiles when data is provided."""
         import panel as pn
 
         from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
@@ -89,24 +89,29 @@ class TestAtomicStatsScatterWidget:
         widget = AtomicStatsScatterWidget()
         result = widget.panel([mock_stats_parquet])
 
-        # Should return a Row layout (sidebar + plot area)
-        assert isinstance(result, pn.Row)
-        assert len(result) == 2  # sidebar and plot area
+        # Should return a GridStack layout (sidebar + plot area in Paper tiles)
+        assert isinstance(result, pn.GridStack)
+        assert len(result.objects) == 2  # sidebar and plot area
 
     def test_panel_contains_scatter_plot(self, mock_stats_parquet: str) -> None:
-        """Widget contains a Holoviews scatter plot."""
+        """Widget contains a Holoviews scatter plot in a Paper tile."""
         import panel as pn
+        import panel_material_ui as pmui
 
         from physicsnemo_curator.dashboard.widgets.atm import AtomicStatsScatterWidget
 
         widget = AtomicStatsScatterWidget()
         result = widget.panel([mock_stats_parquet])
 
-        # The second element should be a Column containing the plot
-        assert isinstance(result, pn.Row)
-        plot_area = result[1]
-        # Should contain a HoloViews pane
-        assert isinstance(plot_area, (pn.pane.HoloViews, pn.Column))
+        # The GridStack should contain Paper tiles
+        assert isinstance(result, pn.GridStack)
+        tiles = list(result.objects.values())
+        assert len(tiles) == 2
+        # Both tiles should be Paper components
+        assert all(isinstance(t, pmui.Paper) for t in tiles)
+        # Second Paper tile wraps the HoloViews plot pane
+        plot_tile = tiles[1]
+        assert isinstance(plot_tile.objects[0], (pn.pane.HoloViews, pn.Column))
 
     def test_layout_hints(self) -> None:
         """Widget declares grid layout hints."""

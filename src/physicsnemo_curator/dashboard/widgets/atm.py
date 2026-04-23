@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 import holoviews as hv
 import panel as pn
+import panel_material_ui as pmui
 from bokeh.models import HoverTool
 
 if TYPE_CHECKING:
@@ -81,7 +82,7 @@ class AtomicStatsScatterWidget:
         Returns
         -------
         pn.viewable.Viewable
-            A Panel Row containing sidebar controls and scatter plot.
+            A GridStack with Paper-wrapped controls sidebar and scatter plot.
         """
         if not artifact_paths:
             return pn.pane.Markdown("*No Atomic Statistics artifacts found.*")
@@ -122,7 +123,7 @@ class AtomicStatsScatterWidget:
             size=min(8, len(available_fields)),
         )
 
-        # Create sidebar - use fixed width, stretch height
+        # Create sidebar controls
         sidebar = pn.Column(
             "### Controls",
             x_select,
@@ -133,9 +134,6 @@ class AtomicStatsScatterWidget:
             "---",
             "### Filter by Field",
             field_filter,
-            width=200,
-            min_width=200,
-            max_width=200,
         )
 
         # Create reactive plot
@@ -197,12 +195,12 @@ class AtomicStatsScatterWidget:
         # Wrap in HoloViews pane - stretch width only
         plot_pane = pn.pane.HoloViews(update_plot, sizing_mode="stretch_width", height=500)
 
-        # Use Row with FlexBox - sidebar fixed, plot stretches
-        return pn.Row(
-            sidebar,
-            plot_pane,
-            sizing_mode="stretch_width",
-        )
+        # Use GridStack layout: sidebar (3 cols) + plot (9 cols)
+        gstack = pn.GridStack(sizing_mode="stretch_both", min_height=500, allow_drag=True, allow_resize=True)
+        gstack[0:3, 0:3] = pmui.Paper(sidebar, elevation=2)
+        gstack[0:3, 3:12] = pmui.Paper(plot_pane, elevation=2)
+
+        return gstack
 
     def _load_data(self, artifact_paths: list[str]) -> pd.DataFrame | None:
         """Load and concatenate parquet files.
