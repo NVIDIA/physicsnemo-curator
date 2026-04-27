@@ -26,6 +26,7 @@ import pytest
 
 from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
 from physicsnemo_curator.core.serialization import (
+    _collect_metadata,
     deserialize_pipeline,
     load_pipeline,
     save_pipeline,
@@ -448,3 +449,118 @@ class TestRegistryIntegration:
             content = pathlib.Path(result[0]).read_text()
             # Source yields i, filter adds 10 -> i + 10
             assert content == str(i + 10)
+
+
+# ---------------------------------------------------------------------------
+# Metadata tests
+# ---------------------------------------------------------------------------
+
+
+class TestMetadata:
+    """Tests for pipeline serialization metadata."""
+
+    def test_serialize_includes_metadata_key(self, tmp_path: pathlib.Path) -> None:
+        """Serialized output contains a metadata section."""
+        data = serialize_pipeline(_make_pipeline(tmp_path))
+        assert "metadata" in data
+
+    def test_metadata_has_required_fields(self, tmp_path: pathlib.Path) -> None:
+        """Metadata includes all expected provenance fields."""
+        data = serialize_pipeline(_make_pipeline(tmp_path))
+        meta = data["metadata"]
+        assert "psnc_version" in meta
+        assert "rust_extension" in meta
+        assert "python_version" in meta
+        assert "platform" in meta
+        assert "created_utc" in meta
+        assert "git_hash" in meta
+        assert "git_dirty" in meta
+
+    def test_metadata_psnc_version_matches(self, tmp_path: pathlib.Path) -> None:
+        """psnc_version matches the package __version__."""
+        from physicsnemo_curator import __version__
+
+        data = serialize_pipeline(_make_pipeline(tmp_path))
+        assert data["metadata"]["psnc_version"] == __version__
+
+    def test_metadata_created_utc_is_iso_format(self, tmp_path: pathlib.Path) -> None:
+        """created_utc is a valid ISO 8601 UTC timestamp."""
+        from datetime import datetime, timezone
+
+        data = serialize_pipeline(_make_pipeline(tmp_path))
+        ts = data["metadata"]["created_utc"]
+        # Should parse without error
+        dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+        assert dt.year >= 2025
+
+    def test_metadata_python_version_is_string(self, tmp_path: pathlib.Path) -> None:
+        """python_version is a non-empty string."""
+        data = serialize_pipeline(_make_pipeline(tmp_path))
+        pv = data["metadata"]["python_version"]
+        assert isinstance(pv, str)
+        assert len(pv) > 0
+
+    def test_collect_metadata_returns_dict(self) -> None:
+        """_collect_metadata returns a dict with expected keys."""
+        meta = _collect_metadata()
+        assert isinstance(meta, dict)
+        assert set(meta.keys()) == {
+            "psnc_version",
+            "rust_extension",
+            "python_version",
+            "platform",
+            "created_utc",
+            "git_hash",
+            "git_dirty",
+        }
+
+    def test_metadata_ignored_on_deserialize(self, tmp_path: pathlib.Path) -> None:
+        """Metadata is ignored during deserialization — round-trip works."""
+        pipeline = _make_pipeline(tmp_path)
+        data = serialize_pipeline(pipeline)
+        # Metadata is present but should not affect deserialization
+        assert "metadata" in data
+        restored = deserialize_pipeline(data)
+        assert len(restored) == 3
+        result = restored[0]
+        content = pathlib.Path(result[0]).read_text()
+        assert content == "10"
+
+    def test_metadata_not_in_config_hash(self, tmp_path: pathlib.Path) -> None:
+        """Metadata does not affect the pipeline config hash."""
+        from physicsnemo_curator.core.pipeline_store import _config_hash, _pipeline_config
+
+        pipeline = _make_pipeline(tmp_path)
+        config = _pipeline_config(pipeline)
+        # _pipeline_config does not include metadata
+        assert "metadata" not in config
+        # Hash is stable (not affected by time-varying metadata)
+        h1 = _config_hash(config)
+        h2 = _config_hash(config)
+        assert h1 == h2
+
+    def test_save_load_preserves_metadata_in_file(self, tmp_path: pathlib.Path) -> None:
+        """Metadata is written to disk and readable from the saved file."""
+        path = tmp_path / "pipeline.json"
+        save_pipeline(_make_pipeline(tmp_path), path)
+        data = json.loads(path.read_text())
+        assert "metadata" in data
+        assert "psnc_version" in data["metadata"]
+        assert "created_utc" in data["metadata"]
+
+    def test_git_fields_nullable(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Git fields are None when git is unavailable."""
+        import subprocess
+
+        original_run = subprocess.run
+
+        def _failing_git(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            cmd = args[0] if args else kwargs.get("args", [])
+            if isinstance(cmd, list) and cmd[0] == "git":
+                raise FileNotFoundError("git not found")
+            return original_run(*args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", _failing_git)
+        meta = _collect_metadata()
+        assert meta["git_hash"] is None
+        assert meta["git_dirty"] is None

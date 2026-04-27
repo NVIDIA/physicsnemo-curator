@@ -35,7 +35,12 @@ from __future__ import annotations
 import importlib
 import inspect
 import json
+import logging
 import pathlib
+import platform
+import subprocess
+import sys
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from physicsnemo_curator.core.base import Pipeline
@@ -44,16 +49,73 @@ from physicsnemo_curator.core.pipeline_store import _pipeline_config
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Filter, Sink, Source
 
+logger = logging.getLogger(__name__)
+
 _FORMAT_VERSION = 1
 """Current serialization format version."""
+
+
+def _collect_metadata() -> dict[str, Any]:
+    """Collect environment metadata for pipeline provenance.
+
+    Gathers package version, Python/platform info, timestamp, and git
+    state.  All fields are best-effort — git fields are ``None`` when
+    not in a repository or when ``git`` is unavailable.
+
+    Returns
+    -------
+    dict[str, Any]
+        Metadata dictionary with keys: ``psnc_version``,
+        ``rust_extension``, ``python_version``, ``platform``,
+        ``created_utc``, ``git_hash``, ``git_dirty``.
+    """
+    from physicsnemo_curator import __version__, rust_version
+
+    # Git information (best-effort)
+    git_hash: str | None = None
+    git_dirty: bool | None = None
+    try:
+        result = subprocess.run(  # noqa: S603, S607
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            git_hash = result.stdout.strip()
+
+            dirty_result = subprocess.run(  # noqa: S603, S607
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if dirty_result.returncode == 0:
+                git_dirty = len(dirty_result.stdout.strip()) > 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        logger.debug("git not available; skipping git metadata")
+
+    return {
+        "psnc_version": __version__,
+        "rust_extension": rust_version(),
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "git_hash": git_hash,
+        "git_dirty": git_dirty,
+    }
 
 
 def serialize_pipeline(pipeline: Pipeline[Any]) -> dict[str, Any]:
     """Serialize a pipeline to a configuration dictionary.
 
-    Calls :func:`~physicsnemo_curator.core.checkpoint._pipeline_config` and
-    adds a ``version`` key.  Ensures the ``sink`` key is always present
-    (set to ``None`` when the pipeline has no sink).
+    Calls :func:`~physicsnemo_curator.core.pipeline_store._pipeline_config`
+    and adds ``version`` and ``metadata`` keys.  Ensures the ``sink`` key
+    is always present (set to ``None`` when the pipeline has no sink).
+
+    The ``metadata`` section captures provenance information (package
+    version, git hash, timestamp, platform) and is purely informational —
+    it is ignored on deserialization.
 
     Parameters
     ----------
@@ -63,11 +125,12 @@ def serialize_pipeline(pipeline: Pipeline[Any]) -> dict[str, Any]:
     Returns
     -------
     dict[str, Any]
-        Serialized pipeline configuration with keys ``version``, ``source``,
-        ``filters``, and ``sink``.
+        Serialized pipeline configuration with keys ``version``,
+        ``metadata``, ``source``, ``filters``, and ``sink``.
     """
     config = _pipeline_config(pipeline)
     config["version"] = _FORMAT_VERSION
+    config["metadata"] = _collect_metadata()
     config.setdefault("sink", None)
     return config
 
