@@ -92,12 +92,13 @@ class FilterScreen(Screen[None]):
         with Vertical(classes="nav-row"):
             yield Button("← Back", id="back-btn", classes="nav-btn")
             yield Button("Next →", id="next-btn", classes="nav-btn")
+            yield Button("Quit", id="quit-btn", classes="nav-btn", variant="error")
 
-    def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
+    async def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
         """Rebuild parameter forms when selection changes."""
         app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         container = self.query_one("#filter-params", VerticalScroll)
-        container.remove_children()
+        await container.remove_children()
 
         try:
             sel_list = self.query_one("#filter-list", SelectionList)
@@ -136,6 +137,10 @@ class FilterScreen(Screen[None]):
         """Handle Back / Next."""
         if event.button.id == "back-btn":
             self.app.pop_screen()
+            return
+
+        if event.button.id == "quit-btn":
+            self.app.exit()
             return
 
         if event.button.id != "next-btn":

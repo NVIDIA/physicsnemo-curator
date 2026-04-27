@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual.containers import Center, Vertical
+from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Input, Static
 
@@ -47,6 +47,10 @@ class WelcomeScreen(Screen[None]):
     WelcomeScreen {
         align: center middle;
     }
+    WelcomeScreen > Vertical {
+        width: auto;
+        height: auto;
+    }
     #banner {
         text-align: center;
         padding: 1 2;
@@ -60,7 +64,8 @@ class WelcomeScreen(Screen[None]):
     }
     #load-input {
         display: none;
-        margin: 1 4;
+        width: 40;
+        margin: 1 0;
     }
     .welcome-btn {
         width: 40;
@@ -70,13 +75,14 @@ class WelcomeScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Yield the banner, mode buttons, and hidden load input."""
-        with Center(), Vertical():
+        with Vertical():
             yield Static("PhysicsNeMo Curator", id="banner")
             yield Static("Interactive ETL Pipeline Wizard", id="subtitle")
             yield Button("Build a new pipeline", id="build-btn", classes="welcome-btn")
             yield Button("Load a saved pipeline", id="load-btn", classes="welcome-btn")
             yield Button("Manage cache", id="cache-btn", classes="welcome-btn")
             yield Input(placeholder="Path to pipeline file (YAML / JSON)", id="load-input")
+            yield Button("Quit", id="quit-btn", classes="welcome-btn", variant="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle mode selection."""
@@ -100,6 +106,9 @@ class WelcomeScreen(Screen[None]):
             from physicsnemo_curator.wiz.screens.cache import CacheScreen
 
             app.push_screen(CacheScreen())
+
+        elif event.button.id == "quit-btn":
+            self.app.exit()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Load a pipeline file and push the summary screen."""

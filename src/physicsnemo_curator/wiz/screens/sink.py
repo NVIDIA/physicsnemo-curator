@@ -86,15 +86,16 @@ class SinkScreen(Screen[None]):
         with Vertical(classes="nav-row"):
             yield Button("← Back", id="back-btn", classes="nav-btn")
             yield Button("Next →", id="next-btn", classes="nav-btn")
+            yield Button("Quit", id="quit-btn", classes="nav-btn", variant="error")
 
-    def on_select_changed(self, event: Select.Changed) -> None:
+    async def on_select_changed(self, event: Select.Changed) -> None:
         """Rebuild parameter form on sink selection change."""
         if event.select.id != "sink-select":
             return
 
         app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         container = self.query_one("#param-container", VerticalScroll)
-        container.remove_children()
+        await container.remove_children()
 
         if event.value is Select.BLANK:
             return
@@ -121,6 +122,10 @@ class SinkScreen(Screen[None]):
         """Handle Back / Next."""
         if event.button.id == "back-btn":
             self.app.pop_screen()
+            return
+
+        if event.button.id == "quit-btn":
+            self.app.exit()
             return
 
         if event.button.id != "next-btn":

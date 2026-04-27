@@ -22,7 +22,7 @@ import time
 from typing import TYPE_CHECKING
 
 from textual.screen import Screen
-from textual.widgets import ProgressBar, Static
+from textual.widgets import Button, ProgressBar, Static
 from textual.worker import Worker, WorkerState
 
 if TYPE_CHECKING:
@@ -59,17 +59,23 @@ class ExecutionScreen(Screen[None]):
     """
 
     def compose(self) -> ComposeResult:
-        """Yield title, progress bar, and status label."""
+        """Yield title, progress bar, status label, and quit button."""
         app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         total = len(app.state.pipeline) if app.state.pipeline else 0
 
         yield Static("Executing Pipeline...", id="exec-title")
         yield ProgressBar(total=total, id="exec-bar")
         yield Static(f"0 / {total}", id="exec-status")
+        yield Button("Quit", id="quit-btn", variant="error")
 
     def on_mount(self) -> None:
         """Start the pipeline worker on mount."""
         self.run_worker(self._execute_pipeline, thread=True)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle quit button."""
+        if event.button.id == "quit-btn":
+            self.app.exit()
 
     def _execute_pipeline(self) -> list[list[str]]:
         """Run the pipeline in a background thread.

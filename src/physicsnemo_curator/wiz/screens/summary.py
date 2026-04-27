@@ -88,6 +88,7 @@ class SummaryScreen(Screen[None]):
             yield Button("Save to JSON", id="save-json-btn", classes="action-btn")
             yield Input(placeholder="Save path", id="save-input")
             yield Button("Execute", id="execute-btn", classes="action-btn", variant="primary")
+            yield Button("Quit", id="quit-btn", classes="action-btn", variant="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle save and execute actions."""
@@ -110,6 +111,9 @@ class SummaryScreen(Screen[None]):
 
             app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
             app.push_screen(ExecutionScreen())
+
+        elif event.button.id == "quit-btn":
+            self.app.exit()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Save the pipeline to the specified path."""

@@ -89,6 +89,7 @@ class CacheScreen(Screen[None]):
             yield Button("← Back", id="back-btn", classes="action-btn")
             yield Button("Remove Selected", id="rm-btn", classes="action-btn", variant="warning")
             yield Button("Remove All", id="rm-all-btn", classes="action-btn", variant="error")
+            yield Button("Quit", id="quit-btn", classes="action-btn", variant="error")
 
     def on_mount(self) -> None:
         """Populate the data table with cached databases."""
@@ -117,9 +118,13 @@ class CacheScreen(Screen[None]):
             )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle back, remove selected, and remove all."""
+        """Handle back, remove selected, remove all, and quit."""
         if event.button.id == "back-btn":
             self.app.pop_screen()
+            return
+
+        if event.button.id == "quit-btn":
+            self.app.exit()
             return
 
         if event.button.id == "rm-btn":

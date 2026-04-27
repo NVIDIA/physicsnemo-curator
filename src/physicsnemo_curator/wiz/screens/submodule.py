@@ -107,9 +107,14 @@ class SubmoduleScreen(Screen[None]):
             yield Static("Step 1/4: Select Submodule", id="step-label")
             yield Select(options, prompt="Choose a submodule", id="submodule-select")
             yield Button("Next →", id="next-btn", classes="nav-btn")
+            yield Button("Quit", id="quit-btn", classes="nav-btn", variant="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle Next button — validate and push SourceScreen."""
+        if event.button.id == "quit-btn":
+            self.app.exit()
+            return
+
         if event.button.id != "next-btn":
             return
 

@@ -72,7 +72,11 @@ class CuratorApp(App[None]):
     """
 
     TITLE = "PhysicsNeMo Curator"
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("down", "focus_next", "Next"),
+        ("up", "focus_previous", "Previous"),
+    ]
 
     def __init__(self) -> None:
         """Initialise the curator app and create an empty wizard state."""
