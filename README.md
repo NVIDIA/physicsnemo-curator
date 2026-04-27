@@ -31,6 +31,9 @@ pipeline components for users to create their own data processing pipelines.
 
 ---
 
+> [!WARNING]
+> This package is in beta and subject to extensive changes. There are no guarantees for API stability.
+
 ## Key Features
 
 - **Fluent pipeline API** — chain `Source → Filter → Sink` with a single
