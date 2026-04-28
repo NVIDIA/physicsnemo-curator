@@ -336,3 +336,92 @@ class TestDrivAerMLMultiMeshContent:
         )
         meshes = list(source[0])
         assert len(meshes) == 1
+
+
+# ---------------------------------------------------------------------------
+# End-to-end pipeline test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.e2e
+class TestDrivAerMLMultiPipeline:
+    """E2E test: DrivAerMLSource(multi) → MeshSink with run_id/mesh_name naming."""
+
+    @pytest.fixture()
+    def local_drivaerml(self, tmp_path: pathlib.Path) -> pathlib.Path:
+        """Create a minimal local DrivAerML-like directory structure."""
+        for run_id in [1, 5]:
+            run_dir = tmp_path / f"run_{run_id}"
+            run_dir.mkdir()
+            sphere = pv.Sphere(radius=1.0, theta_resolution=4, phi_resolution=4)
+            sphere.point_data["Pressure"] = np.random.default_rng(run_id).standard_normal(sphere.n_points)
+            sphere.cell_data["WallShearStress"] = np.random.default_rng(run_id).standard_normal(sphere.n_cells)
+            sphere.save(str(run_dir / f"boundary_{run_id}.vtp"))
+
+            points = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float64)
+            cells = np.array([[4, 0, 1, 2, 3]])
+            cell_types = np.array([10])
+            grid = pv.UnstructuredGrid(cells, cell_types, points)
+            grid.cell_data["Pressure"] = np.array([1.0 * run_id])
+            grid.save(str(run_dir / f"volume_{run_id}.vtu"))
+        return tmp_path
+
+    def test_full_multi_pipeline(self, local_drivaerml: pathlib.Path, tmp_path: pathlib.Path) -> None:
+        """Full pipeline writes expected directory structure."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        output_dir = tmp_path / "output"
+
+        source = DrivAerMLSource(
+            mesh_type="multi",
+            url=str(local_drivaerml),
+            mesh_parts=["domain", "stl", "single_solid"],
+        )
+
+        pipeline = source.write(
+            MeshSink(
+                output_dir=str(output_dir),
+                naming_template="run_{run_id}/{mesh_name}",
+            )
+        )
+
+        # Process both runs
+        paths0 = pipeline[0]
+        paths1 = pipeline[1]
+
+        # Each run should produce 3 output directories
+        assert len(paths0) == 3
+        assert len(paths1) == 3
+
+        # Check expected directory names
+        assert (output_dir / "run_1" / "domain_1").exists()
+        assert (output_dir / "run_1" / "drivaer_1.stl").exists()
+        assert (output_dir / "run_1" / "drivaer_1_single_solid.stl").exists()
+        assert (output_dir / "run_5" / "domain_5").exists()
+        assert (output_dir / "run_5" / "drivaer_5.stl").exists()
+        assert (output_dir / "run_5" / "drivaer_5_single_solid.stl").exists()
+
+    def test_subset_pipeline(self, local_drivaerml: pathlib.Path, tmp_path: pathlib.Path) -> None:
+        """Pipeline with mesh_parts subset writes only requested meshes."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        output_dir = tmp_path / "output"
+
+        source = DrivAerMLSource(
+            mesh_type="multi",
+            url=str(local_drivaerml),
+            mesh_parts=["stl"],
+        )
+
+        pipeline = source.write(
+            MeshSink(
+                output_dir=str(output_dir),
+                naming_template="run_{run_id}/{mesh_name}",
+            )
+        )
+
+        paths = pipeline[0]
+        assert len(paths) == 1
+        assert (output_dir / "run_1" / "drivaer_1.stl").exists()
+        # domain should NOT exist
+        assert not (output_dir / "run_1" / "domain_1").exists()
