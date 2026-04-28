@@ -228,18 +228,12 @@ class MeshSink(Sink["Mesh"]):
         needs_mesh_name = self._naming_template is not None and "{mesh_name" in self._naming_template
 
         if needs_run_id and not has_run_id:
-            msg = (
-                "Naming template uses {run_id} but the source does not "
-                "expose a run_id(index) method."
-            )
+            msg = "Naming template uses {run_id} but the source does not expose a run_id(index) method."
             raise ValueError(msg)
 
         has_mesh_name = self._source is not None and hasattr(self._source, "mesh_name")
         if needs_mesh_name and not has_mesh_name:
-            msg = (
-                "Naming template uses {mesh_name} but the source does not "
-                "expose a mesh_name(index, seq) method."
-            )
+            msg = "Naming template uses {mesh_name} but the source does not expose a mesh_name(index, seq) method."
             raise ValueError(msg)
 
         for seq, mesh in enumerate(items):

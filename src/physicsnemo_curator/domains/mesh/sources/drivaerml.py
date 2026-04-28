@@ -81,10 +81,12 @@ class DrivAerMLSource(Source[Mesh]):
     * ``"volume"`` — volumetric mesh (VTU, reconstructed from split parts)
     * ``"slices"`` — x/y/z-normal slice planes (VTP); yields multiple
       meshes per index
+    * ``"multi"`` — yields domain, stl, and/or single_solid meshes per run
+      (all converted to float32 with ``cell_centroids`` point source)
 
     Parameters
     ----------
-    mesh_type : {"boundary", "volume", "slices"}
+    mesh_type : {"boundary", "volume", "slices", "multi"}
         Which mesh to read from each run directory.
     url : str
         Base HuggingFace Hub URL.  Override only for testing.
@@ -98,6 +100,11 @@ class DrivAerMLSource(Source[Mesh]):
         Point source mode for ``from_pyvista`` conversion.
     warn_on_lost_data : bool
         Warn when data arrays are discarded during conversion.
+    mesh_parts : list[str] or None
+        Which mesh parts to yield in ``"multi"`` mode.  Valid parts are
+        ``"domain"``, ``"stl"``, and ``"single_solid"``.  When ``None``
+        (the default), all three parts are yielded.  Ignored for other
+        mesh types.
 
     Examples
     --------
