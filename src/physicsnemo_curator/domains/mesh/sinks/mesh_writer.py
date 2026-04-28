@@ -58,6 +58,15 @@ class MeshSink(Sink["Mesh"]):
     * ``{stem}`` — the filename stem of the source file (without extension,
       e.g. ``mesh`` for ``mesh.vtu``).
 
+    When the source exposes ``run_id(index)`` and/or ``mesh_name(index, seq)``
+    methods, the following placeholders are also available:
+
+    * ``{run_id}`` — an integer identifier for the simulation run, resolved
+      via ``source.run_id(index)``.
+    * ``{mesh_name}`` — a per-mesh name resolved via
+      ``source.mesh_name(index, seq)``.  Useful for multi-mesh sources
+      where each sequence position has a distinct logical name.
+
     These are wired automatically by the pipeline — no need to pass the
     source manually.  This enables **directory-mirroring** workflows where
     the output dataset reproduces the nested folder layout of the input.
@@ -70,10 +79,11 @@ class MeshSink(Sink["Mesh"]):
         Python format string used to generate subdirectory names.  The
         placeholders ``{index}`` (source index) and ``{seq}`` (sequence
         number within the source, starting at 0) are always available.
-        When the source supports it, ``{relpath}`` and ``{stem}``
-        are also available.  Standard format-spec syntax is supported
-        (e.g. ``{index:04d}``).  When ``None`` (the default) the
-        built-in pattern ``mesh_{index:04d}_{seq}`` is used.
+        When the source supports it, ``{relpath}``, ``{stem}``,
+        ``{run_id}``, and ``{mesh_name}`` are also available.  Standard
+        format-spec syntax is supported (e.g. ``{index:04d}``).  When
+        ``None`` (the default) the built-in pattern
+        ``mesh_{index:04d}_{seq}`` is used.
 
     Examples
     --------
@@ -120,7 +130,7 @@ class MeshSink(Sink["Mesh"]):
                 name="naming_template",
                 description=(
                     "Format string for output names. "
-                    "Placeholders: {index}, {seq}, {relpath}, {stem}. "
+                    "Placeholders: {index}, {seq}, {relpath}, {stem}, {run_id}, {mesh_name}. "
                     "Default: mesh_{index:04d}_{seq}"
                 ),
                 type=str,
@@ -156,16 +166,17 @@ class MeshSink(Sink["Mesh"]):
         # construction time rather than deep inside a pipeline run.
         if naming_template is not None:
             try:
-                naming_template.format(index=0, seq=0, relpath="test", stem="test")
+                naming_template.format(index=0, seq=0, relpath="test", stem="test", run_id=0, mesh_name="test")
             except (KeyError, IndexError, ValueError) as exc:
                 msg = (
                     f"Invalid naming_template {naming_template!r}: {exc}. "
-                    "Only {index}, {seq}, {relpath}, and {stem} placeholders are supported."
+                    "Only {index}, {seq}, {relpath}, {stem}, {run_id}, "
+                    "and {mesh_name} placeholders are supported."
                 )
                 raise ValueError(msg) from exc
 
     def set_source(self, source: Source[Mesh]) -> None:
-        """Inject the pipeline source for ``{relpath}``/``{stem}`` resolution.
+        """Inject the pipeline source for placeholder resolution.
 
         Called automatically by the :class:`~physicsnemo_curator.core.base.Pipeline`
         when the sink is attached via :meth:`Pipeline.write`.
@@ -173,8 +184,9 @@ class MeshSink(Sink["Mesh"]):
         Parameters
         ----------
         source : Source[Mesh]
-            The pipeline source.  If it exposes a ``relative_path(index)``
-            method, the sink will use it to resolve naming placeholders.
+            The pipeline source.  If it exposes ``relative_path(index)``,
+            ``run_id(index)``, or ``mesh_name(index, seq)`` methods, the
+            sink will use them to resolve naming placeholders.
         """
         self._source = source
 
@@ -205,13 +217,45 @@ class MeshSink(Sink["Mesh"]):
             stem = rel_path.stem
             relpath = str(rel_path.parent) if str(rel_path.parent) != "." else ""
 
+        # Resolve run_id if source supports it.
+        run_id: int | str = ""
+        has_run_id = self._source is not None and hasattr(self._source, "run_id")
+        if has_run_id:
+            run_id = self._source.run_id(index)  # ty: ignore[union-attr]
+
+        # Check if template requires source-backed placeholders.
+        needs_run_id = self._naming_template is not None and "{run_id" in self._naming_template
+        needs_mesh_name = self._naming_template is not None and "{mesh_name" in self._naming_template
+
+        if needs_run_id and not has_run_id:
+            msg = (
+                "Naming template uses {run_id} but the source does not "
+                "expose a run_id(index) method."
+            )
+            raise ValueError(msg)
+
+        has_mesh_name = self._source is not None and hasattr(self._source, "mesh_name")
+        if needs_mesh_name and not has_mesh_name:
+            msg = (
+                "Naming template uses {mesh_name} but the source does not "
+                "expose a mesh_name(index, seq) method."
+            )
+            raise ValueError(msg)
+
         for seq, mesh in enumerate(items):
+            # Resolve mesh_name per-seq.
+            mesh_name = ""
+            if has_mesh_name:
+                mesh_name = self._source.mesh_name(index, seq)  # ty: ignore[union-attr]
+
             if self._naming_template is not None:
                 name = self._naming_template.format(
                     index=index,
                     seq=seq,
                     relpath=relpath,
                     stem=stem,
+                    run_id=run_id,
+                    mesh_name=mesh_name,
                 )
             else:
                 name = f"mesh_{index:04d}_{seq}"
