@@ -19,16 +19,17 @@
 from __future__ import annotations
 
 import pathlib
-from collections.abc import Generator
-from unittest.mock import patch
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 import pyvista as pv
-from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.io import from_pyvista
 
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+
+if TYPE_CHECKING:
+    from physicsnemo.mesh import Mesh
 
 pytestmark = pytest.mark.requires("mesh")
 
@@ -145,3 +146,193 @@ class TestMeshSinkRunIdPlaceholder:
             naming_template="run_{run_id}/{mesh_name}",
         )
         assert sink is not None
+
+
+# ---------------------------------------------------------------------------
+# DrivAerMLSource multi-mode tests
+# ---------------------------------------------------------------------------
+
+
+class TestDrivAerMLSourceMultiConstruction:
+    """Test construction and metadata methods for mesh_type='multi'."""
+
+    @pytest.fixture()
+    def local_drivaerml(self, tmp_path: pathlib.Path) -> pathlib.Path:
+        """Create a minimal local DrivAerML-like directory structure."""
+        for run_id in [1, 5, 12]:
+            run_dir = tmp_path / f"run_{run_id}"
+            run_dir.mkdir()
+            # Create a simple boundary VTP
+            sphere = pv.Sphere(radius=1.0, theta_resolution=4, phi_resolution=4)
+            sphere.point_data["Pressure"] = np.random.default_rng(run_id).standard_normal(sphere.n_points)
+            sphere.cell_data["WallShearStress"] = np.random.default_rng(run_id).standard_normal(sphere.n_cells)
+            sphere.save(str(run_dir / f"boundary_{run_id}.vtp"))
+            # Create a simple volume VTU
+            points = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float64)
+            cells = np.array([[4, 0, 1, 2, 3]])
+            cell_types = np.array([10])  # VTK_TETRA
+            grid = pv.UnstructuredGrid(cells, cell_types, points)
+            grid.point_data["Velocity"] = np.random.default_rng(run_id).standard_normal((4, 3))
+            grid.cell_data["Pressure"] = np.array([1.0 * run_id])
+            grid.save(str(run_dir / f"volume_{run_id}.vtu"))
+        return tmp_path
+
+    def test_multi_mode_construction(self, local_drivaerml: pathlib.Path) -> None:
+        """mesh_type='multi' constructs successfully with local data."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(
+            mesh_type="multi",
+            url=str(local_drivaerml),
+        )
+        assert len(source) == 3  # 3 runs
+
+    def test_run_id_returns_dataset_ids(self, local_drivaerml: pathlib.Path) -> None:
+        """run_id() returns the actual dataset run IDs, not sequential indices."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(
+            mesh_type="multi",
+            url=str(local_drivaerml),
+        )
+        assert source.run_id(0) == 1
+        assert source.run_id(1) == 5
+        assert source.run_id(2) == 12
+
+    def test_mesh_name_returns_canonical_names(self, local_drivaerml: pathlib.Path) -> None:
+        """mesh_name() returns canonical filenames with run_id substituted."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(
+            mesh_type="multi",
+            url=str(local_drivaerml),
+            mesh_parts=["domain", "stl", "single_solid"],
+        )
+        assert source.mesh_name(0, 0) == "domain_1"
+        assert source.mesh_name(0, 1) == "drivaer_1.stl"
+        assert source.mesh_name(0, 2) == "drivaer_1_single_solid.stl"
+        assert source.mesh_name(1, 0) == "domain_5"
+
+    def test_mesh_parts_subset(self, local_drivaerml: pathlib.Path) -> None:
+        """mesh_parts subset limits which meshes are yielded."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(
+            mesh_type="multi",
+            url=str(local_drivaerml),
+            mesh_parts=["domain"],
+        )
+        meshes = list(source[0])
+        assert len(meshes) == 1
+
+    def test_invalid_mesh_parts_raises(self, local_drivaerml: pathlib.Path) -> None:
+        """Invalid mesh_parts entries raise ValueError."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        with pytest.raises(ValueError, match="Invalid mesh_parts"):
+            DrivAerMLSource(
+                mesh_type="multi",
+                url=str(local_drivaerml),
+                mesh_parts=["invalid_part"],
+            )
+
+    def test_params_includes_multi(self) -> None:
+        """params() should list 'multi' as a mesh_type choice."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        params = DrivAerMLSource.params()
+        mesh_type_param = next(p for p in params if p.name == "mesh_type")
+        assert "multi" in mesh_type_param.choices
+
+
+class TestDrivAerMLMultiMeshContent:
+    """Test that multi mode yields correctly transformed meshes."""
+
+    @pytest.fixture()
+    def local_drivaerml(self, tmp_path: pathlib.Path) -> pathlib.Path:
+        """Create a minimal local DrivAerML-like directory structure."""
+        for run_id in [1, 5]:
+            run_dir = tmp_path / f"run_{run_id}"
+            run_dir.mkdir()
+            # Boundary VTP with float64 data
+            sphere = pv.Sphere(radius=1.0, theta_resolution=4, phi_resolution=4)
+            sphere.point_data["Pressure"] = (
+                np.random.default_rng(run_id).standard_normal(sphere.n_points).astype(np.float64)
+            )
+            sphere.cell_data["WallShearStress"] = (
+                np.random.default_rng(run_id).standard_normal(sphere.n_cells).astype(np.float64)
+            )
+            sphere.save(str(run_dir / f"boundary_{run_id}.vtp"))
+            # Volume VTU with float64 data
+            points = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float64)
+            cells = np.array([[4, 0, 1, 2, 3]])
+            cell_types = np.array([10])  # VTK_TETRA
+            grid = pv.UnstructuredGrid(cells, cell_types, points)
+            grid.point_data["Velocity"] = np.random.default_rng(run_id).standard_normal((4, 3)).astype(np.float64)
+            grid.cell_data["Pressure"] = np.array([1.0 * run_id], dtype=np.float64)
+            grid.save(str(run_dir / f"volume_{run_id}.vtu"))
+        return tmp_path
+
+    def test_multi_yields_three_meshes(self, local_drivaerml: pathlib.Path) -> None:
+        """Multi mode yields 3 meshes per index by default."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(mesh_type="multi", url=str(local_drivaerml))
+        meshes = list(source[0])
+        assert len(meshes) == 3
+
+    def test_domain_mesh_is_fp32(self, local_drivaerml: pathlib.Path) -> None:
+        """Domain mesh has float32 points and data."""
+        import torch
+
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(mesh_type="multi", url=str(local_drivaerml))
+        meshes = list(source[0])
+        domain = meshes[0]
+        # Points should be fp32
+        assert domain.points.dtype == torch.float32
+
+    def test_stl_mesh_is_fp32(self, local_drivaerml: pathlib.Path) -> None:
+        """STL mesh has float32 points and data."""
+        import torch
+
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(mesh_type="multi", url=str(local_drivaerml))
+        meshes = list(source[0])
+        stl = meshes[1]
+        assert stl.points.dtype == torch.float32
+
+    def test_single_solid_is_single_polydata(self, local_drivaerml: pathlib.Path) -> None:
+        """Single solid mesh should be derived from the boundary file."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(mesh_type="multi", url=str(local_drivaerml))
+        meshes = list(source[0])
+        single_solid = meshes[2]
+        # Should have points (same source file, just merged)
+        assert single_solid.n_points > 0
+
+    def test_domain_uses_cell_centroids(self, local_drivaerml: pathlib.Path) -> None:
+        """Domain mesh should use cell_centroids point source."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(mesh_type="multi", url=str(local_drivaerml))
+        meshes = list(source[0])
+        domain = meshes[0]
+        # With cell_centroids on a tetrahedron, n_points should equal n_cells (1 cell)
+        # The volume has 1 tetrahedron → 1 centroid point
+        assert domain.n_points == 1
+
+    def test_mesh_parts_domain_only(self, local_drivaerml: pathlib.Path) -> None:
+        """mesh_parts=['domain'] yields only the domain mesh."""
+        from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+
+        source = DrivAerMLSource(
+            mesh_type="multi",
+            url=str(local_drivaerml),
+            mesh_parts=["domain"],
+        )
+        meshes = list(source[0])
+        assert len(meshes) == 1

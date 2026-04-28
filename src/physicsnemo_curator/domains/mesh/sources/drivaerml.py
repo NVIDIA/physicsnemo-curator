@@ -58,7 +58,17 @@ _MESH_TEMPLATES: dict[str, str] = {
 }
 
 #: Valid mesh types for this dataset.
-MeshType = Literal["boundary", "volume", "slices"]
+MeshType = Literal["boundary", "volume", "slices", "multi"]
+
+#: Valid mesh parts for multi mode.
+_VALID_MESH_PARTS: set[str] = {"domain", "stl", "single_solid"}
+
+#: Canonical output name templates per mesh part.
+_MESH_NAME_TEMPLATES: dict[str, str] = {
+    "domain": "domain_{run_id}",
+    "stl": "drivaer_{run_id}.stl",
+    "single_solid": "drivaer_{run_id}_single_solid.stl",
+}
 
 
 class DrivAerMLSource(Source[Mesh]):
@@ -122,10 +132,10 @@ class DrivAerMLSource(Source[Mesh]):
         return [
             Param(
                 name="mesh_type",
-                description="Mesh type: boundary (surface), volume (3D field), or slices (planes)",
+                description="Mesh type: boundary (surface), volume (3D field), slices (planes), or multi (all)",
                 type=str,
                 default="boundary",
-                choices=["boundary", "volume", "slices"],
+                choices=["boundary", "volume", "slices", "multi"],
             ),
             Param(name="url", description="Base HuggingFace Hub URL", type=str, default=_DRIVAERML_HF_URL),
             Param(
@@ -154,6 +164,12 @@ class DrivAerMLSource(Source[Mesh]):
                 type=bool,
                 default=True,
             ),
+            Param(
+                name="mesh_parts",
+                description="Mesh parts to yield in multi mode (domain, stl, single_solid)",
+                type=list,
+                default=None,
+            ),
         ]
 
     def __init__(
@@ -165,6 +181,7 @@ class DrivAerMLSource(Source[Mesh]):
         manifold_dim: int | Literal["auto"] = "auto",
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
+        mesh_parts: list[str] | None = None,
     ) -> None:
         import fsspec
 
@@ -180,10 +197,19 @@ class DrivAerMLSource(Source[Mesh]):
         self._protocol = self._fs.protocol if isinstance(self._fs.protocol, str) else self._fs.protocol[0]
         self._run_indices = self._discover_runs()
 
-        if mesh_type == "slices":
+        if mesh_type == "multi":
+            self._mesh_parts = mesh_parts or ["domain", "stl", "single_solid"]
+            invalid = set(self._mesh_parts) - _VALID_MESH_PARTS
+            if invalid:
+                msg = f"Invalid mesh_parts: {sorted(invalid)}. Valid parts: {sorted(_VALID_MESH_PARTS)}"
+                raise ValueError(msg)
+            self._file_template = ""  # not used for multi mode
+        elif mesh_type == "slices":
+            self._mesh_parts: list[str] = []
             self._file_template = "boundary_{i}.vtp"  # dummy, not used for slices
             self._build_slices_data()
         else:
+            self._mesh_parts = []
             self._file_template = _MESH_TEMPLATES[mesh_type]
 
     def _discover_runs(self) -> list[int]:
@@ -271,6 +297,45 @@ class DrivAerMLSource(Source[Mesh]):
         """Return the number of available runs."""
         return len(self._run_indices)
 
+    def run_id(self, index: int) -> int:
+        """Return the dataset run ID for the given source index.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Returns
+        -------
+        int
+            The dataset run ID (e.g. 1, 5, 12).
+        """
+        return self._run_indices[index]
+
+    def mesh_name(self, index: int, seq: int) -> str:
+        """Return the canonical output name for mesh at (index, seq).
+
+        Parameters
+        ----------
+        index : int
+            Source index (which run).
+        seq : int
+            Sequence number within this index (which part).
+
+        Returns
+        -------
+        str
+            Resolved name like ``"domain_1"`` or ``"drivaer_5.stl"``.
+
+        Raises
+        ------
+        IndexError
+            If *seq* is out of range for the active mesh_parts.
+        """
+        run_id = self._run_indices[index]
+        part = self._mesh_parts[seq]
+        return _MESH_NAME_TEMPLATES[part].format(run_id=run_id)
+
     def __getitem__(self, index: int) -> Generator[Mesh]:
         """Read the mesh(es) for the *index*-th run.
 
@@ -292,6 +357,8 @@ class DrivAerMLSource(Source[Mesh]):
             yield from self._read_volume(index)
         elif self._mesh_type == "slices":
             yield from self._read_slices(index)
+        elif self._mesh_type == "multi":
+            yield from self._read_multi(index)
         else:
             if index < -len(self._run_indices) or index >= len(self._run_indices):
                 msg = f"Index {index} out of range for source with {len(self._run_indices)} runs."
@@ -421,3 +488,210 @@ class DrivAerMLSource(Source[Mesh]):
                 raise ValueError(msg)
 
             self._slices_run_data.append((fs, protocol, files))
+
+    # -- Multi-mode methods ---------------------------------------------------
+
+    def _read_multi(self, index: int) -> Generator[Mesh]:
+        """Read multiple mesh representations for a given run.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Yields
+        ------
+        Mesh
+            One mesh per active mesh_part, in order.
+        """
+        for part in self._mesh_parts:
+            if part == "domain":
+                yield from self._read_domain(index)
+            elif part == "stl":
+                yield from self._read_stl(index)
+            elif part == "single_solid":
+                yield from self._read_single_solid(index)
+
+    def _read_domain(self, index: int) -> Generator[Mesh]:
+        """Read domain (volume) mesh with manifold_dim=0, cell_centroids, fp32.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Yields
+        ------
+        Mesh
+            Volume mesh converted with cell centroids and downcast to fp32.
+        """
+        run_id = self._run_indices[index]
+        direct_remote = f"{self._root_path}/run_{run_id}/volume_{run_id}.vtu"
+        try:
+            local_path = self._ensure_local(direct_remote)
+        except (FileNotFoundError, OSError):
+            local_path = self._read_volume_parts(run_id)
+
+        pv_mesh = pv.read(local_path)
+        mesh = from_pyvista(
+            pv_mesh,
+            manifold_dim=0,
+            point_source="cell_centroids",
+            warn_on_lost_data=self._warn_on_lost_data,
+        )
+        yield self._downcast_fp32(mesh)
+
+    def _read_stl(self, index: int) -> Generator[Mesh]:
+        """Read boundary (stl) mesh with manifold_dim='auto', cell_centroids, fp32.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Yields
+        ------
+        Mesh
+            Surface mesh converted with cell centroids and downcast to fp32.
+        """
+        run_id = self._run_indices[index]
+        filename = f"boundary_{run_id}.vtp"
+        remote_path = f"{self._root_path}/run_{run_id}/{filename}"
+        local_path = self._ensure_local(remote_path)
+
+        pv_mesh = pv.read(local_path)
+        mesh = from_pyvista(
+            pv_mesh,
+            manifold_dim="auto",
+            point_source="cell_centroids",
+            warn_on_lost_data=self._warn_on_lost_data,
+        )
+        yield self._downcast_fp32(mesh)
+
+    def _read_single_solid(self, index: int) -> Generator[Mesh]:
+        """Read boundary mesh merged into a single PolyData, with cell_centroids, fp32.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Yields
+        ------
+        Mesh
+            Merged surface mesh converted with cell centroids and downcast to fp32.
+        """
+        run_id = self._run_indices[index]
+        filename = f"boundary_{run_id}.vtp"
+        remote_path = f"{self._root_path}/run_{run_id}/{filename}"
+        local_path = self._ensure_local(remote_path)
+
+        pv_mesh = pv.read(local_path)
+        merged = self._merge_to_single_solid(pv_mesh)
+        mesh = from_pyvista(
+            merged,
+            manifold_dim="auto",
+            point_source="cell_centroids",
+            warn_on_lost_data=self._warn_on_lost_data,
+        )
+        yield self._downcast_fp32(mesh)
+
+    def _read_volume_parts(self, run_id: int) -> str:
+        """Concatenate split volume VTU parts into a single local file.
+
+        Parameters
+        ----------
+        run_id : int
+            The dataset run ID.
+
+        Returns
+        -------
+        str
+            Local path to the concatenated VTU file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If no volume part files are found.
+        """
+        parts: list[str] = []
+        for part_idx in range(10):
+            part_name = f"volume_{run_id}.vtu.{part_idx:02d}.part"
+            remote = f"{self._root_path}/run_{run_id}/{part_name}"
+            try:
+                parts.append(self._ensure_local(remote))
+            except (FileNotFoundError, OSError):
+                break
+
+        if not parts:
+            msg = f"No volume files found for run_{run_id}"
+            raise FileNotFoundError(msg)
+
+        concat_path = pathlib.Path(self._cache_storage) / f"volume_{run_id}_concat.vtu"
+        if not concat_path.exists():
+            with concat_path.open("wb") as out:
+                for part in parts:
+                    with pathlib.Path(part).open("rb") as inp:
+                        out.write(inp.read())
+            logger.info("Concatenated %d parts into %s", len(parts), concat_path)
+
+        return str(concat_path)
+
+    @staticmethod
+    def _downcast_fp32(mesh: Mesh) -> Mesh:
+        """Downcast float64 tensors in a Mesh to float32 in-place.
+
+        Parameters
+        ----------
+        mesh : Mesh
+            Input mesh (modified in-place).
+
+        Returns
+        -------
+        Mesh
+            The same mesh with float64 arrays converted to float32.
+        """
+        import torch
+
+        if mesh.points.dtype == torch.float64:
+            mesh.points = mesh.points.float()
+
+        if mesh.point_data is not None:
+            for key in list(mesh.point_data.keys()):  # noqa: SIM118 - TensorDict needs .keys()
+                tensor = mesh.point_data[key]
+                if tensor.dtype == torch.float64:
+                    mesh.point_data[key] = tensor.float()
+
+        if mesh.cell_data is not None:
+            for key in list(mesh.cell_data.keys()):  # noqa: SIM118 - TensorDict needs .keys()
+                tensor = mesh.cell_data[key]
+                if tensor.dtype == torch.float64:
+                    mesh.cell_data[key] = tensor.float()
+
+        return mesh
+
+    @staticmethod
+    def _merge_to_single_solid(pv_mesh: pv.PolyData | pv.MultiBlock) -> pv.PolyData:
+        """Merge all blocks/cells into a single contiguous PolyData.
+
+        For a PolyData that is already a single block, this is effectively
+        a no-op (returns as-is).  For MultiBlock datasets, concatenates
+        all blocks into one PolyData.
+
+        Parameters
+        ----------
+        pv_mesh : pv.PolyData or pv.MultiBlock
+            Input PyVista mesh.
+
+        Returns
+        -------
+        pv.PolyData
+            A single merged PolyData with all cells.
+        """
+        if isinstance(pv_mesh, pv.MultiBlock):
+            combined = pv_mesh.combine()
+            if isinstance(combined, pv.UnstructuredGrid):
+                return combined.extract_surface()
+            return combined
+        # Already a single PolyData — return as-is.
+        return pv_mesh
