@@ -29,6 +29,35 @@ non-deforming wall nodes with
 mesh metadata, converts fields to single precision, and writes the
 processed meshes to disk.
 
+Dataset
+-------
+
+This pipeline expects LS-DYNA crash simulation output in ``d3plot`` binary
+format.  Organize your data as a directory of run folders, each containing
+a ``d3plot`` file and an optional ``.k`` keyword file for shell thickness::
+
+    crash_sims/
+    ├── Run100/
+    │   ├── d3plot          # Required: binary mesh/displacement data
+    │   └── run100.k        # Optional: part thickness definitions
+    ├── Run101/
+    │   ├── d3plot
+    │   └── run101.k
+    └── ...
+
+**Where to obtain data:**
+
+- **NHTSA NCAP** — The U.S. National Highway Traffic Safety Administration
+  publishes LS-DYNA crash simulation models through their NCAP (New Car
+  Assessment Program) at https://www.nhtsa.gov/crashsimulation. These
+  include full-vehicle finite element models with d3plot outputs.
+
+- **Your own simulations** — Any LS-DYNA explicit dynamics simulation
+  producing shell element d3plot output is compatible.  The source reads
+  node coordinates, shell connectivity, and multi-timestep displacements.
+
+Set ``INPUT_DIR`` below to point to your data directory.
+
 .. note::
 
    This example requires the ``lasso-python`` package for reading d3plot
