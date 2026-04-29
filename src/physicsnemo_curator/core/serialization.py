@@ -39,8 +39,7 @@ import logging
 import pathlib
 import platform
 import subprocess
-import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from physicsnemo_curator.core.base import Pipeline
@@ -100,7 +99,7 @@ def _collect_metadata() -> dict[str, Any]:
         "rust_extension": rust_version(),
         "python_version": platform.python_version(),
         "platform": platform.platform(),
-        "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "git_hash": git_hash,
         "git_dirty": git_dirty,
     }

@@ -7,7 +7,7 @@ parallel execution, caching, and metrics visualization.
 
 ## Package Layout
 
-```
+```text
 src/physicsnemo_curator/
 ├── __init__.py           # Public API: Source, Filter, Sink, Pipeline, Param, run_pipeline
 ├── _lib.pyi              # Type stubs for Rust extension
@@ -48,7 +48,7 @@ src/rust/src/             # Native extension (PyO3)
 
 The core abstraction is a lazy, composable ETL chain:
 
-```
+```text
 Source[T] → Filter[T]* → Sink[T]
 ```
 
@@ -90,7 +90,7 @@ generate forms, validate inputs, and reconstruct components from saved configs.
 
 ### Single-Index Execution (`pipeline[i]`)
 
-```
+```text
 source[i] → gen₀
 filter₁(gen₀) → gen₁
 filter₂(gen₁) → gen₂
@@ -119,6 +119,7 @@ results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 | `prefect` | Workflow orchestration + observability |
 
 Backend selection:
+
 - `n_jobs=1` → always sequential
 - `backend="auto"` → picks best available (dask > loky > process_pool)
 
@@ -162,6 +163,7 @@ Every pipeline execution creates (or reuses) a SQLite database in the cache dire
 The database is identified by a SHA-256 hash of the pipeline's serialized configuration.
 
 **Tables:**
+
 - `pipeline_runs` — one row per invocation (config hash, start time)
 - `index_results` — per-index completion status + output paths
 - `worker_info` — PID, hostname, thread/process ID per worker
@@ -178,11 +180,13 @@ reprocessing completed indices.
 ### Cache Directory
 
 Follows XDG Base Directory Specification:
+
 1. `$PSNC_CACHE_DIR` (explicit override)
 2. `$XDG_CACHE_HOME/psnc/`
 3. `~/.cache/psnc/`
 
 The `cache` module provides introspection:
+
 - `list_databases()` → returns `DBInfo` objects with metadata (hash, size, source,
   sink, completion counts)
 - Used by the wizard's cache management screen and dashboard
@@ -202,6 +206,7 @@ registry.register_sink("mesh", MeshSink)
 ```
 
 The registry tracks:
+
 - **Submodules** — named groups with an `import_check` module path
 - **Availability** — a submodule is "available" only if its dependency can be imported
 - **Component classes** — keyed by their `name` class attribute
@@ -268,6 +273,7 @@ Filters can provide custom dashboard widgets by overriding `dashboard_panel()` a
 standard metrics.
 
 Launch:
+
 ```bash
 curator dashboard /path/to/pipeline.db
 ```
@@ -280,7 +286,8 @@ An interactive terminal wizard built on [Textual](https://textual.textualize.io/
 guides users through pipeline construction without writing code.
 
 **Flow:**
-```
+
+```text
 Welcome → Submodule → Source → Filters → Sink → Summary → Execute → Results
                                                     ↕
                                               Cache Manager
@@ -294,6 +301,7 @@ or executed immediately with a chosen backend.
 Navigation uses Textual's screen stack (`push_screen` / `pop_screen`).
 
 Launch:
+
 ```bash
 psnc
 ```
@@ -320,7 +328,7 @@ The Rust extension is **optional** — the package degrades gracefully if not bu
 
 Each domain is a self-contained package under `domains/` with the same structure:
 
-```
+```text
 domain_name/
 ├── __init__.py     # Registry registration
 ├── sources/        # Source implementations
@@ -336,7 +344,7 @@ can be imported (e.g., `physicsnemo.mesh` for the mesh domain).
 
 ## Data Flow (End to End)
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │  User (Python API / Wizard / CLI)                   │
 │  pipeline = Source(...).filter(...).write(Sink(...)) │

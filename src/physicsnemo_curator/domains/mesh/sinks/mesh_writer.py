@@ -221,7 +221,7 @@ class MeshSink(Sink["Mesh"]):
         run_id: int | str = ""
         has_run_id = self._source is not None and hasattr(self._source, "run_id")
         if has_run_id:
-            run_id = self._source.run_id(index)  # ty: ignore[union-attr]
+            run_id = self._source.run_id(index)  # ty: ignore[unresolved-attribute]
 
         # Check if template requires source-backed placeholders.
         needs_run_id = self._naming_template is not None and "{run_id" in self._naming_template
@@ -240,7 +240,7 @@ class MeshSink(Sink["Mesh"]):
             # Resolve mesh_name per-seq.
             mesh_name = ""
             if has_mesh_name:
-                mesh_name = self._source.mesh_name(index, seq)  # ty: ignore[union-attr]
+                mesh_name = self._source.mesh_name(index, seq)  # ty: ignore[unresolved-attribute]
 
             if self._naming_template is not None:
                 name = self._naming_template.format(

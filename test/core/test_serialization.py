@@ -485,7 +485,7 @@ class TestMetadata:
 
     def test_metadata_created_utc_is_iso_format(self, tmp_path: pathlib.Path) -> None:
         """created_utc is a valid ISO 8601 UTC timestamp."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         data = serialize_pipeline(_make_pipeline(tmp_path))
         ts = data["metadata"]["created_utc"]
@@ -558,7 +558,7 @@ class TestMetadata:
             cmd = args[0] if args else kwargs.get("args", [])
             if isinstance(cmd, list) and cmd[0] == "git":
                 raise FileNotFoundError("git not found")
-            return original_run(*args, **kwargs)
+            return original_run(*args, **kwargs)  # ty: ignore[no-matching-overload]
 
         monkeypatch.setattr(subprocess, "run", _failing_git)
         meta = _collect_metadata()
