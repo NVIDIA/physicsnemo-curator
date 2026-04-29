@@ -37,4 +37,7 @@ docs/specs/
 # Opencode
 .opencode/
 
+# Superpowers brainstorm artifacts
+.superpowers/
+
 data/
