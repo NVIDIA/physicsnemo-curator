@@ -54,6 +54,10 @@ class SourceScreen(Screen[None]):
         width: 60;
         margin: 1 0;
     }
+    #source-select .option-list--option {
+        padding: 1 1;
+        border-bottom: solid $surface-darken-1;
+    }
     #param-container {
         height: auto;
         max-height: 70%;

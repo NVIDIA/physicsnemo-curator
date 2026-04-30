@@ -56,6 +56,10 @@ class FilterScreen(Screen[None]):
         max-height: 30%;
         margin: 1 0;
     }
+    #filter-list .option-list--option {
+        padding: 1 1;
+        border-bottom: solid $surface-darken-1;
+    }
     #filter-params {
         height: auto;
         max-height: 50%;

@@ -86,6 +86,10 @@ class SubmoduleScreen(Screen[None]):
         width: 60;
         margin: 1 0;
     }
+    #submodule-select .option-list--option {
+        padding: 1 1;
+        border-bottom: solid $surface-darken-1;
+    }
     .nav-btn {
         margin: 1 1;
     }

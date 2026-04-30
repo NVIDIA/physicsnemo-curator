@@ -38,7 +38,9 @@ import tempfile
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import pyvista as pv
+import torch
 from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.domain_mesh import DomainMesh
 from physicsnemo.mesh.io import from_pyvista
 
 from physicsnemo_curator.core.base import Param, Source
@@ -81,8 +83,9 @@ class DrivAerMLSource(Source[Mesh]):
     * ``"volume"`` — volumetric mesh (VTU, reconstructed from split parts)
     * ``"slices"`` — x/y/z-normal slice planes (VTP); yields multiple
       meshes per index
-    * ``"multi"`` — yields domain, stl, and/or single_solid meshes per run
-      (all converted to float32 with ``cell_centroids`` point source)
+    * ``"multi"`` — yields domain (as :class:`DomainMesh`), stl, and/or
+      single_solid meshes per run (all converted to float32).  The domain
+      mesh combines volume interior, boundary surface, and global data.
 
     Parameters
     ----------
@@ -498,7 +501,7 @@ class DrivAerMLSource(Source[Mesh]):
 
     # -- Multi-mode methods ---------------------------------------------------
 
-    def _read_multi(self, index: int) -> Generator[Mesh]:
+    def _read_multi(self, index: int) -> Generator[Mesh | DomainMesh]:
         """Read multiple mesh representations for a given run.
 
         Parameters
@@ -508,8 +511,9 @@ class DrivAerMLSource(Source[Mesh]):
 
         Yields
         ------
-        Mesh
-            One mesh per active mesh_part, in order.
+        Mesh or DomainMesh
+            One mesh per active mesh_part, in order.  The ``"domain"`` part
+            yields a :class:`DomainMesh`; others yield plain :class:`Mesh`.
         """
         for part in self._mesh_parts:
             if part == "domain":
@@ -519,8 +523,18 @@ class DrivAerMLSource(Source[Mesh]):
             elif part == "single_solid":
                 yield from self._read_single_solid(index)
 
-    def _read_domain(self, index: int) -> Generator[Mesh]:
-        """Read domain (volume) mesh with manifold_dim=0, cell_centroids, fp32.
+    def _read_domain(self, index: int) -> Generator[DomainMesh]:
+        """Read domain mesh combining volume interior, boundary surface, and global data.
+
+        Produces a :class:`~physicsnemo.mesh.domain_mesh.DomainMesh` with:
+
+        * **interior** — volume VTU converted to a point-cloud via
+          ``cell_centroids`` (no connectivity, cells shape ``[0, 1]``).
+        * **boundaries["surface"]** — boundary VTP converted with
+          ``vertices`` retaining cell connectivity and cell data fields.
+        * **global_data** — ``U_inf = [30, 0, 0]`` and ``rho_inf = 1.225``.
+
+        All floating-point data is downcast to float32.
 
         Parameters
         ----------
@@ -529,27 +543,57 @@ class DrivAerMLSource(Source[Mesh]):
 
         Yields
         ------
-        Mesh
-            Volume mesh converted with cell centroids and downcast to fp32.
+        DomainMesh
+            Combined domain mesh.
         """
         run_id = self._run_indices[index]
+
+        # --- Interior (volume VTU → point-cloud) ---
         direct_remote = f"{self._root_path}/run_{run_id}/volume_{run_id}.vtu"
         try:
-            local_path = self._ensure_local(direct_remote)
+            volume_path = self._ensure_local(direct_remote)
+            pv_volume = pv.read(volume_path)
         except (FileNotFoundError, OSError):
-            local_path = self._read_volume_parts(run_id)
-
-        pv_mesh = pv.read(local_path)
-        mesh = from_pyvista(
-            pv_mesh,
+            volume_path = self._read_volume_parts(run_id)
+            pv_volume = pv.read(volume_path)
+        interior = from_pyvista(
+            pv_volume,
             manifold_dim=0,
             point_source="cell_centroids",
             warn_on_lost_data=self._warn_on_lost_data,
         )
-        yield self._downcast_fp32(mesh)
+        interior = self._downcast_fp32(interior)
+
+        # --- Boundary surface (boundary VTP → triangulated mesh) ---
+        boundary_remote = f"{self._root_path}/run_{run_id}/boundary_{run_id}.vtp"
+        boundary_path = self._ensure_local(boundary_remote)
+
+        pv_boundary = pv.read(boundary_path)
+        surface = from_pyvista(
+            pv_boundary,
+            manifold_dim="auto",
+            point_source="vertices",
+            warn_on_lost_data=self._warn_on_lost_data,
+        )
+        surface = self._downcast_fp32(surface)
+
+        # --- Global data ---
+        global_data = {
+            "U_inf": torch.tensor([30.0, 0.0, 0.0], dtype=torch.float32),
+            "rho_inf": torch.tensor(1.225, dtype=torch.float32),
+        }
+
+        # --- Assemble DomainMesh ---
+        domain_mesh = DomainMesh(
+            interior=interior,
+            boundaries={"surface": surface},
+            global_data=global_data,
+            batch_size=[],
+        )
+        yield domain_mesh
 
     def _read_stl(self, index: int) -> Generator[Mesh]:
-        """Read boundary (stl) mesh with manifold_dim='auto', cell_centroids, fp32.
+        """Read the STL geometry mesh with vertices preserved, downcast to fp32.
 
         Parameters
         ----------
@@ -559,10 +603,10 @@ class DrivAerMLSource(Source[Mesh]):
         Yields
         ------
         Mesh
-            Surface mesh converted with cell centroids and downcast to fp32.
+            STL geometry mesh with triangle connectivity and downcast to fp32.
         """
         run_id = self._run_indices[index]
-        filename = f"boundary_{run_id}.vtp"
+        filename = f"drivaer_{run_id}.stl"
         remote_path = f"{self._root_path}/run_{run_id}/{filename}"
         local_path = self._ensure_local(remote_path)
 
@@ -570,13 +614,13 @@ class DrivAerMLSource(Source[Mesh]):
         mesh = from_pyvista(
             pv_mesh,
             manifold_dim="auto",
-            point_source="cell_centroids",
+            point_source="vertices",
             warn_on_lost_data=self._warn_on_lost_data,
         )
         yield self._downcast_fp32(mesh)
 
     def _read_single_solid(self, index: int) -> Generator[Mesh]:
-        """Read boundary mesh merged into a single PolyData, with cell_centroids, fp32.
+        """Read STL geometry merged into a single PolyData, with vertices, fp32.
 
         Parameters
         ----------
@@ -586,10 +630,10 @@ class DrivAerMLSource(Source[Mesh]):
         Yields
         ------
         Mesh
-            Merged surface mesh converted with cell centroids and downcast to fp32.
+            Merged STL geometry mesh with vertices and downcast to fp32.
         """
         run_id = self._run_indices[index]
-        filename = f"boundary_{run_id}.vtp"
+        filename = f"drivaer_{run_id}.stl"
         remote_path = f"{self._root_path}/run_{run_id}/{filename}"
         local_path = self._ensure_local(remote_path)
 
@@ -598,7 +642,7 @@ class DrivAerMLSource(Source[Mesh]):
         mesh = from_pyvista(
             merged,
             manifold_dim="auto",
-            point_source="cell_centroids",
+            point_source="vertices",
             warn_on_lost_data=self._warn_on_lost_data,
         )
         yield self._downcast_fp32(mesh)
@@ -626,7 +670,10 @@ class DrivAerMLSource(Source[Mesh]):
             part_name = f"volume_{run_id}.vtu.{part_idx:02d}.part"
             remote = f"{self._root_path}/run_{run_id}/{part_name}"
             try:
-                parts.append(self._ensure_local(remote))
+                local = self._ensure_local(remote)
+                if not pathlib.Path(local).exists():
+                    break
+                parts.append(local)
             except (FileNotFoundError, OSError):
                 break
 
@@ -658,8 +705,6 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh
             The same mesh with float64 arrays converted to float32.
         """
-        import torch
-
         if mesh.points.dtype == torch.float64:
             mesh.points = mesh.points.float()
 

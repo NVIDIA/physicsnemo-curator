@@ -23,9 +23,11 @@ progress updates.
 
 from __future__ import annotations
 
+import signal
 import sys
 import threading
 import uuid
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -79,9 +81,41 @@ class ProgressMonitor:
         )
         self._thread: threading.Thread | None = None
 
+    @staticmethod
+    @contextmanager
+    def _suppress_signals():
+        """Suppress signal registration when running off the main thread.
+
+        Textual's LinuxDriver registers SIGTSTP/SIGCONT handlers in its
+        ``__init__``, but Python only allows signal handlers on the main
+        thread.  This context manager temporarily patches ``signal.signal``
+        to silently skip those registrations when called from a non-main
+        thread.
+        """
+        if threading.current_thread() is threading.main_thread():
+            yield
+            return
+
+        original_signal = signal.signal
+
+        def _safe_signal(signalnum, handler):  # noqa: ANN001, ANN202
+            try:
+                return original_signal(signalnum, handler)
+            except ValueError:
+                # "signal only works in main thread" — return the
+                # current handler as a no-op acknowledgement.
+                return signal.getsignal(signalnum)
+
+        signal.signal = _safe_signal  # type: ignore[assignment]
+        try:
+            yield
+        finally:
+            signal.signal = original_signal  # type: ignore[assignment]
+
     def _run_app(self) -> None:
         """Run the Textual app (called in daemon thread)."""
-        self._app.run()
+        with self._suppress_signals():
+            self._app.run()
 
     def start(self) -> None:
         """Start the Textual TUI in a daemon thread."""

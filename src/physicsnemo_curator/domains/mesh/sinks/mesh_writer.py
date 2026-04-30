@@ -16,8 +16,10 @@
 
 """PhysicsNeMo Mesh writer sink.
 
-Persists :class:`physicsnemo.mesh.Mesh` objects to disk using the native
-tensordict memory-mapped format via :meth:`Mesh.save`.
+Persists :class:`physicsnemo.mesh.Mesh` and
+:class:`physicsnemo.mesh.domain_mesh.DomainMesh` objects to disk using the
+native tensordict memory-mapped format via :meth:`Mesh.save` /
+:meth:`DomainMesh.save`.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from physicsnemo.mesh import Mesh
+    from physicsnemo.mesh.domain_mesh import DomainMesh
 
     from physicsnemo_curator.core.base import Source
 
@@ -39,13 +42,18 @@ logger = logging.getLogger(__name__)
 
 
 class MeshSink(Sink["Mesh"]):
-    """Write :class:`~physicsnemo.mesh.Mesh` objects to disk.
+    """Write :class:`~physicsnemo.mesh.Mesh` and :class:`~physicsnemo.mesh.domain_mesh.DomainMesh` objects to disk.
 
     Each mesh is saved to a subdirectory of *output_dir* using the physicsnemo
-    native format (:meth:`Mesh.save`).  By default the subdirectory is named
-    ``mesh_{index:04d}_{seq}``, but a custom *naming_template* can be provided
-    to control output names — for example, to produce filenames that match the
-    patterns expected by ``MeshReader`` in PhysicsNeMo.
+    native format (:meth:`Mesh.save` / :meth:`DomainMesh.save`).  By default
+    the subdirectory is named ``mesh_{index:04d}_{seq}``, but a custom
+    *naming_template* can be provided to control output names.
+
+    The appropriate file extension is appended automatically based on the
+    object type:
+
+    * ``.pmsh`` for :class:`Mesh` objects
+    * ``.pdmsh`` for :class:`DomainMesh` objects
 
     When the pipeline's source exposes a ``relative_path(index)`` method
     (e.g. :class:`~physicsnemo_curator.domains.mesh.sources.vtk.VTKSource`), two
@@ -190,12 +198,16 @@ class MeshSink(Sink["Mesh"]):
         """
         self._source = source
 
-    def __call__(self, items: Iterator[Mesh], index: int) -> list[str]:
+    def __call__(self, items: Iterator[Mesh | DomainMesh], index: int) -> list[str]:
         """Consume meshes from the stream and save each to disk.
+
+        Detects whether each item is a :class:`Mesh` or
+        :class:`DomainMesh` and appends the appropriate file extension
+        (``.pmsh`` for Mesh, ``.pdmsh`` for DomainMesh) to the output name.
 
         Parameters
         ----------
-        items : Iterator[Mesh]
+        items : Iterator[Mesh | DomainMesh]
             Stream of meshes to persist.
         index : int
             Source index (used for naming output subdirectories).
@@ -205,6 +217,8 @@ class MeshSink(Sink["Mesh"]):
         list[str]
             Paths of the saved mesh directories.
         """
+        from physicsnemo.mesh.domain_mesh import DomainMesh as _DomainMesh
+
         self._output_dir.mkdir(parents=True, exist_ok=True)
         paths: list[str] = []
 
@@ -254,10 +268,16 @@ class MeshSink(Sink["Mesh"]):
             else:
                 name = f"mesh_{index:04d}_{seq}"
 
+            # Append appropriate extension based on type.
+            is_domain_mesh = isinstance(mesh, _DomainMesh)
+            ext = ".pdmsh" if is_domain_mesh else ".pmsh"
+            if not name.endswith(ext):
+                name = name + ext
+
             subdir = self._output_dir / name
             subdir.parent.mkdir(parents=True, exist_ok=True)
             mesh.save(str(subdir))
-            logger.debug("Saved mesh to %s", subdir)
+            logger.debug("Saved %s to %s", type(mesh).__name__, subdir)
             paths.append(str(subdir))
 
         return paths
