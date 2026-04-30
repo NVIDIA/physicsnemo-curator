@@ -200,7 +200,7 @@ class TestNavierStokesCylinderSourceLocal:
         mesh_0 = next(source[0])
         mesh_1 = next(source[1])
         # Velocity fields should differ between snapshots
-        assert not torch.equal(mesh_0.point_data["velocity_x"], mesh_1.point_data["velocity_x"])
+        assert not torch.equal(mesh_0.point_data["velocity_x"], mesh_1.point_data["velocity_x"])  # ty: ignore[invalid-argument-type]
 
     def test_negative_index(self) -> None:
         """Negative indexing should work."""

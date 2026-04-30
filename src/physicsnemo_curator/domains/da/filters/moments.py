@@ -379,8 +379,8 @@ class _MomentAccumulator:
         self._mean += delta_n
 
         # Min/max
-        self._min = np.minimum(self._min, x)
-        self._max = np.maximum(self._max, x)
+        self._min = np.minimum(self._min, x)  # ty: ignore[no-matching-overload]
+        self._max = np.maximum(self._max, x)  # ty: ignore[no-matching-overload]
 
     def finalize(self) -> xr.Dataset:
         """Compute final statistics and return as an xarray Dataset.

@@ -175,32 +175,38 @@ class PrecisionFilter(Filter["Mesh"]):
         for mesh in items:
             all_converted: list[str] = []
 
-            # Convert points tensor if present and applicable
-            if mesh.points is not None and mesh.points.dtype in self._source_dtypes:
-                mesh.points = mesh.points.to(self._target_dtype)
-                all_converted.append("points")
+            # Handle DomainMesh: apply precision conversion to all sub-meshes
+            from physicsnemo.mesh.domain_mesh import DomainMesh as _DomainMesh
 
-            # Convert point_data fields
-            if mesh.point_data is not None:
-                all_converted.extend(
-                    _convert_tensordict_precision(
-                        mesh.point_data,
-                        self._target_dtype,
-                        self._source_dtypes,
-                        prefix="point_data/",
-                    )
-                )
+            if isinstance(mesh, _DomainMesh):
+                all_converted.extend(self._convert_domain_mesh(mesh))
+            else:
+                # Convert points tensor if present and applicable
+                if mesh.points is not None and mesh.points.dtype in self._source_dtypes:
+                    mesh.points = mesh.points.to(self._target_dtype)
+                    all_converted.append("points")
 
-            # Convert cell_data fields
-            if mesh.cell_data is not None:
-                all_converted.extend(
-                    _convert_tensordict_precision(
-                        mesh.cell_data,
-                        self._target_dtype,
-                        self._source_dtypes,
-                        prefix="cell_data/",
+                # Convert point_data fields
+                if mesh.point_data is not None:
+                    all_converted.extend(
+                        _convert_tensordict_precision(
+                            mesh.point_data,
+                            self._target_dtype,
+                            self._source_dtypes,
+                            prefix="point_data/",
+                        )
                     )
-                )
+
+                # Convert cell_data fields
+                if mesh.cell_data is not None:
+                    all_converted.extend(
+                        _convert_tensordict_precision(
+                            mesh.cell_data,
+                            self._target_dtype,
+                            self._source_dtypes,
+                            prefix="cell_data/",
+                        )
+                    )
 
             if all_converted:
                 logger.debug(
@@ -211,3 +217,72 @@ class PrecisionFilter(Filter["Mesh"]):
                 )
 
             yield mesh
+
+    def _convert_domain_mesh(self, domain_mesh: object) -> list[str]:
+        """Apply precision conversion to all sub-meshes of a DomainMesh.
+
+        Parameters
+        ----------
+        domain_mesh : DomainMesh
+            The input domain mesh (modified in-place).
+
+        Returns
+        -------
+        list[str]
+            Names of converted fields.
+        """
+        converted: list[str] = []
+
+        interior = domain_mesh.interior  # ty: ignore[unresolved-attribute]
+        converted.extend(self._convert_sub_mesh(interior, "interior"))
+
+        boundaries = domain_mesh.boundaries  # ty: ignore[unresolved-attribute]
+        if boundaries is not None:
+            for bnd_name in boundaries.keys():  # noqa: SIM118 - TensorDict needs .keys()
+                boundary = boundaries[bnd_name]
+                converted.extend(self._convert_sub_mesh(boundary, f"boundary.{bnd_name}"))
+
+        return converted
+
+    def _convert_sub_mesh(self, mesh: object, prefix: str) -> list[str]:
+        """Apply precision conversion to a single sub-mesh.
+
+        Parameters
+        ----------
+        mesh : Mesh
+            The sub-mesh to convert (modified in-place).
+        prefix : str
+            Prefix for field names in reporting.
+
+        Returns
+        -------
+        list[str]
+            Names of converted fields.
+        """
+        converted: list[str] = []
+
+        if mesh.points is not None and mesh.points.dtype in self._source_dtypes:  # ty: ignore[unresolved-attribute]
+            mesh.points = mesh.points.to(self._target_dtype)  # ty: ignore[unresolved-attribute]
+            converted.append(f"{prefix}/points")
+
+        if mesh.point_data is not None:  # ty: ignore[unresolved-attribute]
+            converted.extend(
+                _convert_tensordict_precision(
+                    mesh.point_data,  # ty: ignore[unresolved-attribute]
+                    self._target_dtype,
+                    self._source_dtypes,
+                    prefix=f"{prefix}/point_data/",
+                )
+            )
+
+        if mesh.cell_data is not None:  # ty: ignore[unresolved-attribute]
+            converted.extend(
+                _convert_tensordict_precision(
+                    mesh.cell_data,  # ty: ignore[unresolved-attribute]
+                    self._target_dtype,
+                    self._source_dtypes,
+                    prefix=f"{prefix}/cell_data/",
+                )
+            )
+
+        return converted

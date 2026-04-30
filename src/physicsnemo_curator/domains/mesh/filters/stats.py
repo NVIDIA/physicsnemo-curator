@@ -409,11 +409,11 @@ class StatsFilter(Filter["Mesh"]):
         return str(out_path)
 
     def _compute_mesh_stats(self, mesh: Mesh) -> list[_StatsRow]:
-        """Compute statistics for all fields in a mesh.
+        """Compute statistics for all fields in a mesh or domain mesh.
 
         Parameters
         ----------
-        mesh : Mesh
+        mesh : Mesh or DomainMesh
             The input mesh.
 
         Returns
@@ -421,6 +421,11 @@ class StatsFilter(Filter["Mesh"]):
         list[_StatsRow]
             List of stats rows (one per field/component).
         """
+        from physicsnemo.mesh.domain_mesh import DomainMesh as _DomainMesh
+
+        if isinstance(mesh, _DomainMesh):
+            return self._compute_domain_mesh_stats(mesh)
+
         rows: list[_StatsRow] = []
 
         # Process point_data fields
@@ -434,6 +439,49 @@ class StatsFilter(Filter["Mesh"]):
             for key, tensor in _extract_leaf_tensors(mesh.cell_data):
                 field_key = f"cell_data/{key}"
                 rows.extend(_compute_component_stats(field_key, tensor))
+
+        return rows
+
+    def _compute_domain_mesh_stats(self, domain_mesh: object) -> list[_StatsRow]:
+        """Compute statistics for all fields in a DomainMesh.
+
+        Aggregates statistics from interior and all boundary sub-meshes.
+
+        Parameters
+        ----------
+        domain_mesh : DomainMesh
+            The input domain mesh.
+
+        Returns
+        -------
+        list[_StatsRow]
+            List of stats rows (one per field/component).
+        """
+        rows: list[_StatsRow] = []
+
+        interior = domain_mesh.interior  # ty: ignore[unresolved-attribute]
+        if interior.point_data is not None:
+            for key, tensor in _extract_leaf_tensors(interior.point_data):
+                field_key = f"interior/point_data/{key}"
+                rows.extend(_compute_component_stats(field_key, tensor))
+
+        if interior.cell_data is not None:
+            for key, tensor in _extract_leaf_tensors(interior.cell_data):
+                field_key = f"interior/cell_data/{key}"
+                rows.extend(_compute_component_stats(field_key, tensor))
+
+        boundaries = domain_mesh.boundaries  # ty: ignore[unresolved-attribute]
+        if boundaries is not None:
+            for bnd_name in boundaries.keys():  # noqa: SIM118 - TensorDict needs .keys()
+                boundary = boundaries[bnd_name]
+                if boundary.point_data is not None:
+                    for key, tensor in _extract_leaf_tensors(boundary.point_data):
+                        field_key = f"boundary.{bnd_name}/point_data/{key}"
+                        rows.extend(_compute_component_stats(field_key, tensor))
+                if boundary.cell_data is not None:
+                    for key, tensor in _extract_leaf_tensors(boundary.cell_data):
+                        field_key = f"boundary.{bnd_name}/cell_data/{key}"
+                        rows.extend(_compute_component_stats(field_key, tensor))
 
         return rows
 

@@ -206,11 +206,11 @@ class MeshInfoFilter(Filter["Mesh"]):
         return str(self._output_path) if self._output_path else None
 
     def _extract_mesh_info(self, mesh: Mesh) -> dict[str, object]:
-        """Extract metadata from a mesh.
+        """Extract metadata from a mesh or domain mesh.
 
         Parameters
         ----------
-        mesh : Mesh
+        mesh : Mesh or DomainMesh
             The input mesh.
 
         Returns
@@ -218,6 +218,11 @@ class MeshInfoFilter(Filter["Mesh"]):
         dict[str, object]
             Mesh metadata dictionary.
         """
+        from physicsnemo.mesh.domain_mesh import DomainMesh as _DomainMesh
+
+        if isinstance(mesh, _DomainMesh):
+            return self._extract_domain_mesh_info(mesh)
+
         info: dict[str, object] = {
             "mesh_index": self._mesh_index,
             "n_points": mesh.n_points,
@@ -250,6 +255,80 @@ class MeshInfoFilter(Filter["Mesh"]):
 
         return info
 
+    def _extract_domain_mesh_info(self, domain_mesh: object) -> dict[str, object]:
+        """Extract metadata from a DomainMesh.
+
+        Aggregates info across interior and all boundary sub-meshes.
+
+        Parameters
+        ----------
+        domain_mesh : DomainMesh
+            The input domain mesh.
+
+        Returns
+        -------
+        dict[str, object]
+            Domain mesh metadata dictionary.
+        """
+        interior = domain_mesh.interior  # ty: ignore[unresolved-attribute]
+        info: dict[str, object] = {
+            "mesh_index": self._mesh_index,
+            "type": "DomainMesh",
+            "interior_n_points": interior.n_points,
+            "interior_n_cells": interior.n_cells,
+        }
+
+        total_memory = 0
+        point_fields: list[_FieldInfo] = []
+        cell_fields: list[_FieldInfo] = []
+
+        if interior.point_data is not None:
+            point_fields = _extract_field_info(interior.point_data, prefix="interior.")
+            total_memory += sum(f["nbytes"] for f in point_fields)
+
+        if interior.cell_data is not None:
+            cell_fields = _extract_field_info(interior.cell_data, prefix="interior.")
+            total_memory += sum(f["nbytes"] for f in cell_fields)
+
+        if interior.points is not None:
+            total_memory += interior.points.numel() * interior.points.element_size()
+
+        # Boundaries
+        boundary_info: dict[str, dict[str, int]] = {}
+        boundaries = domain_mesh.boundaries  # ty: ignore[unresolved-attribute]
+        if boundaries is not None:
+            for key in boundaries.keys():  # noqa: SIM118 - TensorDict needs .keys()
+                boundary = boundaries[key]
+                b_info: dict[str, int] = {
+                    "n_points": boundary.n_points,
+                    "n_cells": boundary.n_cells,
+                }
+                boundary_info[key] = b_info
+
+                if boundary.point_data is not None:
+                    b_pf = _extract_field_info(boundary.point_data, prefix=f"boundary.{key}.")
+                    point_fields.extend(b_pf)
+                    total_memory += sum(f["nbytes"] for f in b_pf)
+
+                if boundary.cell_data is not None:
+                    b_cf = _extract_field_info(boundary.cell_data, prefix=f"boundary.{key}.")
+                    cell_fields.extend(b_cf)
+                    total_memory += sum(f["nbytes"] for f in b_cf)
+
+                if boundary.points is not None:
+                    total_memory += boundary.points.numel() * boundary.points.element_size()
+
+        info["boundaries"] = boundary_info
+        info["n_point_fields"] = len(point_fields)
+        info["n_cell_fields"] = len(cell_fields)
+        info["memory_estimate_bytes"] = total_memory
+
+        if self._include_fields:
+            info["point_data_fields"] = point_fields
+            info["cell_data_fields"] = cell_fields
+
+        return info
+
     def _log_info(self, info: dict[str, object]) -> None:
         """Log mesh info to the Python logger.
 
@@ -259,12 +338,20 @@ class MeshInfoFilter(Filter["Mesh"]):
             Mesh metadata dictionary.
         """
         memory_mb = int(info.get("memory_estimate_bytes", 0)) / (1024 * 1024)  # ty: ignore[invalid-argument-type]
-        msg = (
-            f"Mesh {info['mesh_index']}: "
-            f"{info['n_points']} points, {info['n_cells']} cells, "
-            f"{info['n_point_fields']} point fields, {info['n_cell_fields']} cell fields, "
-            f"{memory_mb:.2f} MB"
-        )
+        if info.get("type") == "DomainMesh":
+            msg = (
+                f"DomainMesh {info['mesh_index']}: "
+                f"interior={info['interior_n_points']} points/{info['interior_n_cells']} cells, "
+                f"{info['n_point_fields']} point fields, {info['n_cell_fields']} cell fields, "
+                f"{memory_mb:.2f} MB"
+            )
+        else:
+            msg = (
+                f"Mesh {info['mesh_index']}: "
+                f"{info['n_points']} points, {info['n_cells']} cells, "
+                f"{info['n_point_fields']} point fields, {info['n_cell_fields']} cell fields, "
+                f"{memory_mb:.2f} MB"
+            )
         logger.log(self._log_level, msg)
 
         if self._include_fields and self._log_level <= logging.DEBUG:

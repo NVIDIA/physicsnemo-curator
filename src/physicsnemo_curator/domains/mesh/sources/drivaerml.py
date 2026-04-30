@@ -62,6 +62,9 @@ _MESH_TEMPLATES: dict[str, str] = {
 #: Valid mesh types for this dataset.
 MeshType = Literal["boundary", "volume", "slices", "multi"]
 
+#: Valid backend options for VTK reading.
+Backend = Literal["python", "rust"]
+
 #: Valid mesh parts for multi mode.
 _VALID_MESH_PARTS: set[str] = {"domain", "stl", "single_solid"}
 
@@ -108,6 +111,15 @@ class DrivAerMLSource(Source[Mesh]):
         ``"domain"``, ``"stl"``, and ``"single_solid"``.  When ``None``
         (the default), all three parts are yielded.  Ignored for other
         mesh types.
+    backend : {"python", "rust"}
+        VTK reading backend:
+
+        - ``"python"`` (default): uses PyVista + ``from_pyvista`` for full
+          conversion (manifold_dim, point_source options respected).
+        - ``"rust"``: uses the native Rust VTK reader for faster I/O.
+          Constructs :class:`Mesh` directly from raw arrays.  The
+          ``manifold_dim`` and ``point_source`` options are ignored; data
+          is returned as-is from the file.
 
     Examples
     --------
@@ -180,6 +192,13 @@ class DrivAerMLSource(Source[Mesh]):
                 type=list,
                 default=None,
             ),
+            Param(
+                name="backend",
+                description="VTK reading backend: python (PyVista, default) or rust (native, faster)",
+                type=str,
+                default="python",
+                choices=["python", "rust"],
+            ),
         ]
 
     def __init__(
@@ -192,6 +211,7 @@ class DrivAerMLSource(Source[Mesh]):
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
         mesh_parts: list[str] | None = None,
+        backend: Backend = "python",
     ) -> None:
         import fsspec
 
@@ -202,6 +222,7 @@ class DrivAerMLSource(Source[Mesh]):
         self._manifold_dim = manifold_dim
         self._point_source = point_source
         self._warn_on_lost_data = warn_on_lost_data
+        self._backend: Backend = backend
 
         self._fs, self._root_path = fsspec.core.url_to_fs(self._url, **self._storage_options)
         self._protocol = self._fs.protocol if isinstance(self._fs.protocol, str) else self._fs.protocol[0]
@@ -346,12 +367,14 @@ class DrivAerMLSource(Source[Mesh]):
         part = self._mesh_parts[seq]
         return _MESH_NAME_TEMPLATES[part].format(run_id=run_id)
 
-    def __getitem__(self, index: int) -> Generator[Mesh]:
+    def __getitem__(self, index: int) -> Generator[Mesh | DomainMesh]:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         """Read the mesh(es) for the *index*-th run.
 
         For ``"boundary"`` and ``"volume"`` mesh types, yields a single
         :class:`~physicsnemo.mesh.Mesh`.  For ``"slices"``, yields one
         mesh per slice plane file in the run's ``slices/`` directory.
+        For ``"multi"`` mesh type, yields a :class:`~physicsnemo.mesh.DomainMesh`
+        followed by STL meshes.
 
         Parameters
         ----------
@@ -360,8 +383,8 @@ class DrivAerMLSource(Source[Mesh]):
 
         Yields
         ------
-        Mesh
-            Converted physicsnemo Mesh object(s).
+        Mesh | DomainMesh
+            Converted physicsnemo Mesh or DomainMesh object(s).
         """
         if self._mesh_type == "volume":
             yield from self._read_volume(index)
@@ -383,7 +406,7 @@ class DrivAerMLSource(Source[Mesh]):
     # -- Internal helpers ----------------------------------------------------
 
     def _read_vtk(self, path: str) -> Mesh:
-        """Read a single VTK file and convert to Mesh.
+        """Read a single VTK file and convert to Mesh using the configured backend.
 
         Parameters
         ----------
@@ -395,6 +418,23 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh
             Converted mesh.
         """
+        if self._backend == "rust":
+            return self._read_vtk_rust(path)
+        return self._read_vtk_python(path)
+
+    def _read_vtk_python(self, path: str) -> Mesh:
+        """Read a VTK file using PyVista and convert via from_pyvista.
+
+        Parameters
+        ----------
+        path : str
+            Local filesystem path to a VTK file.
+
+        Returns
+        -------
+        Mesh
+            Converted mesh with manifold_dim/point_source applied.
+        """
         pv_mesh = pv.read(path)
         return from_pyvista(
             pv_mesh,
@@ -402,6 +442,112 @@ class DrivAerMLSource(Source[Mesh]):
             point_source=self._point_source,
             warn_on_lost_data=self._warn_on_lost_data,
         )
+
+    def _read_vtk_rust(self, path: str) -> Mesh:
+        """Read a VTK file using the native Rust backend.
+
+        Constructs a :class:`Mesh` directly from the raw arrays returned
+        by the Rust VTK reader, including points, cells (connectivity),
+        point_data, and cell_data.
+
+        Falls back to the Python backend if the Rust reader does not
+        support the file format (e.g. STL).
+
+        Parameters
+        ----------
+        path : str
+            Local filesystem path to a VTK file.
+
+        Returns
+        -------
+        Mesh
+            Mesh with all available data from the file.
+        """
+        import numpy as np
+        from tensordict import TensorDict
+
+        from physicsnemo_curator._lib import vtk
+
+        try:
+            rust_mesh = vtk.read_vtk(path)
+        except OSError:
+            logger.debug("Rust VTK reader does not support %s, falling back to Python", path)
+            return self._read_vtk_python(path)
+
+        # If Rust reader parsed the file but returned no usable data arrays
+        # (common with binary VTK formats), fall back to Python for full parse.
+        has_data = bool(rust_mesh.point_data()) or bool(rust_mesh.cell_data()) or rust_mesh.connectivity().size > 0
+        if rust_mesh.n_points > 0 and not has_data:
+            logger.debug("Rust reader returned empty data for %s, falling back to Python", path)
+            return self._read_vtk_python(path)
+
+        points = torch.from_numpy(rust_mesh.points()[: rust_mesh.n_points * 3].reshape(-1, 3))
+
+        # Cells from connectivity + offsets
+        cells = self._build_cells_from_rust(rust_mesh)
+
+        n_points = rust_mesh.n_points
+        n_cells = rust_mesh.n_cells
+
+        # Point data (truncate to n_points * num_components to handle Rust reader buffer overruns)
+        point_data_dict: dict[str, torch.Tensor] = {}
+        for name, (data, num_components) in rust_mesh.point_data().items():
+            arr = torch.from_numpy(np.asarray(data)[: n_points * num_components])
+            if num_components > 1:
+                arr = arr.reshape(-1, num_components)
+            point_data_dict[name] = arr
+
+        point_data = TensorDict(point_data_dict, batch_size=[n_points]) if point_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+
+        # Cell data (truncate to n_cells * num_components)
+        cell_data_dict: dict[str, torch.Tensor] = {}
+        for name, (data, num_components) in rust_mesh.cell_data().items():
+            arr = torch.from_numpy(np.asarray(data)[: n_cells * num_components])
+            if num_components > 1:
+                arr = arr.reshape(-1, num_components)
+            cell_data_dict[name] = arr
+
+        cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+
+        return Mesh(
+            points=points,
+            cells=cells,
+            point_data=point_data,
+            cell_data=cell_data,
+        )
+
+    @staticmethod
+    def _build_cells_from_rust(rust_mesh: Any) -> torch.Tensor | None:
+        """Build a cells tensor from Rust mesh connectivity and offsets.
+
+        Parameters
+        ----------
+        rust_mesh : VTKMesh
+            Rust VTK mesh object.
+
+        Returns
+        -------
+        torch.Tensor or None
+            Cells tensor of shape ``(n_cells, nodes_per_cell)`` if
+            connectivity is available, else ``None``.
+        """
+        connectivity = rust_mesh.connectivity()
+        offsets = rust_mesh.offsets()
+
+        if connectivity.size == 0 or offsets.size == 0:
+            return None
+
+        n_cells = rust_mesh.n_cells
+        # Determine nodes per cell from offsets (assumes uniform cell type)
+        if n_cells > 0 and offsets.size > 1:
+            nodes_per_cell = int(offsets[1] - offsets[0])
+        elif n_cells > 0 and connectivity.size > 0:
+            nodes_per_cell = connectivity.size // n_cells
+        else:
+            return None
+
+        cells = torch.from_numpy(connectivity.reshape(n_cells, nodes_per_cell)).to(torch.int64)
+        return cells
 
     def _read_volume(self, index: int) -> Generator[Mesh]:
         """Read a volume VTU that may be split across multiple part files.
@@ -552,29 +698,16 @@ class DrivAerMLSource(Source[Mesh]):
         direct_remote = f"{self._root_path}/run_{run_id}/volume_{run_id}.vtu"
         try:
             volume_path = self._ensure_local(direct_remote)
-            pv_volume = pv.read(volume_path)
+            interior = self._read_interior(volume_path)
         except (FileNotFoundError, OSError):
             volume_path = self._read_volume_parts(run_id)
-            pv_volume = pv.read(volume_path)
-        interior = from_pyvista(
-            pv_volume,
-            manifold_dim=0,
-            point_source="cell_centroids",
-            warn_on_lost_data=self._warn_on_lost_data,
-        )
+            interior = self._read_interior(volume_path)
         interior = self._downcast_fp32(interior)
 
         # --- Boundary surface (boundary VTP → triangulated mesh) ---
         boundary_remote = f"{self._root_path}/run_{run_id}/boundary_{run_id}.vtp"
         boundary_path = self._ensure_local(boundary_remote)
-
-        pv_boundary = pv.read(boundary_path)
-        surface = from_pyvista(
-            pv_boundary,
-            manifold_dim="auto",
-            point_source="vertices",
-            warn_on_lost_data=self._warn_on_lost_data,
-        )
+        surface = self._read_surface(boundary_path)
         surface = self._downcast_fp32(surface)
 
         # --- Global data ---
@@ -588,9 +721,147 @@ class DrivAerMLSource(Source[Mesh]):
             interior=interior,
             boundaries={"surface": surface},
             global_data=global_data,
-            batch_size=[],
         )
         yield domain_mesh
+
+    def _read_interior(self, path: str) -> Mesh:
+        """Read a volume VTK file as an interior point-cloud.
+
+        For the Python backend, uses ``cell_centroids`` and ``manifold_dim=0``
+        to produce a point-cloud without connectivity.  For the Rust backend,
+        reads raw data and computes cell centroids from connectivity.
+
+        Parameters
+        ----------
+        path : str
+            Local path to the volume VTU file.
+
+        Returns
+        -------
+        Mesh
+            Point-cloud mesh (no cell connectivity).
+        """
+        if self._backend == "rust":
+            return self._read_interior_rust(path)
+
+        pv_volume = pv.read(path)
+        return from_pyvista(
+            pv_volume,
+            manifold_dim=0,
+            point_source="cell_centroids",
+            warn_on_lost_data=self._warn_on_lost_data,
+        )
+
+    def _read_interior_rust(self, path: str) -> Mesh:
+        """Read volume VTU via Rust and compute cell centroids.
+
+        Falls back to the Python backend if the Rust reader does not
+        support the file or fails to parse connectivity/data arrays.
+
+        Parameters
+        ----------
+        path : str
+            Local path to the volume VTU file.
+
+        Returns
+        -------
+        Mesh
+            Point-cloud mesh with cell-centroid points and cell_data
+            promoted to point_data.
+        """
+        import numpy as np
+        from tensordict import TensorDict
+
+        from physicsnemo_curator._lib import vtk
+
+        try:
+            rust_mesh = vtk.read_vtk(path)
+        except OSError:
+            logger.debug("Rust VTK reader does not support %s, falling back to Python", path)
+            pv_volume = pv.read(path)
+            return from_pyvista(
+                pv_volume,
+                manifold_dim=0,
+                point_source="cell_centroids",
+                warn_on_lost_data=self._warn_on_lost_data,
+            )
+
+        points_raw = torch.from_numpy(rust_mesh.points()[: rust_mesh.n_points * 3].reshape(-1, 3))
+        connectivity = rust_mesh.connectivity()
+        offsets = rust_mesh.offsets()
+
+        n_cells = rust_mesh.n_cells
+
+        # If Rust reader returned empty data arrays, fall back to Python
+        if n_cells > 0 and connectivity.size == 0:
+            logger.debug("Rust reader returned empty connectivity for %s, falling back to Python", path)
+            pv_volume = pv.read(path)
+            return from_pyvista(
+                pv_volume,
+                manifold_dim=0,
+                point_source="cell_centroids",
+                warn_on_lost_data=self._warn_on_lost_data,
+            )
+
+        if connectivity.size > 0 and offsets.size > 1 and n_cells > 0:
+            # Compute cell centroids from connectivity
+            nodes_per_cell = int(offsets[1] - offsets[0])
+            conn = torch.from_numpy(connectivity.reshape(n_cells, nodes_per_cell)).to(torch.int64)
+            # Gather points for each cell and average
+            cell_points = points_raw[conn]  # (n_cells, nodes_per_cell, 3)
+            centroids = cell_points.mean(dim=1)  # (n_cells, 3)
+        else:
+            # Fallback: treat as point-cloud
+            centroids = points_raw
+
+        # Cell data becomes point_data for centroids
+        point_data_dict: dict[str, torch.Tensor] = {}
+        for name, (data, num_components) in rust_mesh.cell_data().items():
+            arr = torch.from_numpy(np.asarray(data)[: n_cells * num_components])
+            if num_components > 1:
+                arr = arr.reshape(-1, num_components)
+            point_data_dict[name] = arr
+
+        # Also include point_data if present (unlikely for cell_centroids mode)
+        n_points = rust_mesh.n_points
+        for name, (data, num_components) in rust_mesh.point_data().items():
+            arr = torch.from_numpy(np.asarray(data)[: n_points * num_components])
+            if num_components > 1:
+                arr = arr.reshape(-1, num_components)
+            point_data_dict[name] = arr
+
+        n_pts = centroids.shape[0]
+        point_data = TensorDict(point_data_dict, batch_size=[n_pts]) if point_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+
+        return Mesh(
+            points=centroids,
+            cells=None,
+            point_data=point_data,
+        )
+
+    def _read_surface(self, path: str) -> Mesh:
+        """Read a boundary VTP file as a surface mesh preserving connectivity.
+
+        Parameters
+        ----------
+        path : str
+            Local path to the boundary VTP file.
+
+        Returns
+        -------
+        Mesh
+            Surface mesh with cell connectivity and cell/point data.
+        """
+        if self._backend == "rust":
+            return self._read_vtk_rust(path)
+
+        pv_boundary = pv.read(path)
+        return from_pyvista(
+            pv_boundary,
+            manifold_dim="auto",
+            point_source="vertices",
+            warn_on_lost_data=self._warn_on_lost_data,
+        )
 
     def _read_stl(self, index: int) -> Generator[Mesh]:
         """Read the STL geometry mesh with vertices preserved, downcast to fp32.
@@ -610,13 +881,7 @@ class DrivAerMLSource(Source[Mesh]):
         remote_path = f"{self._root_path}/run_{run_id}/{filename}"
         local_path = self._ensure_local(remote_path)
 
-        pv_mesh = pv.read(local_path)
-        mesh = from_pyvista(
-            pv_mesh,
-            manifold_dim="auto",
-            point_source="vertices",
-            warn_on_lost_data=self._warn_on_lost_data,
-        )
+        mesh = self._read_vtk(local_path)
         yield self._downcast_fp32(mesh)
 
     def _read_single_solid(self, index: int) -> Generator[Mesh]:
@@ -637,14 +902,18 @@ class DrivAerMLSource(Source[Mesh]):
         remote_path = f"{self._root_path}/run_{run_id}/{filename}"
         local_path = self._ensure_local(remote_path)
 
-        pv_mesh = pv.read(local_path)
-        merged = self._merge_to_single_solid(pv_mesh)
-        mesh = from_pyvista(
-            merged,
-            manifold_dim="auto",
-            point_source="vertices",
-            warn_on_lost_data=self._warn_on_lost_data,
-        )
+        if self._backend == "rust":
+            # Rust backend: read directly (STL is single solid already)
+            mesh = self._read_vtk_rust(local_path)
+        else:
+            pv_mesh = pv.read(local_path)  # type: ignore[arg-type]
+            merged = self._merge_to_single_solid(pv_mesh)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+            mesh = from_pyvista(
+                merged,
+                manifold_dim="auto",
+                point_source="vertices",
+                warn_on_lost_data=self._warn_on_lost_data,
+            )
         yield self._downcast_fp32(mesh)
 
     def _read_volume_parts(self, run_id: int) -> str:

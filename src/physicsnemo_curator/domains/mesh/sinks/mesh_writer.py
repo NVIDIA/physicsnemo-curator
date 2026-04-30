@@ -276,7 +276,7 @@ class MeshSink(Sink["Mesh"]):
 
             subdir = self._output_dir / name
             subdir.parent.mkdir(parents=True, exist_ok=True)
-            mesh.save(str(subdir))
+            mesh.save(str(subdir))  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
             logger.debug("Saved %s to %s", type(mesh).__name__, subdir)
             paths.append(str(subdir))
 

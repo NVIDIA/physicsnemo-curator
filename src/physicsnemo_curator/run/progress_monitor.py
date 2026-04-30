@@ -106,7 +106,7 @@ class ProgressMonitor:
                 # current handler as a no-op acknowledgement.
                 return signal.getsignal(signalnum)
 
-        signal.signal = _safe_signal  # type: ignore[assignment]
+        signal.signal = _safe_signal  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         try:
             yield
         finally:
