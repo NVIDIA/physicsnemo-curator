@@ -76,7 +76,7 @@ from pathlib import Path
 
 from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.domains.mesh.filters.stats import StatsFilter
+from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
@@ -142,7 +142,7 @@ print(f"Total runs available: {n_runs}")
 
 pipeline = (
     source.filter(MeshInfoFilter(output=str(_OUTPUT_DIR / "mesh_info.jsonl")))
-    .filter(StatsFilter(output=str(_OUTPUT_DIR / "stats.parquet")))
+    .filter(MeshStatsFilter(output=str(_OUTPUT_DIR / "stats.parquet")))
     .filter(PrecisionFilter(target_dtype="float32"))
     .write(
         MeshSink(

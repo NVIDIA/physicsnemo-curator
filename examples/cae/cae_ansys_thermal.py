@@ -47,7 +47,7 @@ single precision, and writes the processed meshes to disk.
 
 from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.domains.mesh.filters.stats import StatsFilter
+from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.ansys_rst import AnsysRSTSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
@@ -82,7 +82,7 @@ source = AnsysRSTSource(
 # 1. **MeshInfoFilter** — Logs mesh metadata (node and element counts,
 #    field names and shapes) and writes a JSON-lines summary.
 #
-# 2. **StatsFilter** — Computes per-field statistics (mean, standard
+# 2. **MeshStatsFilter** — Computes per-field statistics (mean, standard
 #    deviation, min, max) and writes them to a Parquet file.
 #
 # 3. **PrecisionFilter** — Converts floating-point fields from float64
@@ -95,7 +95,7 @@ OUTPUT_DIR = "/data/ansys_thermal_processed"
 
 pipeline = (
     source.filter(MeshInfoFilter(output=f"{OUTPUT_DIR}/mesh_info.jsonl"))
-    .filter(StatsFilter(output=f"{OUTPUT_DIR}/stats.parquet"))
+    .filter(MeshStatsFilter(output=f"{OUTPUT_DIR}/stats.parquet"))
     .filter(PrecisionFilter(target_dtype="float32"))
     .write(MeshSink(output_dir=OUTPUT_DIR))
 )

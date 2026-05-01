@@ -46,7 +46,7 @@ We process only the first 3 runs to keep the example fast.
 
 from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.domains.mesh.filters.stats import StatsFilter
+from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
@@ -65,7 +65,7 @@ from physicsnemo_curator.run import gather_pipeline, run_pipeline
 # 2. :class:`~physicsnemo_curator.domains.mesh.filters.mesh_info.MeshInfoFilter`
 #    logs metadata (point/cell counts, field shapes) and writes structured
 #    records to a JSON-lines file for post-analysis.
-# 3. :class:`~physicsnemo_curator.domains.mesh.filters.stats.StatsFilter` computes
+# 3. :class:`~physicsnemo_curator.domains.mesh.filters.stats.MeshStatsFilter` computes
 #    comprehensive per-field statistics (mean, std, skewness, kurtosis) and
 #    stores Welford accumulator state for cross-file aggregation.
 # 4. :class:`~physicsnemo_curator.domains.mesh.filters.precision.PrecisionFilter`
@@ -82,7 +82,7 @@ print(f"Total DrivAerML runs available: {len(surface_source)}")
 
 surface_pipeline = (
     surface_source.filter(MeshInfoFilter(output="outputs/aero/surface_info.jsonl"))
-    .filter(StatsFilter(output="outputs/aero/surface_stats.parquet"))
+    .filter(MeshStatsFilter(output="outputs/aero/surface_stats.parquet"))
     .filter(PrecisionFilter(target_dtype="float32"))
     .write(MeshSink(output_dir="outputs/aero/surface_meshes/"))
 )
@@ -96,7 +96,7 @@ surface_pipeline = (
 # meshes are typically much larger than surface meshes, so we read cell
 # centroids rather than raw vertices.
 #
-# Here we use :class:`~physicsnemo_curator.domains.mesh.filters.stats.StatsFilter`
+# Here we use :class:`~physicsnemo_curator.domains.mesh.filters.stats.MeshStatsFilter`
 # for volume field statistics.  This filter includes Welford accumulators
 # that can be merged across parallel workers for exact global statistics.
 
@@ -108,7 +108,7 @@ volume_source = DrivAerMLSource(
 
 volume_pipeline = (
     volume_source.filter(MeshInfoFilter(output="outputs/aero/volume_info.jsonl"))
-    .filter(StatsFilter(output="outputs/aero/volume_stats.parquet"))
+    .filter(MeshStatsFilter(output="outputs/aero/volume_stats.parquet"))
     .filter(PrecisionFilter(target_dtype="float32"))
     .write(MeshSink(output_dir="outputs/aero/volume_meshes/"))
 )

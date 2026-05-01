@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import math
 import pathlib
-from typing import TYPE_CHECKING, ClassVar, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, TypedDict
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -229,7 +229,7 @@ def _compute_component_stats(field_key: str, tensor: torch.Tensor) -> list[_Stat
     return rows
 
 
-class StatsFilter(Filter["Mesh"]):
+class MeshStatsFilter(Filter["Mesh"]):
     """Compute comprehensive per-field statistics and accumulate to Parquet.
 
     For each incoming mesh the filter computes statistics for every tensor
@@ -253,16 +253,16 @@ class StatsFilter(Filter["Mesh"]):
 
     Examples
     --------
-    >>> filt = StatsFilter(output="stats.parquet")
+    >>> filt = MeshStatsFilter(output="stats.parquet")
     >>> pipeline = source.filter(filt).write(sink)
     >>> for i in range(len(pipeline)):
     ...     pipeline[i]
     >>> filt.flush()  # write accumulated stats
     """
 
-    name: ClassVar[str] = "Comprehensive Statistics"
+    name: ClassVar[str] = "Mesh Statistics"
     description: ClassVar[str] = (
-        "Compute per-field statistics (mean, std, skewness, kurtosis, etc.) and save to Parquet"
+        "Compute per-field statistics (mean, std, skewness, kurtosis, etc.) for Mesh data and save to Parquet"
     )
 
     @classmethod
@@ -409,7 +409,7 @@ class StatsFilter(Filter["Mesh"]):
         Examples
         --------
         >>> paths = ["worker_0/stats.parquet", "worker_1/stats.parquet"]
-        >>> StatsFilter.merge(paths, output="merged_stats.parquet")  # doctest: +SKIP
+        >>> MeshStatsFilter.merge(paths, output="merged_stats.parquet")  # doctest: +SKIP
         'merged_stats.parquet'
         """
         if not parquet_paths:
@@ -499,6 +499,196 @@ class StatsFilter(Filter["Mesh"]):
                         rows.extend(_compute_component_stats(field_key, tensor))
 
         return rows
+
+    # -- Properties -----------------------------------------------------------
+
+    @property
+    def output_path(self) -> pathlib.Path:
+        """Return the output Parquet path."""
+        return self._output_path
+
+    # -- Dashboard ------------------------------------------------------------
+
+    @classmethod
+    def dashboard_panel(
+        cls,
+        artifact_paths: list[str],
+        selected_index: int | None = None,
+    ) -> Any:
+        """Return an interactive scatter plot of mesh statistics.
+
+        Displays a scatter plot where users can select X/Y axes from
+        available statistics columns and filter by field location
+        (point_data, cell_data, interior, boundary).
+
+        Parameters
+        ----------
+        artifact_paths : list[str]
+            Paths to Parquet files produced by this filter.
+        selected_index : int or None
+            Currently selected pipeline index, if any.
+
+        Returns
+        -------
+        pn.viewable.Viewable or None
+            A GridStack with Paper-wrapped controls sidebar and scatter
+            plot, or a Markdown message if no data is available.
+        """
+        import holoviews as hv
+        import pandas as pd
+        import panel as pn
+        import panel_material_ui as pmui
+        from bokeh.models import HoverTool
+
+        hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
+
+        stat_columns: list[str] = [
+            "index",
+            "mean",
+            "std",
+            "var",
+            "min",
+            "max",
+            "median",
+            "abs_mean",
+            "abs_max",
+            "skewness",
+            "kurtosis",
+            "n_spatial",
+            "n_components",
+        ]
+
+        if not artifact_paths:
+            return pn.pane.Markdown("*No Mesh Statistics artifacts found.*")
+
+        # Load data
+        frames = []
+        for path in artifact_paths:
+            try:
+                frames.append(pd.read_parquet(path))
+            except Exception:  # noqa: BLE001
+                continue
+
+        if not frames:
+            return pn.pane.Markdown("*Could not read any Mesh Statistics artifacts.*")
+
+        df = pd.concat(frames, ignore_index=True)
+        df = df.reset_index(drop=True)
+        df["index"] = df.index
+
+        # Derive a "location" column from field_key prefix for filtering
+        def _location_from_key(key: str) -> str:
+            if key.startswith("interior/"):
+                return "interior"
+            if key.startswith("boundary."):
+                return "boundary"
+            if key.startswith("point_data/"):
+                return "point_data"
+            if key.startswith("cell_data/"):
+                return "cell_data"
+            return "other"
+
+        df["location"] = df["field_key"].apply(_location_from_key)
+
+        # Create widgets
+        x_select = pn.widgets.Select(name="X-Axis", options=stat_columns, value="mean")
+        y_select = pn.widgets.Select(name="Y-Axis", options=stat_columns, value="std")
+        available_locations = sorted(df["location"].unique().tolist())
+        location_filter = pn.widgets.CheckBoxGroup(
+            name="Filter Locations",
+            options=available_locations,
+            value=available_locations,
+        )
+        available_fields = sorted(df["field_key"].unique().tolist())
+        field_filter = pn.widgets.MultiSelect(
+            name="Fields",
+            options=available_fields,
+            value=available_fields,
+            size=min(8, len(available_fields)),
+        )
+
+        sidebar = pn.Column(
+            "### Controls",
+            x_select,
+            y_select,
+            "---",
+            "### Filter by Location",
+            location_filter,
+            "---",
+            "### Filter by Field",
+            field_filter,
+        )
+
+        @pn.depends(  # ty: ignore[invalid-argument-type]
+            x_select.param.value,
+            y_select.param.value,
+            location_filter.param.value,
+            field_filter.param.value,
+        )
+        def update_plot(
+            x_col: str,
+            y_col: str,
+            selected_locations: list[str],
+            selected_fields: list[str],
+        ) -> hv.Points:
+            """Update scatter plot based on widget selections."""
+            filtered_df = df[df["location"].isin(selected_locations)] if selected_locations else df
+            if selected_fields:
+                filtered_df = filtered_df[filtered_df["field_key"].isin(selected_fields)]
+            if filtered_df.empty:
+                return hv.Points([]).opts(title="No data matches filters")
+            points = hv.Points(
+                filtered_df,
+                kdims=[x_col, y_col],
+                vdims=["index", "field_key"],
+            )
+            hover = HoverTool(
+                tooltips=[
+                    (x_col, "@{" + x_col + "}{0.4f}"),
+                    (y_col, "@{" + y_col + "}{0.4f}"),
+                    ("index", "@index"),
+                    ("field", "@field_key"),
+                ],
+                point_policy="follow_mouse",
+            )
+            return points.opts(
+                color="#1f77b4",
+                size=8,
+                tools=[hover, "pan", "wheel_zoom", "box_zoom", "reset"],
+                responsive=True,
+                height=500,
+                xlabel=x_col,
+                ylabel=y_col,
+                title=f"{y_col} vs {x_col}",
+            )
+
+        plot_pane = pn.pane.HoloViews(update_plot, sizing_mode="stretch_width", height=500)
+
+        gstack = pn.GridStack(
+            sizing_mode="stretch_both",
+            min_height=500,
+            allow_drag=True,
+            allow_resize=True,
+        )
+        gstack[0:3, 0:3] = pmui.Paper(sidebar, elevation=2)
+        gstack[0:3, 3:12] = pmui.Paper(plot_pane, elevation=2)
+        return gstack
+
+    @classmethod
+    def dashboard_layout_hints(cls) -> dict[str, int]:
+        """Declare grid space for the scatter plot widget.
+
+        Returns
+        -------
+        dict[str, int]
+            Full width (12 columns), 3 rows tall.
+        """
+        return {"cols": 12, "rows": 3}
+
+
+# Backward-compatible alias.
+StatsFilter = MeshStatsFilter
+"""Deprecated alias for :class:`MeshStatsFilter`."""
 
 
 def merge_welford_stats(parquet_paths: list[str]) -> pa.Table:

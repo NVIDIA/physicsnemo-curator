@@ -31,7 +31,7 @@ from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.filters.quality import MeshQualityFilter
-from physicsnemo_curator.domains.mesh.filters.stats import StatsFilter, merge_welford_stats
+from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter, StatsFilter, merge_welford_stats
 from physicsnemo_curator.domains.mesh.filters.wall_node import WallNodeFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.ahmedml import AhmedMLSource
@@ -56,7 +56,7 @@ registry.register_source("mesh", NavierStokesCylinderSource)
 registry.register_filter("mesh", MeanFilter)
 registry.register_filter("mesh", MeshInfoFilter)
 registry.register_filter("mesh", MeshQualityFilter)
-registry.register_filter("mesh", StatsFilter)
+registry.register_filter("mesh", MeshStatsFilter)
 registry.register_filter("mesh", PrecisionFilter)
 registry.register_filter("mesh", WallNodeFilter)
 registry.register_sink("mesh", MeshSink)
@@ -70,6 +70,7 @@ __all__ = [
     "MeshInfoFilter",
     "MeshQualityFilter",
     "MeshSink",
+    "MeshStatsFilter",
     "NavierStokesCylinderSource",
     "PrecisionFilter",
     "StatsFilter",

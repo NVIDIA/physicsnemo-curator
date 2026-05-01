@@ -84,7 +84,7 @@ uv run pre-commit install
 
 ```python
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.domains.mesh.filters.stats import StatsFilter
+from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.run import run_pipeline
@@ -92,7 +92,7 @@ from physicsnemo_curator.run import run_pipeline
 # Build a pipeline: Source → Filters → Sink
 pipeline = (
     DrivAerMLSource(mesh_type="boundary")
-    .filter(StatsFilter(output="stats.parquet"))
+    .filter(MeshStatsFilter(output="stats.parquet"))
     .filter(PrecisionFilter(target_dtype="float32"))
     .write(MeshSink(output_dir="output/meshes/"))
 )
