@@ -28,7 +28,7 @@ import panel_material_ui as pmui
 if TYPE_CHECKING:
     from physicsnemo_curator.dashboard.data import DashboardStore
 
-hv.extension("bokeh")
+hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
 
 
 def _timeline_scatter(store: DashboardStore) -> pn.Column:
@@ -272,7 +272,7 @@ def _resource_summary(store: DashboardStore) -> pn.Column:
     return pn.Column(*components, sizing_mode="stretch_width")
 
 
-def performance_tab(store: DashboardStore) -> pn.GridStack:
+def performance_tab(store: DashboardStore) -> pn.Column:
     """Build the Performance tab layout.
 
     Parameters
@@ -282,13 +282,16 @@ def performance_tab(store: DashboardStore) -> pn.GridStack:
 
     Returns
     -------
-    pn.GridStack
-        GridStack layout with draggable, resizable tiles.
+    pn.Column
+        Scrollable column layout.
     """
-    gstack = pn.GridStack(sizing_mode="stretch_both", min_height=600, allow_drag=True, allow_resize=True)
-
-    gstack[0:3, 0:12] = pmui.Paper(_timeline_scatter(store), elevation=2)
-    gstack[3:5, 0:6] = pmui.Paper(_stage_breakdown(store), elevation=2)
-    gstack[3:5, 6:12] = pmui.Paper(_resource_summary(store), elevation=2)
-
-    return gstack
+    return pn.Column(
+        pmui.Paper(_timeline_scatter(store), elevation=2, sizing_mode="stretch_width"),
+        pn.Row(
+            pmui.Paper(_stage_breakdown(store), elevation=2, sizing_mode="stretch_width"),
+            pmui.Paper(_resource_summary(store), elevation=2, sizing_mode="stretch_width"),
+            sizing_mode="stretch_width",
+        ),
+        sizing_mode="stretch_width",
+        scroll=True,
+    )

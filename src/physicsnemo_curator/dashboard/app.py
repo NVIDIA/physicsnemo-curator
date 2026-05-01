@@ -54,7 +54,7 @@ class DashboardApp:
         self.store = DashboardStore(db_path)
         self.widget_registry = WidgetRegistry()
         self._page: pmui.Page | None = None
-        self._periodic: pn.state.PeriodicCallback | None = None  # type: ignore[name-defined]
+        self._periodic: pn.state.PeriodicCallback | None = None  # ty: ignore[unresolved-attribute]
 
     def _build_app(self) -> pmui.Page:
         """Build the application shell with Material UI theming.
@@ -64,12 +64,13 @@ class DashboardApp:
         pmui.Page
             The themed dashboard page.
         """
-        pn.extension("gridstack")
+        pn.extension("bokeh")
 
         tabs = pmui.Tabs(
             ("Overview", overview_tab(self.store)),
             ("Pipeline", pipeline_tab(self.store, self.widget_registry)),
             ("Performance", performance_tab(self.store)),
+            sizing_mode="stretch_both",
         )
 
         page = pmui.Page(

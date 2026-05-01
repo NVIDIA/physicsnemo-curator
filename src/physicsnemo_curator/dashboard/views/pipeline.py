@@ -85,11 +85,9 @@ def _pipeline_structure(store: DashboardStore) -> pn.Row:
     cards = []
 
     # Source card
-    source_params = config.get("source", {}).get("params", {})
-    source_detail = ", ".join(f"{k}={v}" for k, v in source_params.items()) if source_params else ""
     cards.append(
         pn.Card(
-            pn.pane.Markdown(f"**Source**\n\n`{source_name}`\n\n{source_detail}"),
+            pn.pane.Markdown(f"**Source**\n\n`{source_name}`"),
             title="Source",
             styles={"background": "#e8f5e9"},
             width=200,
@@ -99,12 +97,10 @@ def _pipeline_structure(store: DashboardStore) -> pn.Row:
     # Filter cards
     for f in filters:
         fname = f.get("name", "?")
-        fparams = f.get("params", {})
-        fdetail = ", ".join(f"{k}={v}" for k, v in fparams.items()) if fparams else ""
         cards.append(pn.pane.Markdown("→", styles={"font-size": "24px"}, align="center"))
         cards.append(
             pn.Card(
-                pn.pane.Markdown(f"**Filter**\n\n`{fname}`\n\n{fdetail}"),
+                pn.pane.Markdown(f"**Filter**\n\n`{fname}`"),
                 title=fname,
                 styles={"background": "#e3f2fd"},
                 width=200,
@@ -113,11 +109,9 @@ def _pipeline_structure(store: DashboardStore) -> pn.Row:
 
     # Sink card
     cards.append(pn.pane.Markdown("→", styles={"font-size": "24px"}, align="center"))
-    sink_params = config.get("sink", {}).get("params", {})
-    sink_detail = ", ".join(f"{k}={v}" for k, v in sink_params.items()) if sink_params else ""
     cards.append(
         pn.Card(
-            pn.pane.Markdown(f"**Sink**\n\n`{sink_name}`\n\n{sink_detail}"),
+            pn.pane.Markdown(f"**Sink**\n\n`{sink_name}`"),
             title="Sink",
             styles={"background": "#fff3e0"},
             width=200,
@@ -236,7 +230,7 @@ def _aggregate_artifacts(
     return pn.Column(*components, sizing_mode="stretch_width")
 
 
-def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.GridStack:
+def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.Column:
     """Build the Pipeline tab layout.
 
     Parameters
@@ -248,8 +242,8 @@ def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.GridStac
 
     Returns
     -------
-    pn.GridStack
-        GridStack layout with draggable, resizable tiles.
+    pn.Column
+        Scrollable column layout.
     """
     # Pipeline structure
     structure = _pipeline_structure(store)
@@ -415,27 +409,25 @@ def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.GridStac
         pagination_row,
     )
 
-    # Build GridStack
-    gstack = pn.GridStack(sizing_mode="stretch_both", min_height=800, allow_drag=True, allow_resize=True)
-
-    gstack[0:2, 0:12] = pmui.Paper(structure, elevation=2)
-    gstack[2:3, 0:12] = pmui.Paper(controls, elevation=2)
-    gstack[3:5, 0:8] = pmui.Paper(table_pane, elevation=2)
-    gstack[3:5, 8:12] = pmui.Paper(detail_pane, elevation=2)
+    # Build scrollable Column layout
+    sections: list[pn.viewable.Viewable] = [
+        pmui.Paper(structure, elevation=2, sizing_mode="stretch_width"),
+        pmui.Paper(controls, elevation=2, sizing_mode="stretch_width"),
+        pn.Row(
+            pmui.Paper(table_pane, elevation=2, sizing_mode="stretch_width"),
+            pmui.Paper(detail_pane, elevation=2, sizing_mode="stretch_width"),
+            sizing_mode="stretch_width",
+        ),
+    ]
 
     # Dynamic filter widget tiles
-    next_row = 5
     all_artifacts = store.all_artifacts()
     for filter_name, paths in all_artifacts.items():
         try:
             tile = registry.get_panel(filter_name, sorted(set(paths)), selected_index=None)
             if tile is not None:
-                hints = registry.get_layout_hints(filter_name)
-                cols = hints.get("cols", 12)
-                rows = hints.get("rows", 2)
-                gstack[next_row : next_row + rows, 0:cols] = pmui.Paper(tile, elevation=2)
-                next_row += rows
+                sections.append(pmui.Paper(tile, elevation=2, sizing_mode="stretch_width"))
         except Exception:  # noqa: BLE001
             pass
 
-    return gstack
+    return pn.Column(*sections, sizing_mode="stretch_width", scroll=True)

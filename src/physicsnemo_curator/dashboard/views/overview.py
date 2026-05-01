@@ -138,10 +138,30 @@ def _pipeline_info(store: DashboardStore) -> pn.Column:
 
     chain = f"**{source_name}** → " + " → ".join(f"*{n}*" for n in filter_names) + f" → **{sink_name}**"
 
-    return pn.Column(
+    components: list[pn.viewable.Viewable] = [
         pn.pane.Markdown("### Pipeline"),
         pn.pane.Markdown(chain),
-    )
+    ]
+
+    # Add stage timing summary if data is available
+    stage_df = store.stage_df
+    if not stage_df.empty:
+        # Aggregate stage timings across all indices
+        stage_summary = stage_df.groupby("stage_name", sort=False)["wall_time_s"].agg(["mean", "sum", "count"])
+        stage_summary = stage_summary.rename(columns={"mean": "Mean (s)", "sum": "Total (s)", "count": "Indices"})
+        stage_summary.index.name = "Stage"
+        stage_summary = stage_summary.reset_index()
+        # Sort by stage_order
+        order_map = stage_df.drop_duplicates("stage_name").set_index("stage_name")["stage_order"]
+        stage_summary["_order"] = stage_summary["Stage"].map(order_map)
+        stage_summary = stage_summary.sort_values("_order").drop(columns="_order")
+        stage_summary["Mean (s)"] = stage_summary["Mean (s)"].round(2)
+        stage_summary["Total (s)"] = stage_summary["Total (s)"].round(2)
+
+        components.append(pn.pane.Markdown("#### Stage Timings"))
+        components.append(pn.pane.DataFrame(stage_summary, index=False, sizing_mode="stretch_width"))
+
+    return pn.Column(*components)
 
 
 def _recent_files(store: DashboardStore) -> pn.Column:
@@ -211,7 +231,7 @@ def _error_log(store: DashboardStore) -> pn.Column:
     )
 
 
-def overview_tab(store: DashboardStore) -> pn.GridStack:
+def overview_tab(store: DashboardStore) -> pn.Column:
     """Build the Overview tab layout.
 
     Parameters
@@ -221,17 +241,18 @@ def overview_tab(store: DashboardStore) -> pn.GridStack:
 
     Returns
     -------
-    pn.GridStack
-        GridStack layout with draggable, resizable tiles.
+    pn.Column
+        Vertical layout: completion status, workers, pipeline info,
+        recent files, and errors.
     """
-    gstack = pn.GridStack(sizing_mode="stretch_both", min_height=600, allow_drag=True, allow_resize=True)
-
-    gstack[0, 0:12] = pmui.Paper(_summary_cards(store), elevation=2)
-    gstack[1:3, 0:6] = pmui.Paper(_worker_table(store), elevation=2)
-    gstack[1:3, 6:12] = pmui.Paper(
-        pn.Column(_pipeline_info(store), _recent_files(store)),
-        elevation=2,
+    return pn.Column(
+        pmui.Paper(_summary_cards(store), elevation=2),
+        pmui.Paper(_worker_table(store), elevation=2),
+        pmui.Paper(
+            pn.Column(_pipeline_info(store), _recent_files(store)),
+            elevation=2,
+        ),
+        pmui.Paper(_error_log(store), elevation=2),
+        sizing_mode="stretch_width",
+        scroll=True,
     )
-    gstack[3:5, 0:12] = pmui.Paper(_error_log(store), elevation=2)
-
-    return gstack

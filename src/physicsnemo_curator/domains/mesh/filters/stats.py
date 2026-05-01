@@ -293,6 +293,9 @@ class StatsFilter(Filter["Mesh"]):
     def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:
         """Compute statistics for each mesh and yield it unchanged.
 
+        Statistics are written to the output Parquet file immediately after
+        each mesh is processed (appending if the file already exists).
+
         Parameters
         ----------
         items : Generator[Mesh]
@@ -306,15 +309,11 @@ class StatsFilter(Filter["Mesh"]):
         for mesh in items:
             mesh_rows = self._compute_mesh_stats(mesh)
             self._rows.extend(mesh_rows)
+            self._flush_rows()
             yield mesh
 
-    def flush(self) -> str | None:
-        """Write accumulated statistics to the Parquet file.
-
-        If the output file already exists (e.g., from a previous flush in
-        the same worker process), the new rows are appended to the existing
-        file. This enables worker-level aggregation when running pipelines
-        in parallel.
+    def _flush_rows(self) -> str | None:
+        """Write current accumulated rows to Parquet (append if exists).
 
         Returns
         -------
@@ -347,6 +346,22 @@ class StatsFilter(Filter["Mesh"]):
         self._rows.clear()
         self._last_artifacts = [path]
         return path
+
+    def flush(self) -> str | None:
+        """Write accumulated statistics to the Parquet file.
+
+        If the output file already exists (e.g., from a previous flush in
+        the same worker process), the new rows are appended to the existing
+        file. This enables worker-level aggregation when running pipelines
+        in parallel.
+
+        Returns
+        -------
+        str or None
+            The path of the written Parquet file, or ``None`` if there are
+            no rows to write.
+        """
+        return self._flush_rows()
 
     def artifacts(self) -> list[str]:
         """Return paths written by the last :meth:`flush` call.

@@ -41,3 +41,7 @@ docs/specs/
 .superpowers/
 
 data/
+output/
+outputs/
+source/
+target/

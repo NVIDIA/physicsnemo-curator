@@ -16,15 +16,15 @@
 
 """Welcome screen for the pipeline wizard.
 
-Offers three modes: build a new pipeline, load an existing one, or
-manage the pipeline database cache.
+Offers four modes: build a new pipeline, load an existing one,
+open the metrics dashboard, or manage the pipeline database cache.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Input, Static
 
@@ -40,6 +40,7 @@ class WelcomeScreen(Screen[None]):
     Modes:
     - **Build** — push :class:`SubmoduleScreen`
     - **Load** — prompt for file path, load pipeline, push :class:`SummaryScreen`
+    - **Dashboard** — push :class:`DashboardScreen`
     - **Cache** — push :class:`CacheScreen`
     """
 
@@ -50,6 +51,7 @@ class WelcomeScreen(Screen[None]):
     WelcomeScreen > Vertical {
         width: auto;
         height: auto;
+        align: center middle;
     }
     #banner {
         text-align: center;
@@ -62,27 +64,45 @@ class WelcomeScreen(Screen[None]):
         color: $text-muted;
         margin-bottom: 2;
     }
+    .btn-row {
+        width: auto;
+        height: auto;
+        align: center middle;
+    }
     #load-input {
         display: none;
         width: 40;
         margin: 1 0;
     }
     .welcome-btn {
-        width: 40;
-        margin: 1 0;
+        width: 24;
+        margin: 1 1;
+    }
+    #quit-row {
+        width: 100%;
+        height: auto;
+        align: center middle;
+        margin-top: 1;
+    }
+    #quit-btn {
+        width: 24;
     }
     """
 
     def compose(self) -> ComposeResult:
-        """Yield the banner, mode buttons, and hidden load input."""
+        """Yield the banner, mode buttons in a 2x2 grid, and quit button."""
         with Vertical():
             yield Static("PhysicsNeMo Curator", id="banner")
             yield Static("Interactive ETL Pipeline Wizard", id="subtitle")
-            yield Button("Build a new pipeline", id="build-btn", classes="welcome-btn")
-            yield Button("Load a saved pipeline", id="load-btn", classes="welcome-btn")
-            yield Button("Manage cache", id="cache-btn", classes="welcome-btn")
+            with Horizontal(classes="btn-row"):
+                yield Button("Build pipeline", id="build-btn", classes="welcome-btn")
+                yield Button("Load pipeline", id="load-btn", classes="welcome-btn")
+            with Horizontal(classes="btn-row"):
+                yield Button("Open dashboard", id="dashboard-btn", classes="welcome-btn")
+                yield Button("Manage cache", id="cache-btn", classes="welcome-btn")
             yield Input(placeholder="Path to pipeline file (YAML / JSON)", id="load-input")
-            yield Button("Quit", id="quit-btn", classes="welcome-btn", variant="error")
+            with Horizontal(id="quit-row"):
+                yield Button("Quit", id="quit-btn", variant="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle mode selection."""
@@ -106,6 +126,11 @@ class WelcomeScreen(Screen[None]):
             from physicsnemo_curator.wiz.screens.cache import CacheScreen
 
             app.push_screen(CacheScreen())
+
+        elif event.button.id == "dashboard-btn":
+            from physicsnemo_curator.wiz.screens.dashboard import DashboardScreen
+
+            app.push_screen(DashboardScreen())
 
         elif event.button.id == "quit-btn":
             self.app.exit()
