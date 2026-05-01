@@ -61,7 +61,7 @@ You can register custom backends using :func:`register_backend`::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from physicsnemo_curator.run.base import RunBackend, RunConfig
 from physicsnemo_curator.run.dask import DaskBackend
@@ -195,7 +195,7 @@ def run_pipeline(
     n_jobs: int = 1,
     backend: str = "auto",
     indices: Iterable[int] | None = None,
-    progress: bool = True,
+    progress: bool | Literal["log"] = True,
     **backend_kwargs: Any,
 ) -> list[list[str]]:
     """Execute a pipeline over all (or selected) source indices.
@@ -217,8 +217,11 @@ def run_pipeline(
     indices : Iterable[int] | None
         Specific source indices to process. ``None`` (default) processes
         all indices ``range(len(pipeline))``.
-    progress : bool
-        Show a progress indicator if the chosen backend supports it.
+    progress : bool | Literal["log"]
+        Progress display mode. ``True`` shows the full-screen Textual
+        TUI (requires an interactive terminal). ``"log"`` prints simple
+        timestamped percentage lines suitable for notebooks and
+        non-interactive scripts. ``False`` disables progress output.
     **backend_kwargs : Any
         Extra keyword arguments forwarded to the backend.
 

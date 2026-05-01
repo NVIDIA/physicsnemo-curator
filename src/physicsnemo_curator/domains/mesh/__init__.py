@@ -27,6 +27,7 @@ This module registers its components with the global
 from __future__ import annotations
 
 from physicsnemo_curator.core.registry import registry
+from physicsnemo_curator.domains.mesh.filters.field_select import FieldSelectFilter
 from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
@@ -53,6 +54,7 @@ registry.register_source("mesh", AhmedMLSource)
 registry.register_source("mesh", WindsorMLSource)
 registry.register_source("mesh", WindTunnelSource)
 registry.register_source("mesh", NavierStokesCylinderSource)
+registry.register_filter("mesh", FieldSelectFilter)
 registry.register_filter("mesh", MeanFilter)
 registry.register_filter("mesh", MeshInfoFilter)
 registry.register_filter("mesh", MeshQualityFilter)
@@ -66,6 +68,7 @@ __all__ = [
     "AnsysRSTSource",
     "D3PlotSource",
     "DrivAerMLSource",
+    "FieldSelectFilter",
     "MeanFilter",
     "MeshInfoFilter",
     "MeshQualityFilter",

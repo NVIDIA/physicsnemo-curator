@@ -26,8 +26,10 @@ from __future__ import annotations
 import signal
 import sys
 import threading
+import time
 import uuid
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -47,6 +49,91 @@ class _NoOpMonitor:
 
     def __exit__(self, *args: Any) -> None:
         """Exit context."""
+
+
+class LogProgressMonitor:
+    """Simple timestamped log-line progress monitor.
+
+    Prints progress percentage with timestamps to stdout. Suitable for
+    notebooks, scripts, and non-interactive environments where the
+    full-screen Textual TUI is not appropriate.
+
+    Parameters
+    ----------
+    store : PipelineStore
+        Pipeline store instance (used for read-only polling).
+    total : int
+        Total number of indices to process.
+    poll_interval : float
+        Seconds between progress polls (default 5.0).
+    """
+
+    def __init__(self, store: Any, total: int, poll_interval: float = 5.0) -> None:
+        """Initialise the log progress monitor."""
+        self._store = store
+        self._total = total
+        self._poll_interval = poll_interval
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._start_time: float = 0.0
+
+    def _poll_loop(self) -> None:
+        """Poll the database and print progress lines."""
+        self._start_time = time.monotonic()
+        while not self._stop_event.is_set():
+            self._print_progress()
+            self._stop_event.wait(self._poll_interval)
+        # Final print on stop
+        self._print_progress()
+
+    def _print_progress(self) -> None:
+        """Print a timestamped progress line."""
+        try:
+            completed = len(self._store.completed_indices())
+            failed = len(self._store.failed_indices())
+        except Exception:  # noqa: BLE001
+            return
+
+        done = completed + failed
+        elapsed = time.monotonic() - self._start_time
+        pct = (done / self._total * 100) if self._total > 0 else 100.0
+        ts = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
+
+        # Estimate remaining time
+        if done > 0 and done < self._total:
+            rate = elapsed / done
+            remaining = rate * (self._total - done)
+            eta_str = f", ETA {remaining:.0f}s"
+        elif done >= self._total:
+            eta_str = ", done"
+        else:
+            eta_str = ""
+
+        status = f"[{ts}] Progress: {done}/{self._total} ({pct:.1f}%) | elapsed {elapsed:.1f}s{eta_str}"
+        if failed > 0:
+            status += f" | {failed} failed"
+        print(status, flush=True)  # noqa: T201
+
+    def start(self) -> None:
+        """Start the polling thread."""
+        self._thread = threading.Thread(target=self._poll_loop, daemon=True, name="progress-log")
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Signal the thread to stop and wait for it."""
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5.0)
+            self._thread = None
+
+    def __enter__(self) -> LogProgressMonitor:
+        """Start the monitor on context entry."""
+        self.start()
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        """Stop the monitor on context exit."""
+        self.stop()
 
 
 class ProgressMonitor:
@@ -142,12 +229,12 @@ class ProgressMonitor:
 def start_progress_monitor(
     pipeline: Pipeline[Any],
     config: RunConfig,
-) -> ProgressMonitor | _NoOpMonitor:
+) -> ProgressMonitor | LogProgressMonitor | _NoOpMonitor:
     """Create and return a progress monitor for pipeline execution.
 
     Returns a :class:`ProgressMonitor` that runs a Textual TUI in a
-    daemon thread, or a no-op monitor when progress display is disabled
-    or the terminal is non-interactive.
+    daemon thread, a :class:`LogProgressMonitor` that prints timestamped
+    progress lines, or a no-op monitor when progress display is disabled.
 
     Parameters
     ----------
@@ -158,10 +245,10 @@ def start_progress_monitor(
 
     Returns
     -------
-    ProgressMonitor | _NoOpMonitor
+    ProgressMonitor | LogProgressMonitor | _NoOpMonitor
         An active progress monitor, or a no-op if disabled.
     """
-    if not config.progress or not sys.stdout.isatty():
+    if not config.progress:
         return _NoOpMonitor()
 
     # Generate a unique invocation ID and set it on the pipeline so
@@ -173,5 +260,13 @@ def start_progress_monitor(
     indices = config.indices if config.indices is not None else list(range(len(pipeline)))
     total = len(indices)
     n_workers = config.resolved_n_jobs
+
+    # Log mode: simple timestamped lines (works in notebooks/scripts)
+    if config.progress == "log":
+        return LogProgressMonitor(store=store, total=total)
+
+    # TUI mode: requires interactive terminal
+    if not sys.stdout.isatty():
+        return LogProgressMonitor(store=store, total=total)
 
     return ProgressMonitor(store=store, total=total, n_workers=n_workers, invocation_id=invocation_id)

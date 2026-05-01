@@ -44,6 +44,7 @@ from physicsnemo.mesh.domain_mesh import DomainMesh
 from physicsnemo.mesh.io import from_pyvista
 
 from physicsnemo_curator.core.base import Param, Source
+from physicsnemo_curator.core.cache import default_data_cache_dir
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -167,6 +168,12 @@ class DrivAerMLSource(Source[Mesh]):
                 default="",
             ),
             Param(
+                name="cache",
+                description="Persist downloaded files across sessions (False = temp dir, deleted after read)",
+                type=bool,
+                default=True,
+            ),
+            Param(
                 name="manifold_dim",
                 description="Target manifold dimension (auto, 0, 1, 2, 3)",
                 type=str,
@@ -207,6 +214,7 @@ class DrivAerMLSource(Source[Mesh]):
         url: str = _DRIVAERML_HF_URL,
         storage_options: dict[str, object] | None = None,
         cache_storage: str | None = None,
+        cache: bool = True,
         manifold_dim: int | Literal["auto"] = "auto",
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
@@ -218,7 +226,19 @@ class DrivAerMLSource(Source[Mesh]):
         self._mesh_type: MeshType = mesh_type
         self._url = url
         self._storage_options = storage_options or {}
-        self._cache_storage = cache_storage or tempfile.mkdtemp(prefix="curator_drivaerml_")
+        self._cache = cache
+
+        # Resolve cache directory:
+        # 1. Explicit cache_storage always wins (implies persistent)
+        # 2. cache=True → persistent default under ~/.cache/psnc/data/drivaerml/
+        # 3. cache=False → ephemeral temp dir (files deleted after read)
+        if cache_storage:
+            self._cache_storage = cache_storage
+        elif cache:
+            self._cache_storage = str(default_data_cache_dir("drivaerml"))
+        else:
+            self._cache_storage = tempfile.mkdtemp(prefix="curator_drivaerml_")
+
         self._manifold_dim = manifold_dim
         self._point_source = point_source
         self._warn_on_lost_data = warn_on_lost_data
@@ -322,6 +342,24 @@ class DrivAerMLSource(Source[Mesh]):
 
         return str(local_path)
 
+    def _cleanup_local(self, *paths: str) -> None:
+        """Delete local files if caching is disabled.
+
+        When ``self._cache`` is ``False``, removes the given files from
+        disk to free space immediately after they have been read into
+        memory.  Does nothing when caching is enabled or for local
+        (``file://``) sources.
+
+        Parameters
+        ----------
+        *paths : str
+            Local file paths to remove.
+        """
+        if self._cache or self._protocol in ("file", ""):
+            return
+        for p in paths:
+            pathlib.Path(p).unlink(missing_ok=True)
+
     # -- Source interface -----------------------------------------------------
 
     def __len__(self) -> int:
@@ -401,7 +439,9 @@ class DrivAerMLSource(Source[Mesh]):
             filename = self._file_template.format(i=run_id)
             remote_path = f"{self._root_path}/run_{run_id}/{filename}"
             path = self._ensure_local(remote_path)
-            yield self._read_vtk(path)
+            mesh = self._read_vtk(path)
+            self._cleanup_local(path)
+            yield mesh
 
     # -- Internal helpers ----------------------------------------------------
 
@@ -572,7 +612,9 @@ class DrivAerMLSource(Source[Mesh]):
         direct_remote = f"{self._root_path}/run_{run_id}/volume_{run_id}.vtu"
         try:
             local_path = self._ensure_local(direct_remote)
-            yield self._read_vtk(local_path)
+            mesh = self._read_vtk(local_path)
+            self._cleanup_local(local_path)
+            yield mesh
             return
         except FileNotFoundError:
             pass
@@ -600,7 +642,9 @@ class DrivAerMLSource(Source[Mesh]):
                         out.write(inp.read())
             logger.info("Concatenated %d parts into %s", len(parts), concat_path)
 
-        yield self._read_vtk(str(concat_path))
+        mesh = self._read_vtk(str(concat_path))
+        self._cleanup_local(*parts, str(concat_path))
+        yield mesh
 
     def _read_slices(self, index: int) -> Generator[Mesh]:
         """Read all slice VTP files for a given run index.
@@ -618,7 +662,9 @@ class DrivAerMLSource(Source[Mesh]):
         fs, protocol, files = self._slices_run_data[index]
         for remote_path in files:
             local_path = self._ensure_local_with_fs(fs, protocol, remote_path)
-            yield self._read_vtk(local_path)
+            mesh = self._read_vtk(local_path)
+            self._cleanup_local(local_path)
+            yield mesh
 
     def _build_slices_data(self) -> None:
         """Discover per-run slice files for slices mode.
@@ -696,18 +742,23 @@ class DrivAerMLSource(Source[Mesh]):
 
         # --- Interior (volume VTU → point-cloud) ---
         direct_remote = f"{self._root_path}/run_{run_id}/volume_{run_id}.vtu"
+        volume_cleanup: list[str] = []
         try:
             volume_path = self._ensure_local(direct_remote)
+            volume_cleanup.append(volume_path)
             interior = self._read_interior(volume_path)
         except (FileNotFoundError, OSError):
             volume_path = self._read_volume_parts(run_id)
+            volume_cleanup.append(volume_path)
             interior = self._read_interior(volume_path)
+        self._cleanup_local(*volume_cleanup)
         interior = self._downcast_fp32(interior)
 
         # --- Boundary surface (boundary VTP → triangulated mesh) ---
         boundary_remote = f"{self._root_path}/run_{run_id}/boundary_{run_id}.vtp"
         boundary_path = self._ensure_local(boundary_remote)
         surface = self._read_surface(boundary_path)
+        self._cleanup_local(boundary_path)
         surface = self._downcast_fp32(surface)
 
         # --- Global data ---

@@ -82,6 +82,41 @@ def default_cache_dir() -> pathlib.Path:
     return pathlib.Path.home() / ".cache" / "psnc"
 
 
+def default_data_cache_dir(source_name: str) -> pathlib.Path:
+    """Return the persistent cache directory for downloaded source data.
+
+    Provides a standard location for remote sources to store downloaded
+    files so they persist across pipeline runs.  The directory is created
+    if it does not yet exist.
+
+    Resolution order follows :func:`default_cache_dir`, with
+    ``data/<source_name>`` appended:
+
+    1. ``$PSNC_CACHE_DIR/data/<source_name>/``
+    2. ``$XDG_CACHE_HOME/psnc/data/<source_name>/``
+    3. ``~/.cache/psnc/data/<source_name>/``
+
+    Parameters
+    ----------
+    source_name : str
+        Short identifier for the source (e.g. ``"drivaerml"``,
+        ``"ahmedml"``).  Used as the subdirectory name.
+
+    Returns
+    -------
+    pathlib.Path
+        Absolute path to the data cache directory (created if needed).
+
+    Examples
+    --------
+    >>> default_data_cache_dir("drivaerml")  # doctest: +SKIP
+    PosixPath('/home/user/.cache/psnc/data/drivaerml')
+    """
+    data_dir = default_cache_dir() / "data" / source_name
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
 # ---------------------------------------------------------------------------
 # DBInfo dataclass
 # ---------------------------------------------------------------------------
