@@ -51,12 +51,39 @@ The ``device`` fixture yields ``"cpu"`` and, when CUDA is available,
 from __future__ import annotations
 
 import importlib
+import os
+import tempfile
 from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
     import pathlib
+    from collections.abc import Generator
+
+
+# ---------------------------------------------------------------------------
+# Redirect pipeline cache to a temporary directory
+# ---------------------------------------------------------------------------
+# Pipeline runs create SQLite ``.db`` files under the default cache
+# directory (``~/.cache/psnc/``).  Letting test runs write there pollutes
+# the user's home directory with throw-away databases.  This session-scoped
+# autouse fixture points ``PSNC_CACHE_DIR`` at a temporary directory that
+# is cleaned up when the test session finishes.
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _isolate_cache_dir() -> Generator[None]:
+    """Redirect PSNC_CACHE_DIR to a temp dir for the test session."""
+    with tempfile.TemporaryDirectory(prefix="psnc_test_cache_") as tmp:
+        old = os.environ.get("PSNC_CACHE_DIR")
+        os.environ["PSNC_CACHE_DIR"] = tmp
+        yield
+        if old is None:
+            os.environ.pop("PSNC_CACHE_DIR", None)
+        else:
+            os.environ["PSNC_CACHE_DIR"] = old
+
 
 # ---------------------------------------------------------------------------
 # Dependency-group → sentinel imports
