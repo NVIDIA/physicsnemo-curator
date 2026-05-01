@@ -20,7 +20,7 @@ DrivAerML End-to-End ETL Pipeline
 
 This example demonstrates a complete **Source → Filter → Sink** pipeline
 that reads `DrivAerML <https://huggingface.co/datasets/neashton/drivaerml>`_
-meshes from HuggingFace Hub in **multi** mode, producing:
+meshes in **multi** mode, producing:
 
 - A :class:`~physicsnemo.mesh.domain_mesh.DomainMesh` per run — combining
   the volumetric interior (point-cloud from VTU cell centroids), boundary
@@ -42,8 +42,25 @@ The pipeline showcases:
   match the canonical DrivAerML structure (e.g.
   ``domain_1.pdmsh``, ``drivaer_1.stl.pmsh``).
 
-A train/val split is demonstrated so the output directory can be pointed at
-directly by downstream training configs.
+Prerequisites
+-------------
+
+Download sample data from HuggingFace using the ``huggingface-cli``:
+
+.. code-block:: bash
+
+    pip install huggingface_hub[cli]
+
+    # Download run_1 and run_2 (boundary, volume, STL, and metadata)
+    cd examples/cae
+    huggingface-cli download neashton/drivaerml \\
+        --repo-type dataset \\
+        --include "run_1/*" "run_2/*" \\
+        --local-dir data/drivaerml
+
+This creates ``examples/cae/data/drivaerml/run_1/`` and
+``examples/cae/data/drivaerml/run_2/`` with the VTP, VTU, STL, and CSV
+files needed by the pipeline.
 """
 
 # %%
@@ -55,6 +72,8 @@ directly by downstream training configs.
 # a **Sink** to write outputs, and
 # :func:`~physicsnemo_curator.run.run_pipeline` for parallel execution.
 
+from pathlib import Path
+
 from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.filters.stats import StatsFilter
@@ -63,11 +82,24 @@ from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # %%
+# Resolve Data Directory
+# -----------------------
+#
+# Resolve the path to the downloaded data relative to this example file.
+# This ensures the example works regardless of the working directory.
+
+_HERE = Path(__file__).resolve().parent
+_DATA_DIR = _HERE / "data" / "drivaerml"
+_OUTPUT_DIR = _HERE / "outputs" / "drivaerml"
+
+# %%
 # Configure the Source
 # --------------------
 #
 # :class:`~physicsnemo_curator.domains.mesh.sources.drivaerml.DrivAerMLSource`
-# connects to the HuggingFace Hub dataset and discovers available runs.
+# reads from the locally downloaded dataset.  We pass a ``file://`` URL
+# pointing to the data directory resolved relative to this example file.
+#
 # We select ``mesh_type="multi"`` to read all mesh representations:
 #
 # - **domain** — DomainMesh combining volume interior + boundary surface
@@ -75,6 +107,7 @@ from physicsnemo_curator.run import gather_pipeline, run_pipeline
 # - **single_solid** — same STL merged into one contiguous solid
 
 source = DrivAerMLSource(
+    url=f"file://{_DATA_DIR}",
     mesh_type="multi",
     manifold_dim="auto",
     point_source="vertices",
@@ -84,24 +117,8 @@ n_runs = len(source)
 print(f"Total runs available: {n_runs}")
 
 # %%
-# Define a Train / Val Split
-# ---------------------------
-#
-# Reserve the last 20% of runs for validation.  The ``{mesh_name}`` naming
-# template ensures output file names encode the canonical DrivAerML mesh
-# name (e.g. ``domain_1``, ``drivaer_1.stl``) regardless of split.
-
-val_frac = 0.2
-n_val = max(1, int(n_runs * val_frac))
-n_train = n_runs - n_val
-train_indices = range(n_train)
-val_indices = range(n_train, n_runs)
-
-print(f"Train: {len(train_indices)} runs, Val: {len(val_indices)} runs")
-
-# %%
-# Build the Training Pipeline
-# ----------------------------
+# Build the Pipeline
+# -------------------
 #
 # The fluent API chains **Source → Filter → Sink** into a lazy
 # :class:`~physicsnemo_curator.core.base.Pipeline`.  Nothing is
@@ -123,33 +140,13 @@ print(f"Train: {len(train_indices)} runs, Val: {len(val_indices)} runs")
 # source's :meth:`~DrivAerMLSource.mesh_name` method — producing output
 # names like ``domain_1.pdmsh``, ``drivaer_1.stl.pmsh``, etc.
 
-train_pipeline = (
-    source.filter(MeshInfoFilter(output="outputs/drivaerml/train/mesh_info.jsonl"))
-    .filter(StatsFilter(output="outputs/drivaerml/train/stats.parquet"))
+pipeline = (
+    source.filter(MeshInfoFilter(output=str(_OUTPUT_DIR / "mesh_info.jsonl")))
+    .filter(StatsFilter(output=str(_OUTPUT_DIR / "stats.parquet")))
     .filter(PrecisionFilter(target_dtype="float32"))
     .write(
         MeshSink(
-            output_dir="outputs/drivaerml/train/",
-            naming_template="{mesh_name}",
-        )
-    )
-)
-
-# %%
-# Build the Validation Pipeline
-# ------------------------------
-#
-# The validation pipeline uses the same source and filter chain, with a
-# separate output directory.  The ``{mesh_name}`` template still resolves
-# correctly because :meth:`~DrivAerMLSource.mesh_name` is index-based.
-
-val_pipeline = (
-    source.filter(MeshInfoFilter(output="outputs/drivaerml/val/mesh_info.jsonl"))
-    .filter(StatsFilter(output="outputs/drivaerml/val/stats.parquet"))
-    .filter(PrecisionFilter(target_dtype="float32"))
-    .write(
-        MeshSink(
-            output_dir="outputs/drivaerml/val/",
+            output_dir=str(_OUTPUT_DIR),
             naming_template="{mesh_name}",
         )
     )
@@ -160,25 +157,14 @@ val_pipeline = (
 # ---------------
 #
 # :func:`~physicsnemo_curator.run.run_pipeline` dispatches work to a
-# ``process_pool`` backend with 4 workers.  We process the training
-# split first, then the validation split.
-#
-# Each worker gets an independent copy of the pipeline, so meshes are
-# read, filtered, and written concurrently.
+# ``process_pool`` backend with 4 workers.  Each worker gets an
+# independent copy of the pipeline, so meshes are read, filtered, and
+# written concurrently.
 
-train_results = run_pipeline(
-    train_pipeline,
+results = run_pipeline(
+    pipeline,
     n_jobs=4,
     backend="process_pool",
-    indices=train_indices,
-    progress=True,
-)
-
-val_results = run_pipeline(
-    val_pipeline,
-    n_jobs=4,
-    backend="process_pool",
-    indices=val_indices,
     progress=True,
 )
 
@@ -189,10 +175,9 @@ val_results = run_pipeline(
 # ``results`` is a list of lists — one entry per processed index,
 # each containing the file paths written by the sink.
 
-print(f"Processed {len(train_results)} training runs")
-print(f"Processed {len(val_results)} validation runs")
-for i, paths in enumerate(train_results[:3]):
-    print(f"  Train run {i}: {paths}")
+print(f"Processed {len(results)} runs")
+for i, paths in enumerate(results[:3]):
+    print(f"  Run {i}: {paths}")
 
 # %%
 # Gather Statistics
@@ -207,14 +192,13 @@ for i, paths in enumerate(train_results[:3]):
 # After gathering, the statistics Parquet contains the exact global
 # mean, std, skewness, and kurtosis computed across all processed meshes.
 
-for pipe in (train_pipeline, val_pipeline):
-    merged = gather_pipeline(pipe)
-    for path in merged:
-        print(f"Merged statistics: {path}")
+merged = gather_pipeline(pipeline)
+for path in merged:
+    print(f"Merged statistics: {path}")
 
 # %%
-# Using the Output with ``MeshReader``
-# -------------------------------------
+# Output Structure
+# ----------------
 #
 # The output directory structure is directly compatible with
 # ``MeshReader`` from `PhysicsNeMo PR #1512
@@ -223,29 +207,24 @@ for pipe in (train_pipeline, val_pipeline):
 # .. code-block:: text
 #
 #     outputs/drivaerml/
-#     ├── train/
-#     │   ├── mesh_info.jsonl                  # Mesh metadata (JSON-lines)
-#     │   ├── stats.parquet                    # Per-field statistics (merged)
-#     │   ├── domain_1.pdmsh/                  # DomainMesh: interior + surface
-#     │   ├── drivaer_1.stl.pmsh/              # STL geometry
-#     │   ├── drivaer_1_single_solid.stl.pmsh/ # Merged STL
-#     │   ├── domain_2.pdmsh/                  # Run 2
-#     │   └── ...
-#     └── val/
-#         ├── mesh_info.jsonl
-#         ├── stats.parquet
-#         ├── domain_388.pdmsh/                 # First val run
-#         └── ...
+#     ├── mesh_info.jsonl                  # Mesh metadata (JSON-lines)
+#     ├── stats.parquet                    # Per-field statistics (merged)
+#     ├── domain_1.pdmsh/                  # DomainMesh: interior + surface
+#     ├── drivaer_1.stl.pmsh/              # STL geometry
+#     ├── drivaer_1_single_solid.stl.pmsh/ # Merged STL
+#     ├── domain_2.pdmsh/                  # Run 2
+#     ├── drivaer_2.stl.pmsh/
+#     ├── drivaer_2_single_solid.stl.pmsh/
+#     └── ...
 #
-# Point the ``drivaer_ml_surface.yaml`` config at the output:
+# Point a training config at the output:
 #
 # .. code-block:: yaml
 #
-#     train_datadir: outputs/drivaerml/train/
-#     val_datadir: outputs/drivaerml/val/
+#     datadir: outputs/drivaerml/
 #
 #     pipeline:
 #       reader:
 #         _target_: ${dp:MeshReader}
-#         path: ${train_datadir}
+#         path: ${datadir}
 #         pattern: "**/*.pdmsh"
