@@ -36,9 +36,7 @@ import re
 import tempfile
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
-import pyvista as pv
 from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.io import from_pyvista
 
 from physicsnemo_curator.core.base import Param, Source
 
@@ -56,6 +54,9 @@ _MESH_TEMPLATES: dict[str, str] = {
 
 #: Valid mesh types for this dataset.
 MeshType = Literal["boundary", "volume", "slices"]
+
+#: Valid backend options for VTK reading.
+Backend = Literal["pyvista", "rust"]
 
 
 class AhmedMLSource(Source[Mesh]):
@@ -81,10 +82,20 @@ class AhmedMLSource(Source[Mesh]):
         Local cache directory.  ``None`` → temporary directory.
     manifold_dim : int or {"auto"}
         Target manifold dimension for ``from_pyvista`` conversion.
+        Only used with the ``"pyvista"`` backend.
     point_source : {"vertices", "cell_centroids"}
         Point source mode for ``from_pyvista`` conversion.
+        Only used with the ``"pyvista"`` backend.
     warn_on_lost_data : bool
         Warn when data arrays are discarded during conversion.
+        Only used with the ``"pyvista"`` backend.
+    backend : {"pyvista", "rust"}
+        VTK reading backend:
+
+        - ``"pyvista"`` (default): use PyVista for full-featured reading.
+        - ``"rust"``: use the native Rust backend for faster reading.
+          Note: The Rust backend only supports ASCII VTU/VTP files and
+          does not support ``manifold_dim`` or ``point_source`` options.
 
     Examples
     --------
@@ -96,6 +107,10 @@ class AhmedMLSource(Source[Mesh]):
     >>> source = AhmedMLSource(mesh_type="slices")
     >>> for mesh in source[0]:
     ...     print(mesh.n_points)
+
+    Using the fast Rust backend:
+
+    >>> source = AhmedMLSource(mesh_type="boundary", backend="rust")
 
     Note
     ----
@@ -151,6 +166,13 @@ class AhmedMLSource(Source[Mesh]):
                 type=bool,
                 default=True,
             ),
+            Param(
+                name="backend",
+                description="VTK reading backend: pyvista (default) or rust (faster)",
+                type=str,
+                default="pyvista",
+                choices=["pyvista", "rust"],
+            ),
         ]
 
     def __init__(
@@ -162,6 +184,7 @@ class AhmedMLSource(Source[Mesh]):
         manifold_dim: int | Literal["auto"] = "auto",
         point_source: Literal["vertices", "cell_centroids"] = "vertices",
         warn_on_lost_data: bool = True,
+        backend: Backend = "pyvista",
     ) -> None:
         import fsspec
 
@@ -172,13 +195,13 @@ class AhmedMLSource(Source[Mesh]):
         self._manifold_dim = manifold_dim
         self._point_source = point_source
         self._warn_on_lost_data = warn_on_lost_data
+        self._backend: Backend = backend
 
         self._fs, self._root_path = fsspec.core.url_to_fs(self._url, **self._storage_options)
         self._protocol = self._fs.protocol if isinstance(self._fs.protocol, str) else self._fs.protocol[0]
         self._run_indices = self._discover_runs()
 
         if mesh_type == "slices":
-            self._file_template = "boundary_{i}.vtp"  # dummy, not used for slices
             self._build_slices_data()
         else:
             self._file_template = _MESH_TEMPLATES[mesh_type]
@@ -212,46 +235,26 @@ class AhmedMLSource(Source[Mesh]):
 
         return sorted(run_indices)
 
-    def _ensure_local(self, remote_path: str) -> str:
+    def _ensure_local(self, remote_path: str, fs: Any = None, protocol: str | None = None) -> str:
         """Download *remote_path* to the local cache if not already present.
 
         Parameters
         ----------
         remote_path : str
             Filesystem path (no protocol prefix).
+        fs : Any, optional
+            fsspec filesystem instance. Defaults to ``self._fs``.
+        protocol : str, optional
+            Filesystem protocol string. Defaults to ``self._protocol``.
 
         Returns
         -------
         str
             Local filesystem path.
         """
-        if self._protocol in ("file", ""):
-            return remote_path
+        fs = fs or self._fs
+        protocol = protocol or self._protocol
 
-        local_path = pathlib.Path(self._cache_storage) / remote_path.lstrip("/")
-        if not local_path.exists():
-            local_path.parent.mkdir(parents=True, exist_ok=True)
-            self._fs.get(remote_path, str(local_path))
-
-        return str(local_path)
-
-    def _ensure_local_with_fs(self, fs: Any, protocol: str, remote_path: str) -> str:
-        """Download *remote_path* using the given filesystem.
-
-        Parameters
-        ----------
-        fs : Any
-            fsspec filesystem instance.
-        protocol : str
-            Filesystem protocol string.
-        remote_path : str
-            Remote path to download.
-
-        Returns
-        -------
-        str
-            Local filesystem path.
-        """
         if protocol in ("file", ""):
             return remote_path
 
@@ -301,7 +304,7 @@ class AhmedMLSource(Source[Mesh]):
     # -- Internal helpers ----------------------------------------------------
 
     def _read_vtk(self, path: str) -> Mesh:
-        """Read a single VTK file and convert to Mesh.
+        """Read a single VTK file and convert to Mesh using the configured backend.
 
         Parameters
         ----------
@@ -313,12 +316,74 @@ class AhmedMLSource(Source[Mesh]):
         Mesh
             Converted mesh.
         """
+        if self._backend == "rust":
+            return self._read_with_rust(path)
+        return self._read_with_pyvista(path)
+
+    def _read_with_pyvista(self, path: str) -> Mesh:
+        """Read VTK file using PyVista backend.
+
+        Parameters
+        ----------
+        path : str
+            Path to the VTK file.
+
+        Returns
+        -------
+        Mesh
+            Converted physicsnemo Mesh.
+        """
+        import pyvista as pv
+        from physicsnemo.mesh.io import from_pyvista
+
         pv_mesh = pv.read(path)
         return from_pyvista(
             pv_mesh,
             manifold_dim=self._manifold_dim,
             point_source=self._point_source,
             warn_on_lost_data=self._warn_on_lost_data,
+        )
+
+    def _read_with_rust(self, path: str) -> Mesh:
+        """Read VTK file using Rust backend.
+
+        The Rust backend returns raw mesh data without the from_pyvista
+        conversion. Currently only supports ASCII VTU/VTP files and does
+        not support manifold_dim or point_source options.
+
+        Parameters
+        ----------
+        path : str
+            Path to the VTK file.
+
+        Returns
+        -------
+        Mesh
+            Raw mesh with points and point_data from the VTK file.
+        """
+        import torch
+        from tensordict import TensorDict
+
+        from physicsnemo_curator._lib import vtk
+
+        rust_mesh = vtk.read_vtk(path)
+
+        # Convert Rust mesh to physicsnemo Mesh
+        points = torch.from_numpy(rust_mesh.points().reshape(-1, 3))
+
+        # Build point_data TensorDict from Rust arrays
+        point_data_dict = {}
+        for name, (data, num_components) in rust_mesh.point_data().items():
+            arr = torch.from_numpy(data)
+            if num_components > 1:
+                arr = arr.reshape(-1, num_components)
+            point_data_dict[name] = arr
+
+        point_data = TensorDict(point_data_dict, batch_size=[rust_mesh.n_points]) if point_data_dict else None
+
+        return Mesh(
+            points=points,
+            point_data=point_data,
         )
 
     def _build_slices_data(self) -> None:
@@ -361,5 +426,5 @@ class AhmedMLSource(Source[Mesh]):
         """
         fs, protocol, files = self._slices_run_data[index]
         for remote_path in files:
-            local_path = self._ensure_local_with_fs(fs, protocol, remote_path)
+            local_path = self._ensure_local(remote_path, fs=fs, protocol=protocol)
             yield self._read_vtk(local_path)
