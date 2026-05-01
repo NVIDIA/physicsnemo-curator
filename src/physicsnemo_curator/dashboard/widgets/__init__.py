@@ -117,6 +117,13 @@ class WidgetRegistry:
             logger.debug("AtomicStatsFilter not available", exc_info=True)
 
         try:
+            from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
+
+            self.register(MeshStatsFilter)
+        except Exception:  # noqa: BLE001
+            logger.debug("MeshStatsFilter not available", exc_info=True)
+
+        try:
             from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 
             self.register(MeanFilter)

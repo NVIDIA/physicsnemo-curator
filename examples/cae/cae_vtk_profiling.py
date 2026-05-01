@@ -68,7 +68,7 @@ N_RUNS = 3
 N_JOBS = 1  # Sequential for fair comparison (no scheduling noise)
 
 DRIVAERML_URL = "hf://datasets/neashton/drivaerml"
-CACHE_DIR = "outputs/profiling/drivaerml_cache"
+CACHE_DIR = "output/profiling/drivaerml_cache"
 
 import pathlib
 
@@ -102,7 +102,7 @@ pyvista_source = VTKSource(CACHE_DIR, backend="pyvista")
 print(f"VTK files discovered locally: {len(pyvista_source)}")
 
 pyvista_pipeline = pyvista_source.filter(PrecisionFilter(target_dtype="float32")).write(
-    MeshSink(output_dir="outputs/profiling/pyvista_meshes/")
+    MeshSink(output_dir="output/profiling/pyvista_meshes/")
 )
 
 # %%
@@ -145,7 +145,7 @@ profiled_pyvista.metrics.to_console()
 rust_source = VTKSource(CACHE_DIR, backend="rust")
 
 rust_pipeline = rust_source.filter(PrecisionFilter(target_dtype="float32")).write(
-    MeshSink(output_dir="outputs/profiling/rust_meshes/")
+    MeshSink(output_dir="output/profiling/rust_meshes/")
 )
 
 profiled_rust = ProfiledPipeline(rust_pipeline)
@@ -194,12 +194,12 @@ if rust_total_ms > 0:
 # - **CSV**: tabular format for spreadsheets or plotting.
 # - **Console**: human-readable summary (shown above).
 
-pyvista_metrics.to_json("outputs/profiling/pyvista_profile.json")
-pyvista_metrics.to_csv("outputs/profiling/pyvista_profile.csv")
-rust_metrics.to_json("outputs/profiling/rust_profile.json")
-rust_metrics.to_csv("outputs/profiling/rust_profile.csv")
+pyvista_metrics.to_json("output/profiling/pyvista_profile.json")
+pyvista_metrics.to_csv("output/profiling/pyvista_profile.csv")
+rust_metrics.to_json("output/profiling/rust_profile.json")
+rust_metrics.to_csv("output/profiling/rust_profile.csv")
 
-print("\nMetrics exported to outputs/profiling/")
+print("\nMetrics exported to output/profiling/")
 
 # %%
 # Cleanup

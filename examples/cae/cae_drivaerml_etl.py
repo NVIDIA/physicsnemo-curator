@@ -91,7 +91,7 @@ from physicsnemo_curator.run import gather_pipeline, run_pipeline
 # All outputs are written relative to this example file.
 
 _HERE = Path(__file__).resolve().parent
-_OUTPUT_DIR = _HERE / "outputs" / "drivaerml"
+_OUTPUT_DIR = _HERE / "output" / "drivaerml"
 
 # %%
 # Configure the Source
@@ -213,7 +213,7 @@ for path in merged:
 #
 # .. code-block:: text
 #
-#     outputs/drivaerml/
+#     output/drivaerml/
 #     ├── mesh_info.jsonl                          # Mesh metadata (JSON-lines)
 #     ├── stats.parquet                            # Per-field statistics (merged)
 #     ├── run_1/
@@ -230,7 +230,7 @@ for path in merged:
 #
 # .. code-block:: yaml
 #
-#     datadir: outputs/drivaerml/
+#     datadir: output/drivaerml/
 #
 #     pipeline:
 #       reader:

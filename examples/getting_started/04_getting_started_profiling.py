@@ -57,9 +57,9 @@ from physicsnemo_curator.run import run_pipeline
 
 pipeline = (
     NavierStokesCylinderSource()
-    .filter(MeanFilter(output="outputs/profiling/stats.parquet"))
+    .filter(MeanFilter(output="output/profiling/stats.parquet"))
     .filter(PrecisionFilter(target_dtype="float32"))
-    .write(MeshSink(output_dir="outputs/profiling/meshes/"))
+    .write(MeshSink(output_dir="output/profiling/meshes/"))
 )
 
 profiled = ProfiledPipeline(pipeline)
@@ -101,8 +101,8 @@ metrics.to_console()
 #
 # Metrics can be exported to JSON or CSV for further analysis.
 
-metrics.to_json("outputs/profiling/timing.json")
-metrics.to_csv("outputs/profiling/timing.csv")
+metrics.to_json("output/profiling/timing.json")
+metrics.to_csv("output/profiling/timing.csv")
 
 print("\nExported timing.json and timing.csv")
 

@@ -92,7 +92,7 @@ from physicsnemo_curator.run import run_pipeline
 # plastic strain as cell data fields.  Set ``read_k_file=True`` to parse
 # companion ``.k`` keyword files for per-node shell thickness.
 
-INPUT_DIR = "/data/crash_simulations"
+INPUT_DIR = "input/crash_simulations"
 
 source = D3PlotSource(
     input_dir=INPUT_DIR,
@@ -120,7 +120,7 @@ source = D3PlotSource(
 # Finally a **MeshSink** writes each processed mesh as a TensorDict
 # memory-mapped directory.
 
-OUTPUT_DIR = "/data/crash_processed"
+OUTPUT_DIR = "output/crash_simulations"
 
 pipeline = (
     source.filter(WallNodeFilter(threshold=1.0))

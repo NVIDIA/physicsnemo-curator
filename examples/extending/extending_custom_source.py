@@ -242,8 +242,8 @@ from physicsnemo_curator.run import run_pipeline
 source = CylinderFlowSource()
 print(f"Simulations available: {len(source)}")
 
-pipeline = source.filter(MeanFilter(output="outputs/extending/cylinder_stats.parquet")).write(
-    MeshSink(output_dir="outputs/extending/cylinder_meshes/")
+pipeline = source.filter(MeanFilter(output="output/extending/cylinder_stats.parquet")).write(
+    MeshSink(output_dir="output/extending/cylinder_meshes/")
 )
 
 results = run_pipeline(

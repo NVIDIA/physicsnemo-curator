@@ -81,10 +81,10 @@ surface_source = DrivAerMLSource(
 print(f"Total DrivAerML runs available: {len(surface_source)}")
 
 surface_pipeline = (
-    surface_source.filter(MeshInfoFilter(output="outputs/aero/surface_info.jsonl"))
-    .filter(MeshStatsFilter(output="outputs/aero/surface_stats.parquet"))
+    surface_source.filter(MeshInfoFilter(output="output/aero/surface_info.jsonl"))
+    .filter(MeshStatsFilter(output="output/aero/surface_stats.parquet"))
     .filter(PrecisionFilter(target_dtype="float32"))
-    .write(MeshSink(output_dir="outputs/aero/surface_meshes/"))
+    .write(MeshSink(output_dir="output/aero/surface_meshes/"))
 )
 
 # %%
@@ -107,10 +107,10 @@ volume_source = DrivAerMLSource(
 )
 
 volume_pipeline = (
-    volume_source.filter(MeshInfoFilter(output="outputs/aero/volume_info.jsonl"))
-    .filter(MeshStatsFilter(output="outputs/aero/volume_stats.parquet"))
+    volume_source.filter(MeshInfoFilter(output="output/aero/volume_info.jsonl"))
+    .filter(MeshStatsFilter(output="output/aero/volume_stats.parquet"))
     .filter(PrecisionFilter(target_dtype="float32"))
-    .write(MeshSink(output_dir="outputs/aero/volume_meshes/"))
+    .write(MeshSink(output_dir="output/aero/volume_meshes/"))
 )
 
 # %%
@@ -170,11 +170,11 @@ for pipe in (surface_pipeline, volume_pipeline):
 # Inspect Outputs
 # ----------------
 #
-# The ``outputs/aero/`` directory now contains:
+# The ``output/aero/`` directory now contains:
 #
 # .. code-block:: text
 #
-#     outputs/aero/
+#     output/aero/
 #     ├── surface_info.jsonl         # Mesh metadata (JSON-lines)
 #     ├── surface_stats.parquet      # Per-field statistics (merged)
 #     ├── surface_meshes/

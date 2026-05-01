@@ -56,8 +56,8 @@ from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 pipeline = (
     DrivAerMLSource(mesh_type="boundary")
-    .filter(MeanFilter(output="outputs/parallel/stats.parquet"))
-    .write(MeshSink(output_dir="outputs/parallel/meshes/"))
+    .filter(MeanFilter(output="output/parallel/stats.parquet"))
+    .write(MeshSink(output_dir="output/parallel/meshes/"))
 )
 
 print(f"Total runs available: {len(pipeline)}")

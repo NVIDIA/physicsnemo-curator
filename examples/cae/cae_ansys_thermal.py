@@ -66,7 +66,7 @@ from physicsnemo_curator.run import gather_pipeline, run_pipeline
 # parameter.  Leaving ``result_types`` empty (the default) extracts
 # every field the solver wrote.
 
-INPUT_DIR = "/data/ansys_thermal"
+INPUT_DIR = "input/ansys_thermal"
 
 source = AnsysRSTSource(
     input_dir=INPUT_DIR,
@@ -91,7 +91,7 @@ source = AnsysRSTSource(
 # Finally a **MeshSink** writes each processed mesh as a TensorDict
 # memory-mapped directory.
 
-OUTPUT_DIR = "/data/ansys_thermal_processed"
+OUTPUT_DIR = "output/ansys_thermal"
 
 pipeline = (
     source.filter(MeshInfoFilter(output=f"{OUTPUT_DIR}/mesh_info.jsonl"))

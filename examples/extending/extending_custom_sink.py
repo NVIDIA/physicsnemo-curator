@@ -204,7 +204,7 @@ source = ERA5Source(
     backend="arco",
 )
 
-pipeline = source.write(HDF5Sink(output_dir="outputs/extending/hdf5/"))
+pipeline = source.write(HDF5Sink(output_dir="output/extending/hdf5/"))
 
 print(f"Source items: {len(pipeline)}")
 

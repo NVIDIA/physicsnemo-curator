@@ -134,17 +134,41 @@ class RunBackend(ABC):
         ...
 
 
+def _get_worker_id() -> str:
+    """Return a unique worker identifier using PID and thread ID.
+
+    For process-based backends each process has a distinct PID.  For
+    thread-based backends all threads share the same PID, so we append
+    the thread identifier to disambiguate.
+
+    Returns
+    -------
+    str
+        A string like ``"12345_1234567890"`` (pid_threadid).
+    """
+    import os
+    import threading
+
+    pid = os.getpid()
+    tid = threading.current_thread().ident or 0
+    return f"{pid}_{tid}"
+
+
 def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
     """Flush stateful filters after processing an index.
 
     For each filter that has a ``flush`` method and an ``_output_path``
-    attribute, this function temporarily swaps the output path to a
-    worker-specific path (``{stem}_worker_{pid}{suffix}``) before
-    flushing, then restores the original path.
+    attribute, this function sets the output path to a worker-specific
+    path before flushing (idempotent — only resolved once per worker).
 
-    Using worker PID (instead of index) ensures all indices processed by
-    the same worker append to a single file, reducing output file count
-    when running with parallel workers.
+    If the original path contains ``{worker_id}`` it is treated as a
+    template and the placeholder is substituted with the unique worker
+    identifier.  Otherwise the path is rewritten as
+    ``{stem}_worker_{worker_id}{suffix}``.
+
+    The worker ID is derived from a combination of PID and thread ID so
+    that both process-based and thread-based backends produce unique
+    per-worker output files.
 
     After flushing, any filter artifacts (reported via
     :meth:`~Filter.artifacts`) are recorded in the pipeline store when
@@ -158,23 +182,30 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
         The source index that was just processed (used for artifact
         tracking).
     """
-    import os
     import pathlib
 
-    pid = os.getpid()
+    worker_id = _get_worker_id()
 
     for i_f, f in enumerate(pipeline.filters):
         if not (hasattr(f, "flush") and hasattr(f, "_output_path")):
             continue
 
-        original = f._output_path  # noqa: SLF001
-        p = pathlib.Path(str(original))
-        worker_path = p.parent / f"{p.stem}_worker_{pid}{p.suffix}"
+        # Resolve the worker-specific path once. We store the original
+        # template in _output_path_template so we only do the resolution
+        # on the first call per worker.
+        if not hasattr(f, "_output_path_template"):
+            f._output_path_template = f._output_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
+
+        template_str = str(f._output_path_template)  # noqa: SLF001  # ty: ignore[unresolved-attribute]
+
+        if "{worker_id}" in template_str:
+            worker_path = pathlib.Path(template_str.format(worker_id=worker_id))
+        else:
+            p = pathlib.Path(template_str)
+            worker_path = p.parent / f"{p.stem}_worker_{worker_id}{p.suffix}"
+
         f._output_path = worker_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
-        try:
-            f.flush()  # ty: ignore[call-non-callable]
-        finally:
-            f._output_path = original  # noqa: SLF001  # ty: ignore[invalid-assignment]
+        f.flush()  # ty: ignore[call-non-callable]
 
         # Record filter artifacts if metrics tracking is enabled
         if pipeline.track_metrics:

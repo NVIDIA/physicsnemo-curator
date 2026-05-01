@@ -160,14 +160,6 @@ def _artifact_detail(
             components.append(pn.pane.Markdown(f"**{filter_name} Artifacts:**"))
             paths_md = "\n".join(f"- `{p}`" for p in artifact_paths)
             components.append(pn.pane.Markdown(paths_md))
-
-            # Render widget if available
-            try:
-                widget_panel = registry.get_panel(filter_name, artifact_paths, selected_index=selected_index)
-                if widget_panel is not None:
-                    components.append(widget_panel)
-            except Exception as exc:  # noqa: BLE001
-                components.append(pn.pane.Markdown(f"*Widget error: {exc}*"))
     else:
         components.append(pn.pane.Markdown("*No filter artifacts.*"))
 
@@ -218,14 +210,6 @@ def _aggregate_artifacts(
                 components.append(pn.pane.DataFrame(preview, index=False, sizing_mode="stretch_width"))
             except Exception:  # noqa: BLE001
                 pass
-
-        # Render widget if available
-        try:
-            widget_panel = registry.get_panel(filter_name, unique_paths, selected_index=None)
-            if widget_panel is not None:
-                components.append(widget_panel)
-        except Exception as exc:  # noqa: BLE001
-            components.append(pn.pane.Markdown(f"*Widget error: {exc}*"))
 
     return pn.Column(*components, sizing_mode="stretch_width")
 

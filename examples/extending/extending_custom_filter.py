@@ -163,7 +163,7 @@ source = ERA5Source(
     backend="arco",
 )
 
-pipeline = source.filter(LogTransformFilter(variable="tp")).write(ZarrSink(output_path="outputs/extending/log_tp.zarr"))
+pipeline = source.filter(LogTransformFilter(variable="tp")).write(ZarrSink(output_path="output/extending/log_tp.zarr"))
 
 print(f"Source items: {len(pipeline)}")
 

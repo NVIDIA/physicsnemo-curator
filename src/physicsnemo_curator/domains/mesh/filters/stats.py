@@ -246,18 +246,20 @@ class MeshStatsFilter(Filter["Mesh"]):
     Parameters
     ----------
     output : str
-        File path for the output Parquet file.
+        File path for the output Parquet file.  May contain a
+        ``{worker_id}`` placeholder which is substituted with a unique
+        per-worker identifier (PID + thread ID) at flush time so that
+        each parallel worker writes to its own file.
     per_component : bool
         Whether to compute separate statistics for each vector component.
         Default is ``True``.
 
     Examples
     --------
-    >>> filt = MeshStatsFilter(output="stats.parquet")
+    >>> filt = MeshStatsFilter(output="output/stats_{worker_id}.parquet")
     >>> pipeline = source.filter(filt).write(sink)
-    >>> for i in range(len(pipeline)):
-    ...     pipeline[i]
-    >>> filt.flush()  # write accumulated stats
+    >>> results = run_pipeline(pipeline, n_jobs=4, backend="thread_pool")
+    >>> # Each worker writes: output/stats_<pid>_<tid>.parquet
     """
 
     name: ClassVar[str] = "Mesh Statistics"
@@ -275,7 +277,7 @@ class MeshStatsFilter(Filter["Mesh"]):
             The ``output`` and ``per_component`` parameters.
         """
         return [
-            Param(name="output", description="Output Parquet file path for statistics", type=str),
+            Param(name="output", description="Output Parquet file path (supports {worker_id} template)", type=str),
             Param(
                 name="per_component",
                 description="Compute separate statistics for each vector component",
@@ -285,16 +287,33 @@ class MeshStatsFilter(Filter["Mesh"]):
         ]
 
     def __init__(self, output: str, per_component: bool = True) -> None:
+        import threading
+
         self._output_path = pathlib.Path(output)
         self._per_component = per_component
-        self._rows: list[_StatsRow] = []
+        self._local = threading.local()
         self._last_artifacts: list[str] = []
+
+    @property
+    def _rows(self) -> list[_StatsRow]:
+        """Return the thread-local rows list.
+
+        Each thread gets its own accumulator to avoid races when the
+        same filter instance is shared across threads in a thread-pool
+        backend.
+        """
+        if not hasattr(self._local, "rows"):
+            self._local.rows: list[_StatsRow] = []
+        return self._local.rows
 
     def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:
         """Compute statistics for each mesh and yield it unchanged.
 
-        Statistics are written to the output Parquet file immediately after
-        each mesh is processed (appending if the file already exists).
+        Statistics are accumulated in thread-local memory and written to
+        the output Parquet file when :meth:`flush` is called (typically
+        by the pipeline runner after each index is processed).  Using
+        thread-local storage ensures each worker accumulates its own
+        rows independently.
 
         Parameters
         ----------
@@ -309,11 +328,10 @@ class MeshStatsFilter(Filter["Mesh"]):
         for mesh in items:
             mesh_rows = self._compute_mesh_stats(mesh)
             self._rows.extend(mesh_rows)
-            self._flush_rows()
             yield mesh
 
     def _flush_rows(self) -> str | None:
-        """Write current accumulated rows to Parquet (append if exists).
+        """Write current thread's accumulated rows to Parquet (append if exists).
 
         Returns
         -------
@@ -321,13 +339,14 @@ class MeshStatsFilter(Filter["Mesh"]):
             The path of the written Parquet file, or ``None`` if there are
             no rows to write.
         """
-        if not self._rows:
+        rows = self._rows
+        if not rows:
             return None
 
         # Build PyArrow table from accumulated rows
         columns: dict[str, list[object]] = {field.name: [] for field in _STATS_SCHEMA}
 
-        for row in self._rows:
+        for row in rows:
             for col_name in columns:
                 columns[col_name].append(row.get(col_name))  # type: ignore[arg-type]
 
@@ -343,7 +362,7 @@ class MeshStatsFilter(Filter["Mesh"]):
             pq.write_table(new_table, str(self._output_path))
 
         path = str(self._output_path)
-        self._rows.clear()
+        rows.clear()
         self._last_artifacts = [path]
         return path
 
@@ -351,7 +370,7 @@ class MeshStatsFilter(Filter["Mesh"]):
         """Write accumulated statistics to the Parquet file.
 
         If the output file already exists (e.g., from a previous flush in
-        the same worker process), the new rows are appended to the existing
+        the same worker), the new rows are appended to the existing
         file. This enables worker-level aggregation when running pipelines
         in parallel.
 
@@ -517,9 +536,10 @@ class MeshStatsFilter(Filter["Mesh"]):
     ) -> Any:
         """Return an interactive scatter plot of mesh statistics.
 
-        Displays a scatter plot where users can select X/Y axes from
-        available statistics columns and filter by field location
-        (point_data, cell_data, interior, boundary).
+        Displays a single scatter plot with a controls sidebar. Users can
+        select X/Y axes from available statistics columns and filter by
+        field location (point_data, cell_data, interior, boundary) and
+        by individual field name.
 
         Parameters
         ----------
@@ -531,13 +551,12 @@ class MeshStatsFilter(Filter["Mesh"]):
         Returns
         -------
         pn.viewable.Viewable or None
-            A GridStack with Paper-wrapped controls sidebar and scatter
-            plot, or a Markdown message if no data is available.
+            A full-width Row with controls sidebar and scatter plot,
+            or a Markdown message if no data is available.
         """
         import holoviews as hv
         import pandas as pd
         import panel as pn
-        import panel_material_ui as pmui
         from bokeh.models import HoverTool
 
         hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
@@ -581,14 +600,33 @@ class MeshStatsFilter(Filter["Mesh"]):
             if key.startswith("interior/"):
                 return "interior"
             if key.startswith("boundary."):
-                return "boundary"
+                # Extract boundary name: boundary.{name}/...
+                rest = key[len("boundary.") :]
+                bnd_name = rest.split("/", 1)[0] if "/" in rest else rest
+                return f"boundary.{bnd_name}"
             if key.startswith("point_data/"):
                 return "point_data"
             if key.startswith("cell_data/"):
                 return "cell_data"
             return "other"
 
+        # Strip all prefixes from field_key to get the bare field name
+        def _short_field_name(key: str) -> str:
+            if key.startswith("interior/point_data/"):
+                return key[len("interior/point_data/") :]
+            if key.startswith("interior/cell_data/"):
+                return key[len("interior/cell_data/") :]
+            if key.startswith("boundary."):
+                parts = key.split("/")
+                return parts[-1] if len(parts) > 1 else key
+            if key.startswith("point_data/"):
+                return key[len("point_data/") :]
+            if key.startswith("cell_data/"):
+                return key[len("cell_data/") :]
+            return key
+
         df["location"] = df["field_key"].apply(_location_from_key)
+        df["field_name"] = df["field_key"].apply(_short_field_name)
 
         # Create widgets
         x_select = pn.widgets.Select(name="X-Axis", options=stat_columns, value="mean")
@@ -599,12 +637,13 @@ class MeshStatsFilter(Filter["Mesh"]):
             options=available_locations,
             value=available_locations,
         )
-        available_fields = sorted(df["field_key"].unique().tolist())
+        # Use short field names for display, map back to field_key for filtering
+        available_field_names = sorted(df["field_name"].unique().tolist())
         field_filter = pn.widgets.MultiSelect(
             name="Fields",
-            options=available_fields,
-            value=available_fields,
-            size=min(8, len(available_fields)),
+            options=available_field_names,
+            value=available_field_names,
+            size=min(8, len(available_field_names)),
         )
 
         sidebar = pn.Column(
@@ -617,6 +656,8 @@ class MeshStatsFilter(Filter["Mesh"]):
             "---",
             "### Filter by Field",
             field_filter,
+            width=250,
+            sizing_mode="fixed",
         )
 
         @pn.depends(  # ty: ignore[invalid-argument-type]
@@ -634,20 +675,20 @@ class MeshStatsFilter(Filter["Mesh"]):
             """Update scatter plot based on widget selections."""
             filtered_df = df[df["location"].isin(selected_locations)] if selected_locations else df
             if selected_fields:
-                filtered_df = filtered_df[filtered_df["field_key"].isin(selected_fields)]
+                filtered_df = filtered_df[filtered_df["field_name"].isin(selected_fields)]
             if filtered_df.empty:
                 return hv.Points([]).opts(title="No data matches filters")
             points = hv.Points(
                 filtered_df,
                 kdims=[x_col, y_col],
-                vdims=["index", "field_key"],
+                vdims=["index", "field_key", "field_name"],
             )
             hover = HoverTool(
                 tooltips=[
                     (x_col, "@{" + x_col + "}{0.4f}"),
                     (y_col, "@{" + y_col + "}{0.4f}"),
                     ("index", "@index"),
-                    ("field", "@field_key"),
+                    ("field", "@field_name"),
                 ],
                 point_policy="follow_mouse",
             )
@@ -662,17 +703,14 @@ class MeshStatsFilter(Filter["Mesh"]):
                 title=f"{y_col} vs {x_col}",
             )
 
-        plot_pane = pn.pane.HoloViews(update_plot, sizing_mode="stretch_width", height=500)
+        plot_pane = pn.pane.HoloViews(update_plot, sizing_mode="stretch_both", min_height=500)
 
-        gstack = pn.GridStack(
-            sizing_mode="stretch_both",
-            min_height=500,
-            allow_drag=True,
-            allow_resize=True,
+        return pn.Row(
+            sidebar,
+            plot_pane,
+            sizing_mode="stretch_width",
+            min_height=550,
         )
-        gstack[0:3, 0:3] = pmui.Paper(sidebar, elevation=2)
-        gstack[0:3, 3:12] = pmui.Paper(plot_pane, elevation=2)
-        return gstack
 
     @classmethod
     def dashboard_layout_hints(cls) -> dict[str, int]:

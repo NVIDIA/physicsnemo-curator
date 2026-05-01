@@ -59,12 +59,12 @@ from physicsnemo_curator.run import run_pipeline
 pipeline = (
     NavierStokesCylinderSource()
     .filter(PrecisionFilter(target_dtype="float32"))
-    .write(MeshSink(output_dir="outputs/checkpoint/meshes/"))
+    .write(MeshSink(output_dir="output/checkpoint/meshes/"))
 )
 
 checkpointed = CheckpointedPipeline(
     pipeline,
-    db_path="outputs/checkpoint/pipeline.db",
+    db_path="output/checkpoint/pipeline.db",
 )
 
 # %%

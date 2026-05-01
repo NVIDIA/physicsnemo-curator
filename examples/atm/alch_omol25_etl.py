@@ -37,11 +37,41 @@ potentials (MLIPs).
 
 We process only the first 2 LMDB files to keep the example fast.
 
+Data Access
+-----------
+
+The OMol25 dataset is hosted on HuggingFace at
+`facebook/OMol25 <https://huggingface.co/facebook/OMol25>`_.
+**Access is gated** — you must accept the license agreement on the model
+page before downloading.
+
+To download and extract the validation split used in this example:
+
+.. code-block:: bash
+
+    # 1. Install the HuggingFace CLI (if not already installed)
+    pip install huggingface_hub[cli]
+
+    # 2. Authenticate (requires a HuggingFace account with access granted)
+    huggingface-cli login
+
+    # 3. Download the validation split LMDB files into the input directory
+    huggingface-cli download facebook/OMol25 \
+        --include "val/*" \
+        --local-dir input/omol25
+
+This creates an ``input/omol25/val/`` directory containing ``.aselmdb``
+files and a ``metadata.npz`` file.  For the full dataset (train + val
+splits), omit the ``--include`` flag or adjust the pattern accordingly.
+
+See the `DATASET.md
+<https://huggingface.co/facebook/OMol25/blob/main/DATASET.md>`_ on the
+model page for the full list of available splits and download options.
+
 References
 ----------
 - OMol25 dataset: https://huggingface.co/facebook/OMol25
 - OMol25 paper: Levine et al., arXiv:2505.08762 (2025)
-- nvalchemi toolkit: https://nvidia.github.io/nvalchemi-toolkit/
 """
 
 # %%
@@ -72,10 +102,16 @@ from physicsnemo_curator.run import gather_pipeline, run_pipeline
 # The optional *metadata_path* parameter points to a NumPy ``.npz``
 # file containing ``natoms`` and ``data_ids`` arrays, which the source
 # loads eagerly for downstream reference.
+#
+# .. note::
+#
+#     Make sure you have downloaded the dataset first (see **Data Access**
+#     above).  The ``input/omol25/val/`` directory should contain
+#     ``.aselmdb`` files and ``metadata.npz``.
 
 source = ASELMDBSource(
-    data_dir="./val/",
-    metadata_path="./val/metadata.npz",
+    data_dir="input/omol25/val/",
+    metadata_path="input/omol25/val/metadata.npz",
 )
 
 print(f"LMDB files discovered: {len(source)}")
@@ -104,8 +140,8 @@ if source.metadata is not None:
 #   structured Zarr store using ``AtomicDataZarrWriter``.  Multiple
 #   pipeline indices append to the **same** store.
 
-pipeline = source.filter(AtomicStatsFilter(output="outputs/omol25/stats.parquet")).write(
-    AtomicDataZarrSink(output_path="outputs/omol25/dataset.zarr", batch_size=500)
+pipeline = source.filter(AtomicStatsFilter(output="output/omol25/stats.parquet")).write(
+    AtomicDataZarrSink(output_path="output/omol25/dataset.zarr", batch_size=500)
 )
 
 # %%
@@ -161,17 +197,17 @@ for path in merged:
 # with columns for mean, std, variance, min, max, median, skewness,
 # kurtosis, and the full Welford accumulator state.
 
-table = pq.read_table("outputs/omol25/stats.parquet")
+table = pq.read_table("output/omol25/stats.parquet")
 print(f"\nStatistics table: {table.num_rows} rows, {table.num_columns} columns")
 print(f"Fields tracked: {table.column('field_key').to_pylist()[:10]}...")
 print(f"Levels: {set(table.column('level').to_pylist())}")
 
 # %%
-# The ``outputs/omol25/`` directory now contains:
+# The ``output/omol25/`` directory now contains:
 #
 # .. code-block:: text
 #
-#     outputs/omol25/
+#     output/omol25/
 #     ├── stats.parquet              # Per-field statistics (merged)
 #     └── dataset.zarr/              # AtomicData Zarr store
 #         ├── meta/                  # Pointer arrays (atoms_ptr, edges_ptr)
@@ -191,7 +227,7 @@ print(f"Levels: {set(table.column('level').to_pylist())}")
 # For large-scale runs (all 80 LMDB files), wrap the pipeline with
 # :class:`~physicsnemo_curator.core.checkpoint.CheckpointedPipeline`
 # to enable restart from where you left off.  Create a checkpoint with
-# ``CheckpointedPipeline(pipeline, db_path="outputs/omol25/etl.db")``,
+# ``CheckpointedPipeline(pipeline, db_path="output/omol25/etl.db")``,
 # then pass it to ``run_pipeline`` as usual.  On restart, completed
 # LMDB files are skipped automatically.
 # See :doc:`/user-guide/checkpointing` for the full guide.

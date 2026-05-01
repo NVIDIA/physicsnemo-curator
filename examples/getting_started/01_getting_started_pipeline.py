@@ -74,7 +74,7 @@ print(f"Items available: {len(source)}")
 # - :class:`~physicsnemo_curator.domains.mesh.filters.precision.PrecisionFilter`
 #   converts floating-point fields to ``float32``.
 
-pipeline = source.filter(MeanFilter(output="outputs/getting_started/stats.parquet")).filter(
+pipeline = source.filter(MeanFilter(output="output/getting_started/stats.parquet")).filter(
     PrecisionFilter(target_dtype="float32")
 )
 
@@ -89,7 +89,7 @@ print(f"Sink: {pipeline.sink}")  # None — no sink yet
 # storage.  The ``.write()`` method attaches a sink and returns a
 # complete pipeline.
 
-pipeline = pipeline.write(MeshSink(output_dir="outputs/getting_started/meshes/"))
+pipeline = pipeline.write(MeshSink(output_dir="output/getting_started/meshes/"))
 
 assert pipeline.sink is not None
 print(f"Sink: {pipeline.sink.name}")
