@@ -152,7 +152,7 @@ pipeline = (
 # independent copy of the pipeline, so meshes are read, filtered, and
 # written concurrently.
 
-results = run_pipeline(pipeline, n_jobs=2, backend="process_pool")
+results = run_pipeline(pipeline, n_jobs=1, backend="process_pool")
 
 # %%
 # Inspect Results

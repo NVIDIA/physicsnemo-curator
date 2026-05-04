@@ -288,20 +288,21 @@ def list_databases(cache_dir: pathlib.Path | None = None) -> list[DBInfo]:
 
 
 def remove_databases(
-    hash_prefixes: list[str],
+    identifiers: list[str],
     *,
     cache_dir: pathlib.Path | None = None,
 ) -> int:
-    """Remove pipeline databases matching the given hash prefixes.
+    """Remove pipeline databases matching the given identifiers.
 
-    Each prefix is matched against ``.db`` filenames (stems).  A prefix
-    that matches more than one file raises :class:`ValueError` to
-    prevent accidental deletion.
+    Each identifier is first tested as an exact stem match.  If no exact
+    match is found it is treated as a prefix and matched against ``.db``
+    file stems.  A prefix that matches more than one file raises
+    :class:`ValueError` to prevent accidental deletion.
 
     Parameters
     ----------
-    hash_prefixes : list[str]
-        Hash prefix strings to match against DB file stems.
+    identifiers : list[str]
+        Full stems or prefix strings to match against DB file stems.
     cache_dir : pathlib.Path | None, optional
         Directory to scan.  Defaults to :func:`default_cache_dir`.
 
@@ -320,13 +321,21 @@ def remove_databases(
         return 0
 
     db_files = list(d.glob("*.db"))
+    stems_to_files = {f.stem: f for f in db_files}
     removed = 0
 
-    for prefix in hash_prefixes:
-        matches = [f for f in db_files if f.stem.startswith(prefix)]
+    for ident in identifiers:
+        # Try exact stem match first
+        if ident in stems_to_files:
+            stems_to_files[ident].unlink()
+            removed += 1
+            continue
+
+        # Fall back to prefix matching
+        matches = [f for f in db_files if f.stem.startswith(ident)]
         if len(matches) > 1:
             stems = [f.stem for f in matches]
-            msg = f"Prefix {prefix!r} is ambiguous, matches {len(matches)} databases: {stems}"
+            msg = f"Identifier {ident!r} is ambiguous, matches {len(matches)} databases: {stems}"
             raise ValueError(msg)
         if len(matches) == 1:
             matches[0].unlink()

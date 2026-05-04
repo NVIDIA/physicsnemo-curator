@@ -232,7 +232,10 @@ def _error_log(store: DashboardStore) -> pn.Column:
 
 
 def overview_tab(store: DashboardStore) -> pn.Column:
-    """Build the Overview tab layout.
+    """Build the Overview tab layout with auto-refresh support.
+
+    The tab content rebuilds each time ``store.refresh`` is triggered,
+    re-querying the database for fresh metrics.
 
     Parameters
     ----------
@@ -242,17 +245,29 @@ def overview_tab(store: DashboardStore) -> pn.Column:
     Returns
     -------
     pn.Column
-        Vertical layout: completion status, workers, pipeline info,
-        recent files, and errors.
+        Reactive vertical layout that updates on refresh.
     """
-    return pn.Column(
-        pmui.Paper(_summary_cards(store), elevation=2),
-        pmui.Paper(_worker_table(store), elevation=2),
-        pmui.Paper(
-            pn.Column(_pipeline_info(store), _recent_files(store)),
-            elevation=2,
-        ),
-        pmui.Paper(_error_log(store), elevation=2),
-        sizing_mode="stretch_width",
-        scroll=True,
-    )
+    content_area = pn.Column(sizing_mode="stretch_width", scroll=True)
+
+    def _rebuild() -> None:
+        """Rebuild all overview panels from current database state."""
+        content_area.clear()
+        content_area.extend(
+            [
+                pmui.Paper(_summary_cards(store), elevation=2),
+                pmui.Paper(_worker_table(store), elevation=2),
+                pmui.Paper(
+                    pn.Column(_pipeline_info(store), _recent_files(store)),
+                    elevation=2,
+                ),
+                pmui.Paper(_error_log(store), elevation=2),
+            ]
+        )
+
+    # Watch for refresh events to rebuild
+    store.param.watch(lambda event: _rebuild(), "refresh")
+
+    # Initial render
+    _rebuild()
+
+    return content_area

@@ -548,8 +548,8 @@ class DrivAerMLSource(Source[Mesh]):
             Cells tensor of shape ``(n_cells, nodes_per_cell)`` if
             connectivity is available, else ``None``.
         """
-        connectivity = rust_mesh.cells  # ty: ignore[unresolved-attribute]
-        offsets = rust_mesh.cell_offsets  # ty: ignore[unresolved-attribute]
+        connectivity = rust_mesh.cells
+        offsets = rust_mesh.cell_offsets
 
         if connectivity is None or offsets is None or connectivity.size == 0 or offsets.size == 0:
             return None

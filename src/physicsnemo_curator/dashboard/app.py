@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Main dashboard application with tab layout and auto-refresh."""
+"""Main dashboard application with tab layout and manual refresh."""
 
 from __future__ import annotations
+
+from datetime import UTC, datetime
 
 import panel as pn
 
@@ -38,9 +40,9 @@ class DashboardApp:
     """Interactive pipeline metrics dashboard.
 
     Creates a 3-tab Panel application (Overview, Pipeline, Performance)
-    backed by a :class:`DashboardStore` and auto-refreshes on a timer.
-    Uses ``panel-material-ui`` for Material Design theming and
-    ``pn.GridStack`` for draggable tile layouts within each tab.
+    backed by a :class:`DashboardStore`.  Data is refreshed on demand
+    via a toolbar button.  Uses ``panel-material-ui`` for Material
+    Design theming.
     """
 
     def __init__(self, db_path: str) -> None:
@@ -54,7 +56,6 @@ class DashboardApp:
         self.store = DashboardStore(db_path)
         self.widget_registry = WidgetRegistry()
         self._page: pmui.Page | None = None
-        self._periodic: pn.state.PeriodicCallback | None = None  # ty: ignore[unresolved-attribute]
 
     def _build_app(self) -> pmui.Page:
         """Build the application shell with Material UI theming.
@@ -73,8 +74,32 @@ class DashboardApp:
             sizing_mode="stretch_both",
         )
 
+        # Refresh button and timestamp label
+        timestamp_label = pn.pane.Markdown(
+            self._timestamp_text(),
+            styles={"margin": "auto 0", "font-size": "12px", "color": "#666"},
+        )
+        refresh_btn = pn.widgets.Button(
+            name="Refresh",
+            button_type="primary",
+            width=90,
+        )
+
+        def _on_refresh(event: object) -> None:  # noqa: ARG001
+            self.store.param.trigger("refresh")
+            timestamp_label.object = self._timestamp_text()
+
+        refresh_btn.on_click(_on_refresh)
+
+        toolbar = pn.Row(
+            refresh_btn,
+            timestamp_label,
+            sizing_mode="stretch_width",
+            styles={"padding": "4px 16px", "background": "#f5f5f5"},
+        )
+
         page = pmui.Page(
-            main=[tabs],
+            main=[toolbar, tabs],
             title="PhysicsNeMo Curator",
             theme_toggle=True,
             theme_config={
@@ -83,7 +108,20 @@ class DashboardApp:
                 }
             },
         )
+
         return page
+
+    @staticmethod
+    def _timestamp_text() -> str:
+        """Return a formatted 'Last refreshed' markdown string.
+
+        Returns
+        -------
+        str
+            Markdown text with the current UTC timestamp.
+        """
+        now = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+        return f"*Last loaded: {now}*"
 
     def servable(self) -> pmui.Page:
         """Return the Page object for embedding in notebooks.
@@ -109,10 +147,6 @@ class DashboardApp:
         """
         if self._page is None:
             self._page = self._build_app()
-
-        # Set up auto-refresh
-        def _refresh() -> None:
-            self.store.param.trigger("refresh")
 
         pn.serve(
             self._page,

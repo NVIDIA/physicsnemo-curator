@@ -107,8 +107,14 @@ class CacheScreen(Screen[None]):
         databases = list_databases(cache_dir)
 
         for db in databases:
+            # Display short hash but use full stem as unique row key
+            display_hash = db.hash_prefix[:8]
+            # Append timestamp portion if present for disambiguation
+            if "_" in db.hash_prefix:
+                ts_suffix = db.hash_prefix.rsplit("_", 1)[-1][-6:]
+                display_hash = f"{display_hash}..{ts_suffix}"
             table.add_row(
-                db.hash_prefix[:8],
+                display_hash,
                 db.created.strftime("%Y-%m-%d %H:%M"),
                 _human_size(db.size_bytes),
                 f"{db.completed}/{db.total}",
@@ -142,11 +148,14 @@ class CacheScreen(Screen[None]):
             self.notify("No row selected", severity="warning")
             return
 
-        row_key = table.get_row_at(table.cursor_row)
-        hash_prefix = str(row_key[0])
+        # Get the row key (full file stem) via coordinate_to_cell_key
+        from textual.widgets._data_table import Coordinate
+
+        cell_key = table.coordinate_to_cell_key(Coordinate(table.cursor_row, 0))
+        full_stem = str(cell_key.row_key.value or "")
 
         try:
-            removed = remove_databases([hash_prefix])
+            removed = remove_databases([full_stem])
             self.notify(f"Removed {removed} database(s)")
         except ValueError as exc:
             self.notify(str(exc), severity="error")

@@ -34,16 +34,12 @@ from physicsnemo_curator.core.pipeline_store import PipelineStore
 class DashboardStore(param.Parameterized):
     """Reactive wrapper around :class:`PipelineStore`.
 
-    Provides pandas DataFrame views of pipeline metrics and supports
-    auto-refresh for live monitoring of running pipelines.
+    Provides pandas DataFrame views of pipeline metrics.  Triggers a
+    cache invalidation when the ``refresh`` event fires, causing the
+    next property access to re-query the database.
     """
 
     refresh = param.Event(doc="Trigger a data refresh from the database.")
-    refresh_interval = param.Integer(
-        default=5,
-        bounds=(1, 60),
-        doc="Auto-refresh interval in seconds.",
-    )
     selected_index = param.Integer(
         default=-1,
         allow_None=True,

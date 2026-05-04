@@ -273,7 +273,10 @@ def _resource_summary(store: DashboardStore) -> pn.Column:
 
 
 def performance_tab(store: DashboardStore) -> pn.Column:
-    """Build the Performance tab layout.
+    """Build the Performance tab layout with auto-refresh support.
+
+    The tab content rebuilds each time ``store.refresh`` is triggered,
+    re-querying the database for fresh metrics.
 
     Parameters
     ----------
@@ -283,15 +286,28 @@ def performance_tab(store: DashboardStore) -> pn.Column:
     Returns
     -------
     pn.Column
-        Scrollable column layout.
+        Reactive scrollable column layout that updates on refresh.
     """
-    return pn.Column(
-        pmui.Paper(_timeline_scatter(store), elevation=2, sizing_mode="stretch_width"),
-        pn.Row(
-            pmui.Paper(_stage_breakdown(store), elevation=2, sizing_mode="stretch_width"),
-            pmui.Paper(_resource_summary(store), elevation=2, sizing_mode="stretch_width"),
-            sizing_mode="stretch_width",
-        ),
-        sizing_mode="stretch_width",
-        scroll=True,
-    )
+    content_area = pn.Column(sizing_mode="stretch_width", scroll=True)
+
+    def _rebuild() -> None:
+        """Rebuild all performance panels from current database state."""
+        content_area.clear()
+        content_area.extend(
+            [
+                pmui.Paper(_timeline_scatter(store), elevation=2, sizing_mode="stretch_width"),
+                pn.Row(
+                    pmui.Paper(_stage_breakdown(store), elevation=2, sizing_mode="stretch_width"),
+                    pmui.Paper(_resource_summary(store), elevation=2, sizing_mode="stretch_width"),
+                    sizing_mode="stretch_width",
+                ),
+            ]
+        )
+
+    # Watch for refresh events to rebuild
+    store.param.watch(lambda event: _rebuild(), "refresh")
+
+    # Initial render
+    _rebuild()
+
+    return content_area
