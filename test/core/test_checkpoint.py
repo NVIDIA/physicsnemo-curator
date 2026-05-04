@@ -293,8 +293,8 @@ class TestSkipLogic:
 
         assert pipeline.completed_indices == {0, 1, 2}
 
-    def test_second_run_skips_completed(self, tmp_path: pathlib.Path) -> None:
-        """On restart, completed indices return cached paths without re-running."""
+    def test_second_run_reprocesses_all(self, tmp_path: pathlib.Path) -> None:
+        """By default, a new pipeline gets a fresh DB and reprocesses all indices."""
         db_dir = tmp_path / ".pnc"
         pipeline = Pipeline(
             source=_CountSource(count=3),
@@ -305,15 +305,46 @@ class TestSkipLogic:
         )
 
         # First run
-        original_paths = [pipeline[i] for i in range(3)]
+        for i in range(3):
+            pipeline[i]
 
-        # Second pipeline with same config, same db_dir
+        assert pipeline.completed_indices == {0, 1, 2}
+
+        # Second pipeline with same config gets a fresh DB
         pipeline2 = Pipeline(
             source=_CountSource(count=3),
             filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
+        )
+
+        # Store is fresh — no completed indices
+        assert pipeline2.completed_indices == set()
+
+    def test_resume_skips_completed(self, tmp_path: pathlib.Path) -> None:
+        """With resume=True, completed indices return cached paths without re-running."""
+        db_dir = tmp_path / ".pnc"
+        pipeline = Pipeline(
+            source=_CountSource(count=3),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_PathSink(output_dir=str(tmp_path / "output")),
+            track_metrics=True,
+            db_dir=db_dir,
+            resume=True,
+        )
+
+        # First run
+        original_paths = [pipeline[i] for i in range(3)]
+
+        # Second pipeline with resume=True reuses the same DB
+        pipeline2 = Pipeline(
+            source=_CountSource(count=3),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_PathSink(output_dir=str(tmp_path / "output")),
+            track_metrics=True,
+            db_dir=db_dir,
+            resume=True,
         )
 
         for i in range(3):
@@ -411,8 +442,8 @@ class TestErrorHandling:
 class TestProvenance:
     """Tests for config drift detection and provenance storage."""
 
-    def test_same_config_reuses_run_id(self, tmp_path: pathlib.Path) -> None:
-        """Same pipeline config produces the same run_id."""
+    def test_same_config_gets_separate_dbs(self, tmp_path: pathlib.Path) -> None:
+        """Each pipeline construction creates a separate DB file by default."""
         db_dir = tmp_path / ".pnc"
         pipeline1 = Pipeline(
             source=_CountSource(count=5),
@@ -421,8 +452,8 @@ class TestProvenance:
             track_metrics=True,
             db_dir=db_dir,
         )
-        pipeline1[0]  # force store
-        run_id_1 = pipeline1._get_store()._run_id  # noqa: SLF001
+        pipeline1[0]
+        db_path_1 = pipeline1._get_store()._db_path  # noqa: SLF001
 
         pipeline2 = Pipeline(
             source=_CountSource(count=5),
@@ -431,9 +462,39 @@ class TestProvenance:
             track_metrics=True,
             db_dir=db_dir,
         )
-        pipeline2[0]  # force store (cached result from DB)
-        run_id_2 = pipeline2._get_store()._run_id  # noqa: SLF001
+        pipeline2[0]
+        db_path_2 = pipeline2._get_store()._db_path  # noqa: SLF001
 
+        assert db_path_1 != db_path_2
+
+    def test_resume_reuses_db(self, tmp_path: pathlib.Path) -> None:
+        """With resume=True, same config reuses the same DB file and run_id."""
+        db_dir = tmp_path / ".pnc"
+        pipeline1 = Pipeline(
+            source=_CountSource(count=5),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_PathSink(output_dir=str(tmp_path / "output")),
+            track_metrics=True,
+            db_dir=db_dir,
+            resume=True,
+        )
+        pipeline1[0]
+        run_id_1 = pipeline1._get_store()._run_id  # noqa: SLF001
+        db_path_1 = pipeline1._get_store()._db_path  # noqa: SLF001
+
+        pipeline2 = Pipeline(
+            source=_CountSource(count=5),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_PathSink(output_dir=str(tmp_path / "output")),
+            track_metrics=True,
+            db_dir=db_dir,
+            resume=True,
+        )
+        pipeline2[0]
+        run_id_2 = pipeline2._get_store()._run_id  # noqa: SLF001
+        db_path_2 = pipeline2._get_store()._db_path  # noqa: SLF001
+
+        assert db_path_1 == db_path_2
         assert run_id_1 == run_id_2
 
     def test_config_stored_in_db(self, tmp_path: pathlib.Path) -> None:
@@ -568,8 +629,8 @@ class TestRunPipelineIntegration:
         assert len(results) == 3
         assert pipeline.completed_indices == {0, 1, 2}
 
-    def test_sequential_resume(self, tmp_path: pathlib.Path) -> None:
-        """Sequential backend correctly resumes from checkpoint."""
+    def test_sequential_no_resume_across_pipelines(self, tmp_path: pathlib.Path) -> None:
+        """A new pipeline does not resume from a previous pipeline's checkpoint."""
         db_dir = tmp_path / ".pnc"
 
         pipeline = Pipeline(
@@ -582,14 +643,45 @@ class TestRunPipelineIntegration:
 
         # First run: process first 3
         run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(3), progress=False)
+        assert pipeline.completed_indices == {0, 1, 2}
 
-        # Second run: process all 5 (first 3 should be skipped)
+        # Second pipeline gets a fresh DB — processes all 5 from scratch
         pipeline2 = Pipeline(
             source=_CountSource(count=5),
             filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
+        )
+        results = run_pipeline(pipeline2, n_jobs=1, backend="sequential", progress=False)
+        assert len(results) == 5
+        assert pipeline2.completed_indices == {0, 1, 2, 3, 4}
+
+    def test_sequential_resume_with_flag(self, tmp_path: pathlib.Path) -> None:
+        """With resume=True, sequential backend resumes from checkpoint."""
+        db_dir = tmp_path / ".pnc"
+
+        pipeline = Pipeline(
+            source=_CountSource(count=5),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_PathSink(output_dir=str(tmp_path / "output")),
+            track_metrics=True,
+            db_dir=db_dir,
+            resume=True,
+        )
+
+        # First run: process first 3
+        run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(3), progress=False)
+        assert pipeline.completed_indices == {0, 1, 2}
+
+        # Second pipeline with resume=True reuses the same DB
+        pipeline2 = Pipeline(
+            source=_CountSource(count=5),
+            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            sink=_PathSink(output_dir=str(tmp_path / "output")),
+            track_metrics=True,
+            db_dir=db_dir,
+            resume=True,
         )
         results = run_pipeline(pipeline2, n_jobs=1, backend="sequential", progress=False)
         assert len(results) == 5

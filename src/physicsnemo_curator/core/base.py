@@ -372,6 +372,7 @@ class Pipeline[T]:
     track_memory: bool = True
     track_gpu: bool = False
     db_dir: pathlib.Path | None = None
+    resume: bool = False
     _store: PipelineStore | None = field(default=None, init=False, repr=False, compare=False)
     invocation_id: str | None = field(default=None, init=False, repr=False, compare=False)
 
@@ -407,6 +408,7 @@ class Pipeline[T]:
             track_memory=self.track_memory,
             track_gpu=self.track_gpu,
             db_dir=self.db_dir,
+            resume=self.resume,
         )
 
     def write(self, s: Sink[T]) -> Pipeline[T]:
@@ -436,6 +438,7 @@ class Pipeline[T]:
             track_memory=self.track_memory,
             track_gpu=self.track_gpu,
             db_dir=self.db_dir,
+            resume=self.resume,
         )
 
     def __len__(self) -> int:
@@ -635,11 +638,17 @@ class Pipeline[T]:
         """Create the SQLite-backed pipeline store.
 
         Idempotent — if the store already exists, this is a no-op.
+
+        When :attr:`resume` is ``False`` (default), a new database file is
+        created with a unique timestamp suffix so each pipeline run starts
+        fresh.  When ``True``, the stable config-hash name is reused,
+        enabling checkpoint resumption from a previous run.
         """
         if self._store is not None:
             return
 
         import pathlib
+        import time
 
         from physicsnemo_curator.core.cache import default_cache_dir
         from physicsnemo_curator.core.pipeline_store import (
@@ -651,10 +660,15 @@ class Pipeline[T]:
         config = _pipeline_config(self)
         hash_ = _config_hash(config)
 
-        if self.db_dir is not None:
-            db_path = pathlib.Path(self.db_dir) / f"{hash_[:16]}.db"
+        if self.resume:
+            # Stable filename — reuses existing DB for checkpoint resumption
+            filename = f"{hash_[:16]}.db"
         else:
-            db_path = default_cache_dir() / f"{hash_[:16]}.db"
+            # Unique filename — each pipeline gets a fresh database
+            ts = int(time.time() * 1_000_000)
+            filename = f"{hash_[:16]}_{ts}.db"
+
+        db_path = pathlib.Path(self.db_dir) / filename if self.db_dir is not None else default_cache_dir() / filename
 
         self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_)
 
