@@ -30,6 +30,7 @@ pub enum VTKReadError {
 /// * `path` - Path to the VTK file
 /// * `filter` - Array include/exclude filter
 /// * `skip_cells` - If true, skip cell topology and cell data
+/// * `skip_point_data` - If true, skip point data field arrays
 ///
 /// # Returns
 ///
@@ -38,9 +39,10 @@ pub fn read_vtk_file_raw<P: AsRef<Path>>(
     path: P,
     filter: &ArrayFilter,
     skip_cells: bool,
+    skip_point_data: bool,
 ) -> Result<MeshArrays, VTKReadError> {
     let raw = fs::read(path.as_ref())?;
-    let mesh = parse_vtk_xml(&raw, filter, skip_cells)?;
+    let mesh = parse_vtk_xml(&raw, filter, skip_cells, skip_point_data)?;
     Ok(mesh)
 }
 
@@ -54,14 +56,16 @@ pub fn read_vtk_file_raw<P: AsRef<Path>>(
 /// * `paths` - Slice of paths to VTK files
 /// * `filter` - Array include/exclude filter (shared across all files)
 /// * `skip_cells` - If true, skip cell topology and cell data
+/// * `skip_point_data` - If true, skip point data field arrays
 pub fn read_vtk_files_parallel_raw<P: AsRef<Path> + Sync>(
     paths: &[P],
     filter: &ArrayFilter,
     skip_cells: bool,
+    skip_point_data: bool,
 ) -> Vec<Result<MeshArrays, VTKReadError>> {
     paths
         .par_iter()
-        .map(|p| read_vtk_file_raw(p, filter, skip_cells))
+        .map(|p| read_vtk_file_raw(p, filter, skip_cells, skip_point_data))
         .collect()
 }
 
@@ -113,7 +117,7 @@ mod tests {
     fn test_read_single_file() {
         let dir = tempdir().unwrap();
         let path = create_test_vtu(dir.path(), "test.vtu");
-        let mesh = read_vtk_file_raw(&path, &no_filter(), false).unwrap();
+        let mesh = read_vtk_file_raw(&path, &no_filter(), false, false).unwrap();
         assert_eq!(mesh.n_points, 3);
         assert_eq!(mesh.n_cells, 1);
     }
@@ -125,7 +129,7 @@ mod tests {
             .map(|i| create_test_vtu(dir.path(), &format!("test_{i}.vtu")))
             .collect();
 
-        let results = read_vtk_files_parallel_raw(&paths, &no_filter(), false);
+        let results = read_vtk_files_parallel_raw(&paths, &no_filter(), false, false);
         assert_eq!(results.len(), 4);
         for result in results {
             let mesh = result.unwrap();
@@ -135,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_file_not_found() {
-        let result = read_vtk_file_raw("/nonexistent/path/file.vtu", &no_filter(), false);
+        let result = read_vtk_file_raw("/nonexistent/path/file.vtu", &no_filter(), false, false);
         assert!(matches!(result, Err(VTKReadError::Io(_))));
     }
 }

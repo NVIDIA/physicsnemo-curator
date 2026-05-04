@@ -45,8 +45,8 @@ def main() -> None:
     parser.add_argument(
         "--workers",
         type=int,
-        default=2,
-        help="Number of parallel workers (default: 2)",
+        default=1,
+        help="Number of parallel workers (default: 1)",
     )
     args = parser.parse_args()
 

@@ -64,6 +64,7 @@ def read_vtk(
     include_arrays: list[str] | None = None,
     exclude_arrays: list[str] | None = None,
     skip_cells: bool = False,
+    skip_point_data: bool = False,
 ) -> VtkMeshData:
     """Read a single VTK file.
 
@@ -77,6 +78,9 @@ def read_vtk(
         If set, exclude these named data arrays.
     skip_cells : bool
         If ``True``, skip all cell topology and cell data.
+    skip_point_data : bool
+        If ``True``, skip all point data field arrays.
+        Point coordinates are still read.
 
     Returns
     -------
@@ -95,6 +99,7 @@ def read_vtk_parallel(
     include_arrays: list[str] | None = None,
     exclude_arrays: list[str] | None = None,
     skip_cells: bool = False,
+    skip_point_data: bool = False,
 ) -> list[VtkMeshData]:
     """Read multiple VTK files in parallel using Rayon.
 
@@ -108,6 +113,9 @@ def read_vtk_parallel(
         If set, exclude these named data arrays.
     skip_cells : bool
         If ``True``, skip all cell topology and cell data.
+    skip_point_data : bool
+        If ``True``, skip all point data field arrays.
+        Point coordinates are still read.
 
     Returns
     -------
@@ -126,6 +134,7 @@ def read_vtk_from_bytes(
     include_arrays: list[str] | None = None,
     exclude_arrays: list[str] | None = None,
     skip_cells: bool = False,
+    skip_point_data: bool = False,
 ) -> VtkMeshData:
     """Read a VTK mesh from an in-memory byte buffer.
 
@@ -142,6 +151,9 @@ def read_vtk_from_bytes(
         If set, exclude these named data arrays.
     skip_cells : bool
         If ``True``, skip all cell topology and cell data.
+    skip_point_data : bool
+        If ``True``, skip all point data field arrays.
+        Point coordinates are still read.
 
     Returns
     -------

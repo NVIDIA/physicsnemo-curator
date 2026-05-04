@@ -36,6 +36,7 @@ Usage
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import hashlib
 import inspect
@@ -727,9 +728,12 @@ class PipelineStore:
                 break
             except sqlite3.OperationalError:
                 if attempt == max_retries - 1:
-                    raise
-                time.sleep(delay)
-                delay = min(delay * 2, 2.0)
+                    # WAL not supported (e.g. network filesystem) — use DELETE mode
+                    with contextlib.suppress(sqlite3.OperationalError):
+                        conn.execute("PRAGMA journal_mode=DELETE")
+                else:
+                    time.sleep(delay)
+                    delay = min(delay * 2, 2.0)
 
         return conn
 

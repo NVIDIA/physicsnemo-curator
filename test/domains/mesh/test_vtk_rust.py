@@ -179,6 +179,17 @@ class TestRustVTKReader:
         points = np.asarray(mesh.points)
         assert points.shape == (4, 3)
 
+    def test_skip_point_data(self, simple_vtu_file: pathlib.Path) -> None:
+        """Test that skip_point_data=True omits point data but keeps points."""
+        mesh = vtk.read_vtk(str(simple_vtu_file), skip_point_data=True)
+
+        assert mesh.n_points == 4
+        assert mesh.points is not None
+        assert np.asarray(mesh.points).shape == (4, 3)
+        assert mesh.point_data == {}
+        # Cells are still present
+        assert mesh.cells is not None
+
 
 class TestRustVsPyVistaConsistency:
     """Tests comparing Rust reader output against PyVista."""

@@ -470,7 +470,7 @@ class DrivAerMLSource(Source[Mesh]):
 
             n_points = rust_mesh.n_points
             n_cells = rust_mesh.n_cells
-            points = torch.from_numpy(rust_mesh.points.copy())
+            points = torch.from_numpy(rust_mesh.points)
 
             # Cells from connectivity + offsets
             cells = self._build_cells_from_rust(rust_mesh)
@@ -478,7 +478,7 @@ class DrivAerMLSource(Source[Mesh]):
             # Point data
             point_data_dict: dict[str, torch.Tensor] = {}
             for name, data in rust_mesh.point_data.items():
-                arr = torch.from_numpy(data.copy())
+                arr = torch.from_numpy(data)
                 point_data_dict[name] = arr
 
             point_data = TensorDict(point_data_dict, batch_size=[n_points]) if point_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
@@ -486,7 +486,7 @@ class DrivAerMLSource(Source[Mesh]):
             # Cell data
             cell_data_dict: dict[str, torch.Tensor] = {}
             for name, data in rust_mesh.cell_data.items():
-                arr = torch.from_numpy(data.copy())
+                arr = torch.from_numpy(data)
                 cell_data_dict[name] = arr
 
             cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
@@ -555,12 +555,19 @@ class DrivAerMLSource(Source[Mesh]):
             return None
 
         n_cells = rust_mesh.n_cells
-        # Determine nodes per cell from offsets (assumes uniform cell type)
-        if n_cells > 0 and offsets.size > 1:
+        if n_cells == 0:
+            return None
+
+        # Determine nodes per cell from offsets
+        if offsets.size > 1:
             nodes_per_cell = int(offsets[1] - offsets[0])
-        elif n_cells > 0 and connectivity.size > 0:
+        elif connectivity.size > 0:
             nodes_per_cell = connectivity.size // n_cells
         else:
+            return None
+
+        # If mixed cell types, cannot form a uniform (n_cells, npc) tensor
+        if connectivity.size != n_cells * nodes_per_cell:
             return None
 
         cells = torch.from_numpy(connectivity.reshape(n_cells, nodes_per_cell)).to(torch.int64)
@@ -865,6 +872,9 @@ class DrivAerMLSource(Source[Mesh]):
     ) -> object:
         """Read volume VTU via the Rust backend.
 
+        Only reads cell topology and cell data — point data fields are
+        skipped since the interior mesh uses cell centroids.
+
         Parameters
         ----------
         volume_path : str
@@ -877,7 +887,7 @@ class DrivAerMLSource(Source[Mesh]):
         """
         from physicsnemo_curator._lib import vtk
 
-        return vtk.read_vtk(volume_path)
+        return vtk.read_vtk(volume_path, skip_point_data=True)
 
     def _build_centroid_mesh(self, rust_mesh: object) -> Mesh:
         """Convert a Rust VtkMeshData into a centroid point-cloud Mesh.
@@ -901,7 +911,7 @@ class DrivAerMLSource(Source[Mesh]):
         connectivity = rust_mesh.cells  # ty: ignore[unresolved-attribute]
 
         points_raw = torch.from_numpy(
-            rust_mesh.points.copy()  # ty: ignore[unresolved-attribute]
+            rust_mesh.points  # ty: ignore[unresolved-attribute]
         )
         offsets = rust_mesh.cell_offsets  # ty: ignore[unresolved-attribute]
 
@@ -912,17 +922,43 @@ class DrivAerMLSource(Source[Mesh]):
             and offsets.size > 1
             and n_cells > 0
         ):
-            nodes_per_cell = int(offsets[1] - offsets[0])
-            conn = torch.from_numpy(connectivity.reshape(n_cells, nodes_per_cell)).to(torch.int64)
-            cell_points = points_raw[conn]  # (n_cells, nodes_per_cell, 3)
-            centroids = cell_points.mean(dim=1)  # (n_cells, 3)
+            import numpy as np
+
+            # Offsets are cumulative node counts: cell i spans
+            # connectivity[starts[i]:starts[i+1]].
+            off = np.empty(n_cells + 1, dtype=np.int64)
+            off[0] = 0
+            off[1:] = offsets
+
+            # Check if all cells have the same node count (uniform mesh)
+            nodes_first = int(off[1])
+            if connectivity.size == n_cells * nodes_first:
+                # Uniform cell type — fast vectorized path
+                conn = torch.from_numpy(connectivity.reshape(n_cells, nodes_first)).to(torch.int64)
+                cell_points = points_raw[conn]  # (n_cells, nodes_per_cell, 3)
+                centroids = cell_points.mean(dim=1)  # (n_cells, 3)
+            else:
+                # Mixed cell types — vectorized scatter-add approach
+                conn_t = torch.from_numpy(connectivity).to(torch.int64)
+                # Gather all referenced points
+                all_pts = points_raw[conn_t]  # (total_nodes, 3)
+                # Build cell index for each node in connectivity
+                nodes_per_cell = np.diff(off)  # (n_cells,)
+                cell_ids = np.repeat(np.arange(n_cells, dtype=np.int64), nodes_per_cell)
+                cell_ids_t = torch.from_numpy(cell_ids).unsqueeze(1).expand(-1, 3)
+                # Sum points per cell
+                centroids = torch.zeros(n_cells, 3, dtype=points_raw.dtype)
+                centroids.scatter_add_(0, cell_ids_t, all_pts)
+                # Divide by node count per cell
+                npc_t = torch.from_numpy(nodes_per_cell.astype(np.float64)).to(points_raw.dtype)
+                centroids /= npc_t.unsqueeze(1)
         else:
             centroids = points_raw
 
         # Cell data becomes point_data for the centroid point-cloud
         point_data_dict: dict[str, torch.Tensor] = {}
         for name, data in rust_mesh.cell_data.items():  # ty: ignore[unresolved-attribute]
-            arr = torch.from_numpy(data.copy())
+            arr = torch.from_numpy(data)
             point_data_dict[name] = arr
 
         n_pts = centroids.shape[0]
@@ -958,7 +994,7 @@ class DrivAerMLSource(Source[Mesh]):
             from physicsnemo_curator._lib import vtk
 
             try:
-                rust_mesh = vtk.read_vtk(path)
+                rust_mesh = vtk.read_vtk(path, skip_point_data=True)
             except OSError:
                 logger.debug("Rust VTK reader does not support %s, falling back to pyvista", path)
                 return self._read_surface_pyvista(path)
@@ -973,13 +1009,18 @@ class DrivAerMLSource(Source[Mesh]):
                 return self._read_surface_pyvista(path)
 
             n_cells = rust_mesh.n_cells
-            points = torch.from_numpy(rust_mesh.points.copy())
+            points = torch.from_numpy(rust_mesh.points)
             cells = self._build_cells_from_rust(rust_mesh)
+
+            # For mixed cell types, create a placeholder 1-column cells tensor
+            # so that Mesh.n_cells matches cell_data batch size.
+            if cells is None and n_cells > 0:
+                cells = torch.arange(n_cells, dtype=torch.int64).unsqueeze(1)
 
             # Only extract cell data for surface meshes
             cell_data_dict: dict[str, torch.Tensor] = {}
             for name, data in rust_mesh.cell_data.items():
-                arr = torch.from_numpy(data.copy())
+                arr = torch.from_numpy(data)
                 cell_data_dict[name] = arr
 
             cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]

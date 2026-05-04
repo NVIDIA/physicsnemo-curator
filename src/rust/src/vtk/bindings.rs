@@ -18,13 +18,15 @@ use super::reader::read_vtk_files_parallel_raw;
 ///     include_arrays: If set, only include these named data arrays
 ///     exclude_arrays: If set, exclude these named data arrays
 ///     skip_cells: If True, skip all cell topology and cell data
+///     skip_point_data: If True, skip all point data field arrays
+///         (point coordinates are still read)
 ///
 /// Returns:
 ///     VtkMeshData object with mesh data accessible as NumPy arrays
 #[pyfunction]
 #[pyo3(
     name = "read_vtk",
-    signature = (path, *, include_arrays=None, exclude_arrays=None, skip_cells=false)
+    signature = (path, *, include_arrays=None, exclude_arrays=None, skip_cells=false, skip_point_data=false)
 )]
 pub fn py_read_vtk(
     py: Python<'_>,
@@ -32,12 +34,13 @@ pub fn py_read_vtk(
     include_arrays: Option<Vec<String>>,
     exclude_arrays: Option<Vec<String>>,
     skip_cells: bool,
+    skip_point_data: bool,
 ) -> PyResult<VtkMeshData> {
     let raw = fs::read(path).map_err(|e| {
         PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Cannot read {path}: {e}"))
     })?;
     let filter = ArrayFilter::new(include_arrays, exclude_arrays);
-    let arrays = parse_vtk_xml(&raw, &filter, skip_cells).map_err(|e| {
+    let arrays = parse_vtk_xml(&raw, &filter, skip_cells, skip_point_data).map_err(|e| {
         PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())
     })?;
     arrays.into_py_mesh(py)
@@ -50,13 +53,14 @@ pub fn py_read_vtk(
 ///     include_arrays: If set, only include these named data arrays
 ///     exclude_arrays: If set, exclude these named data arrays
 ///     skip_cells: If True, skip all cell topology and cell data
+///     skip_point_data: If True, skip all point data field arrays
 ///
 /// Returns:
 ///     List of VtkMeshData objects (or raises exception on first error)
 #[pyfunction]
 #[pyo3(
     name = "read_vtk_parallel",
-    signature = (paths, *, include_arrays=None, exclude_arrays=None, skip_cells=false)
+    signature = (paths, *, include_arrays=None, exclude_arrays=None, skip_cells=false, skip_point_data=false)
 )]
 pub fn py_read_vtk_parallel(
     py: Python<'_>,
@@ -64,9 +68,10 @@ pub fn py_read_vtk_parallel(
     include_arrays: Option<Vec<String>>,
     exclude_arrays: Option<Vec<String>>,
     skip_cells: bool,
+    skip_point_data: bool,
 ) -> PyResult<Vec<VtkMeshData>> {
     let filter = ArrayFilter::new(include_arrays, exclude_arrays);
-    let results = read_vtk_files_parallel_raw(&paths, &filter, skip_cells);
+    let results = read_vtk_files_parallel_raw(&paths, &filter, skip_cells, skip_point_data);
 
     results
         .into_iter()
@@ -87,13 +92,14 @@ pub fn py_read_vtk_parallel(
 ///     include_arrays: If set, only include these named data arrays
 ///     exclude_arrays: If set, exclude these named data arrays
 ///     skip_cells: If True, skip all cell topology and cell data
+///     skip_point_data: If True, skip all point data field arrays
 ///
 /// Returns:
 ///     VtkMeshData object with mesh data accessible as NumPy arrays
 #[pyfunction]
 #[pyo3(
     name = "read_vtk_from_bytes",
-    signature = (data, *, include_arrays=None, exclude_arrays=None, skip_cells=false)
+    signature = (data, *, include_arrays=None, exclude_arrays=None, skip_cells=false, skip_point_data=false)
 )]
 pub fn py_read_vtk_from_bytes(
     py: Python<'_>,
@@ -101,9 +107,10 @@ pub fn py_read_vtk_from_bytes(
     include_arrays: Option<Vec<String>>,
     exclude_arrays: Option<Vec<String>>,
     skip_cells: bool,
+    skip_point_data: bool,
 ) -> PyResult<VtkMeshData> {
     let filter = ArrayFilter::new(include_arrays, exclude_arrays);
-    let arrays = parse_vtk_xml(data, &filter, skip_cells).map_err(|e| {
+    let arrays = parse_vtk_xml(data, &filter, skip_cells, skip_point_data).map_err(|e| {
         PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())
     })?;
     arrays.into_py_mesh(py)

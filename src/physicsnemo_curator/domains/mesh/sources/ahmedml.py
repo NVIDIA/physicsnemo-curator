@@ -369,12 +369,12 @@ class AhmedMLSource(Source[Mesh]):
         rust_mesh = vtk.read_vtk(path)
 
         # Convert Rust mesh to physicsnemo Mesh
-        points = torch.from_numpy(rust_mesh.points.copy())
+        points = torch.from_numpy(rust_mesh.points)
 
         # Build point_data TensorDict from Rust arrays
         point_data_dict = {}
         for name, data in rust_mesh.point_data.items():
-            arr = torch.from_numpy(data.copy())
+            arr = torch.from_numpy(data)
             point_data_dict[name] = arr
 
         point_data = TensorDict(point_data_dict, batch_size=[rust_mesh.n_points]) if point_data_dict else None

@@ -583,6 +583,17 @@ class MeshStatsFilter(Filter["Mesh"]):
             size=min(12, len(available_keys)),
         )
 
+        # Component index filter
+        available_components = sorted(df["component"].unique().tolist())
+        comp_labels = {c: "scalar" if c == -1 else f"comp {c}" for c in available_components}
+        comp_options = {comp_labels[c]: c for c in available_components}
+        component_filter = pn.widgets.MultiSelect(
+            name="Components",
+            options=comp_options,
+            value=available_components,
+            size=min(6, len(available_components)),
+        )
+
         sidebar = pn.Column(
             "### Controls",
             x_select,
@@ -590,6 +601,9 @@ class MeshStatsFilter(Filter["Mesh"]):
             "---",
             "### Field Keys",
             field_key_filter,
+            "---",
+            "### Components",
+            component_filter,
             width=300,
             sizing_mode="fixed",
         )
@@ -598,20 +612,24 @@ class MeshStatsFilter(Filter["Mesh"]):
             x_select.param.value,
             y_select.param.value,
             field_key_filter.param.value,
+            component_filter.param.value,
         )
         def update_plot(
             x_col: str,
             y_col: str,
             selected_keys: list[str],
+            selected_components: list[int],
         ) -> hv.Points:
             """Update scatter plot based on widget selections."""
             filtered_df = df[df["field_key"].isin(selected_keys)] if selected_keys else df
+            if selected_components:
+                filtered_df = filtered_df[filtered_df["component"].isin(selected_components)]
             if filtered_df.empty:
                 return hv.Points([]).opts(title="No data matches filters")
             points = hv.Points(
                 filtered_df,
                 kdims=[x_col, y_col],
-                vdims=["index", "field_key"],
+                vdims=["index", "field_key", "component"],
             )
             hover = HoverTool(
                 tooltips=[
@@ -619,6 +637,7 @@ class MeshStatsFilter(Filter["Mesh"]):
                     (y_col, "@{" + y_col + "}{0.4f}"),
                     ("index", "@index"),
                     ("field_key", "@field_key"),
+                    ("component", "@component"),
                 ],
                 point_policy="follow_mouse",
             )

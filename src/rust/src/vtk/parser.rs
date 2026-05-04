@@ -198,6 +198,7 @@ fn should_skip(
     name: &str,
     section: Section,
     skip_cells: bool,
+    skip_point_data: bool,
     filter: &ArrayFilter,
 ) -> bool {
     // Skip FieldData and unknown sections entirely
@@ -208,7 +209,11 @@ fn should_skip(
     if skip_cells && (section.is_cell_topo() || section == Section::CellData) {
         return true;
     }
-    // Points section is always kept
+    // Skip ALL point data fields when skip_point_data is set
+    if skip_point_data && section == Section::PointData {
+        return true;
+    }
+    // Points section (coordinates) is always kept
     if section == Section::Points {
         return false;
     }
@@ -295,10 +300,13 @@ fn parse_ascii_to_bytes(text: &str, scalar_type: ScalarType) -> Vec<u8> {
 /// * `raw` - The entire file contents as a byte slice
 /// * `filter` - Array include/exclude filter
 /// * `skip_cells` - If `true`, skip all cell topology and cell data arrays
+/// * `skip_point_data` - If `true`, skip all point data field arrays
+///   (point *coordinates* are still read)
 pub fn parse_vtk_xml(
     raw: &[u8],
     filter: &ArrayFilter,
     skip_cells: bool,
+    skip_point_data: bool,
 ) -> Result<MeshArrays, VTKParseError> {
     let mut reader = Reader::from_reader(raw);
     reader.config_mut().trim_text(true);
@@ -384,7 +392,7 @@ pub fn parse_vtk_xml(
                     "FieldData" => section = Section::FieldData,
                     "DataArray" => {
                         let da = parse_da_attrs(e);
-                        let skip = should_skip(&da.name, section, skip_cells, filter);
+                        let skip = should_skip(&da.name, section, skip_cells, skip_point_data, filter);
 
                         if da.is_appended {
                             if !skip {
@@ -433,7 +441,7 @@ pub fn parse_vtk_xml(
                 let tag = std::str::from_utf8(qname.as_ref()).unwrap_or("");
                 if tag == "DataArray" {
                     let da = parse_da_attrs(e);
-                    let skip = should_skip(&da.name, section, skip_cells, filter);
+                    let skip = should_skip(&da.name, section, skip_cells, skip_point_data, filter);
                     if da.is_appended && !skip {
                         if let Some(t) = array_target_for(&da.name, section) {
                             appended_entries.push(AppendedEntry {
@@ -942,7 +950,7 @@ mod tests {
   </UnstructuredGrid>
 </VTKFile>"#;
 
-        let mesh = parse_vtk_xml(xml, &no_filter(), false).unwrap();
+        let mesh = parse_vtk_xml(xml, &no_filter(), false, false).unwrap();
         assert_eq!(mesh.n_points, 4);
         assert_eq!(mesh.n_cells, 1);
         // Points: 4 * 3 * 8 bytes = 96 bytes
@@ -991,7 +999,7 @@ mod tests {
   </UnstructuredGrid>
 </VTKFile>"#;
 
-        let mesh = parse_vtk_xml(xml, &no_filter(), false).unwrap();
+        let mesh = parse_vtk_xml(xml, &no_filter(), false, false).unwrap();
         assert_eq!(mesh.n_points, 3);
         assert!(mesh.point_data.contains_key("Temperature"));
         let temp = &mesh.point_data["Temperature"];
@@ -1023,7 +1031,7 @@ mod tests {
   </PolyData>
 </VTKFile>"#;
 
-        let mesh = parse_vtk_xml(xml, &no_filter(), false).unwrap();
+        let mesh = parse_vtk_xml(xml, &no_filter(), false, false).unwrap();
         assert_eq!(mesh.n_points, 3);
         assert_eq!(mesh.n_cells, 1);
     }
@@ -1064,7 +1072,7 @@ mod tests {
   </UnstructuredGrid>
 </VTKFile>"#;
 
-        let mesh = parse_vtk_xml(xml, &no_filter(), true).unwrap();
+        let mesh = parse_vtk_xml(xml, &no_filter(), true, false).unwrap();
         assert_eq!(mesh.n_points, 3);
         assert!(mesh.cells.is_none());
         assert!(mesh.cell_offsets.is_none());
@@ -1108,7 +1116,7 @@ mod tests {
 </VTKFile>"#;
 
         let filter = ArrayFilter::new(Some(vec!["Temperature".to_string()]), None);
-        let mesh = parse_vtk_xml(xml, &filter, false).unwrap();
+        let mesh = parse_vtk_xml(xml, &filter, false, false).unwrap();
         assert!(mesh.point_data.contains_key("Temperature"));
         assert!(!mesh.point_data.contains_key("Pressure"));
     }
@@ -1145,7 +1153,7 @@ mod tests {
 </VTKFile>"#
         );
 
-        let mesh = parse_vtk_xml(xml.as_bytes(), &no_filter(), false).unwrap();
+        let mesh = parse_vtk_xml(xml.as_bytes(), &no_filter(), false, false).unwrap();
         assert_eq!(mesh.n_points, 3);
         // Verify point data: 9 * 8 = 72 bytes
         assert_eq!(mesh.points.data.len(), 72);
