@@ -197,7 +197,7 @@ sink = AtomicDataZarrSink(
     batch_size=1000,
 )
 
-# 4. Build pipeline: Source → StatsFilter → Sink
+# 4. Build pipeline: Source → MeshStatsFilter → Sink
 pipeline = source.filter(stats).write(sink)
 
 # 5. Process first 3 files sequentially

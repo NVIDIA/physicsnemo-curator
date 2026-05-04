@@ -448,7 +448,6 @@ class DrivAerMLSource(Source[Mesh]):
             Converted mesh.
         """
         if self._backend == "rust":
-            import numpy as np
             from tensordict import TensorDict
 
             from physicsnemo_curator._lib import vtk
@@ -460,34 +459,34 @@ class DrivAerMLSource(Source[Mesh]):
                 return self._read_with_pyvista(path)
 
             # If Rust parsed the file but returned no usable data, fall back.
-            has_data = bool(rust_mesh.point_data()) or bool(rust_mesh.cell_data()) or rust_mesh.connectivity().size > 0
+            has_data = (
+                bool(rust_mesh.point_data)
+                or bool(rust_mesh.cell_data)
+                or (rust_mesh.cells is not None and rust_mesh.cells.size > 0)
+            )
             if rust_mesh.n_points > 0 and not has_data:
                 logger.debug("Rust reader returned empty data for %s, falling back to pyvista", path)
                 return self._read_with_pyvista(path)
 
             n_points = rust_mesh.n_points
             n_cells = rust_mesh.n_cells
-            points = torch.from_numpy(rust_mesh.points()[: n_points * 3].reshape(-1, 3))
+            points = torch.from_numpy(rust_mesh.points.copy())
 
             # Cells from connectivity + offsets
             cells = self._build_cells_from_rust(rust_mesh)
 
             # Point data
             point_data_dict: dict[str, torch.Tensor] = {}
-            for name, (data, num_components) in rust_mesh.point_data().items():
-                arr = torch.from_numpy(np.asarray(data)[: n_points * num_components])
-                if num_components > 1:
-                    arr = arr.reshape(-1, num_components)
+            for name, data in rust_mesh.point_data.items():
+                arr = torch.from_numpy(data.copy())
                 point_data_dict[name] = arr
 
             point_data = TensorDict(point_data_dict, batch_size=[n_points]) if point_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
             # Cell data
             cell_data_dict: dict[str, torch.Tensor] = {}
-            for name, (data, num_components) in rust_mesh.cell_data().items():
-                arr = torch.from_numpy(np.asarray(data)[: n_cells * num_components])
-                if num_components > 1:
-                    arr = arr.reshape(-1, num_components)
+            for name, data in rust_mesh.cell_data.items():
+                arr = torch.from_numpy(data.copy())
                 cell_data_dict[name] = arr
 
             cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
@@ -540,7 +539,7 @@ class DrivAerMLSource(Source[Mesh]):
 
         Parameters
         ----------
-        rust_mesh : VTKMesh
+        rust_mesh : VtkMeshData
             Rust VTK mesh object.
 
         Returns
@@ -549,10 +548,10 @@ class DrivAerMLSource(Source[Mesh]):
             Cells tensor of shape ``(n_cells, nodes_per_cell)`` if
             connectivity is available, else ``None``.
         """
-        connectivity = rust_mesh.connectivity()
-        offsets = rust_mesh.offsets()
+        connectivity = rust_mesh.cells  # ty: ignore[unresolved-attribute]
+        offsets = rust_mesh.cell_offsets  # ty: ignore[unresolved-attribute]
 
-        if connectivity.size == 0 or offsets.size == 0:
+        if connectivity is None or offsets is None or connectivity.size == 0 or offsets.size == 0:
             return None
 
         n_cells = rust_mesh.n_cells
@@ -574,7 +573,7 @@ class DrivAerMLSource(Source[Mesh]):
 
         DrivAerML volume files are split as ``volume_{i}.vtu.00.part``,
         ``volume_{i}.vtu.01.part``.  This method concatenates the parts
-        before reading.
+        in memory before reading.
 
         Parameters
         ----------
@@ -599,14 +598,20 @@ class DrivAerMLSource(Source[Mesh]):
         except FileNotFoundError:
             pass
 
-        # Concatenate split parts.
-        volume_path = self._concat_volume_parts(run_id)
-        mesh = self._read_vtk(volume_path)
-        self._cleanup_local(volume_path)
+        # Concatenate split parts into a temp file and read.
+        volume_path = self._concat_volume_parts_tempfile(run_id)
+        try:
+            mesh = self._read_vtk(volume_path)
+        finally:
+            pathlib.Path(volume_path).unlink(missing_ok=True)
         yield mesh
 
-    def _concat_volume_parts(self, run_id: int) -> str:
-        """Concatenate split volume VTU parts into a single local file.
+    def _concat_volume_parts_tempfile(self, run_id: int) -> str:
+        """Concatenate split volume VTU parts into a temporary file.
+
+        Creates a :func:`tempfile.NamedTemporaryFile` (``delete=False``)
+        and streams each part into it.  The caller is responsible for
+        deleting the file after use.
 
         Parameters
         ----------
@@ -616,38 +621,62 @@ class DrivAerMLSource(Source[Mesh]):
         Returns
         -------
         str
-            Local path to the concatenated VTU file.
+            Path to the temporary concatenated VTU file.
 
         Raises
         ------
         FileNotFoundError
             If no volume part files are found.
         """
-        parts: list[str] = []
-        for part_idx in range(10):
-            part_name = f"volume_{run_id}.vtu.{part_idx:02d}.part"
-            remote = f"{self._root_path}/run_{run_id}/{part_name}"
-            try:
-                local = self._ensure_local(remote)
-                if not pathlib.Path(local).exists():
+        import tempfile
+
+        cleanup_parts: list[str] = []
+        try:
+            part_paths: list[str] = []
+            for part_idx in range(10):
+                part_name = f"volume_{run_id}.vtu.{part_idx:02d}.part"
+                remote = f"{self._root_path}/run_{run_id}/{part_name}"
+                try:
+                    local = self._ensure_local(remote)
+                    if not pathlib.Path(local).exists():
+                        break
+                    cleanup_parts.append(local)
+                    part_paths.append(local)
+                except (FileNotFoundError, OSError):
                     break
-                parts.append(local)
-            except (FileNotFoundError, OSError):
-                break
 
-        if not parts:
-            msg = f"No volume files found for run_{run_id}"
-            raise FileNotFoundError(msg)
+            if not part_paths:
+                msg = f"No volume files found for run_{run_id}"
+                raise FileNotFoundError(msg)
 
-        concat_path = pathlib.Path(self._cache_storage) / f"volume_{run_id}_concat.vtu"
-        if not concat_path.exists():
-            with concat_path.open("wb") as out:
-                for part in parts:
+            tmp = tempfile.NamedTemporaryFile(  # noqa: SIM115
+                suffix=".vtu",
+                dir=pathlib.Path(part_paths[0]).parent,
+                delete=False,
+            )
+            try:
+                for part in part_paths:
                     with pathlib.Path(part).open("rb") as inp:
-                        out.write(inp.read())
-            logger.info("Concatenated %d parts into %s", len(parts), concat_path)
+                        while True:
+                            chunk = inp.read(64 * 1024 * 1024)  # 64 MB
+                            if not chunk:
+                                break
+                            tmp.write(chunk)
+                tmp.close()
+            except BaseException:
+                tmp.close()
+                pathlib.Path(tmp.name).unlink(missing_ok=True)
+                raise
 
-        return str(concat_path)
+            logger.info(
+                "Concatenated %d parts for run_%d into %s",
+                len(part_paths),
+                run_id,
+                tmp.name,
+            )
+            return tmp.name
+        finally:
+            self._cleanup_local(*cleanup_parts)
 
     # -- Slices reading -------------------------------------------------------
 
@@ -789,66 +818,121 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh
             Point-cloud mesh (no cell connectivity).
         """
-        # Resolve volume file path
+        # Resolve volume file — direct VTU or concatenated parts
         direct_remote = f"{self._root_path}/run_{run_id}/volume_{run_id}.vtu"
+        volume_path: str | None = None
         cleanup_paths: list[str] = []
+        temp_concat = False
         try:
             volume_path = self._ensure_local(direct_remote)
             cleanup_paths.append(volume_path)
         except (FileNotFoundError, OSError):
-            volume_path = self._concat_volume_parts(run_id)
-            cleanup_paths.append(volume_path)
+            volume_path = self._concat_volume_parts_tempfile(run_id)
+            temp_concat = True
 
         try:
             if self._backend == "rust":
-                import numpy as np
-                from tensordict import TensorDict
-
-                from physicsnemo_curator._lib import vtk
-
                 try:
-                    rust_mesh = vtk.read_vtk(volume_path)
-                except OSError:
-                    logger.debug("Rust VTK reader does not support %s, falling back to pyvista", volume_path)
-                    return self._read_with_pyvista(volume_path, manifold_dim=0, point_source="cell_centroids")
-
-                n_cells = rust_mesh.n_cells
-                connectivity = rust_mesh.connectivity()
-
-                # If Rust reader returned empty connectivity, fall back
-                if n_cells > 0 and connectivity.size == 0:
-                    logger.debug("Rust reader returned empty connectivity for %s, falling back", volume_path)
-                    return self._read_with_pyvista(volume_path, manifold_dim=0, point_source="cell_centroids")
-
-                # Compute cell centroids from connectivity
-                points_raw = torch.from_numpy(rust_mesh.points()[: rust_mesh.n_points * 3].reshape(-1, 3))
-                offsets = rust_mesh.offsets()
-
-                if connectivity.size > 0 and offsets.size > 1 and n_cells > 0:
-                    nodes_per_cell = int(offsets[1] - offsets[0])
-                    conn = torch.from_numpy(connectivity.reshape(n_cells, nodes_per_cell)).to(torch.int64)
-                    cell_points = points_raw[conn]  # (n_cells, nodes_per_cell, 3)
-                    centroids = cell_points.mean(dim=1)  # (n_cells, 3)
+                    rust_mesh = self._read_rust_interior(volume_path)
+                except Exception:  # noqa: BLE001
+                    logger.debug(
+                        "Rust VTK reader failed for volume run_%d, falling back to pyvista",
+                        run_id,
+                    )
                 else:
-                    centroids = points_raw
+                    has_data = (
+                        bool(rust_mesh.cell_data)  # ty: ignore[unresolved-attribute]
+                        or (rust_mesh.cells is not None and rust_mesh.cells.size > 0)  # ty: ignore[unresolved-attribute]
+                    )
+                    if has_data:
+                        return self._build_centroid_mesh(rust_mesh)
+                    logger.debug(
+                        "Rust reader returned empty data for volume run_%d, falling back to pyvista",
+                        run_id,
+                    )
 
-                # Cell data becomes point_data for centroid point-cloud
-                point_data_dict: dict[str, torch.Tensor] = {}
-                for name, (data, num_components) in rust_mesh.cell_data().items():
-                    arr = torch.from_numpy(np.asarray(data)[: n_cells * num_components])
-                    if num_components > 1:
-                        arr = arr.reshape(-1, num_components)
-                    point_data_dict[name] = arr
-
-                n_pts = centroids.shape[0]
-                point_data = TensorDict(point_data_dict, batch_size=[n_pts]) if point_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
-
-                return Mesh(points=centroids, cells=None, point_data=point_data)
-
-            # PyVista backend
+            # PyVista backend (or Rust fallback)
             return self._read_with_pyvista(volume_path, manifold_dim=0, point_source="cell_centroids")
         finally:
-            self._cleanup_local(*cleanup_paths)
+            if temp_concat:
+                pathlib.Path(volume_path).unlink(missing_ok=True)
+            else:
+                self._cleanup_local(*cleanup_paths)
+
+    def _read_rust_interior(
+        self,
+        volume_path: str,
+    ) -> object:
+        """Read volume VTU via the Rust backend.
+
+        Parameters
+        ----------
+        volume_path : str
+            Local path to a VTU file.
+
+        Returns
+        -------
+        VtkMeshData
+            The Rust VTK mesh handle.
+        """
+        from physicsnemo_curator._lib import vtk
+
+        return vtk.read_vtk(volume_path)
+
+    def _build_centroid_mesh(self, rust_mesh: object) -> Mesh:
+        """Convert a Rust VtkMeshData into a centroid point-cloud Mesh.
+
+        Computes cell centroids from the cell connectivity and promotes
+        cell data to point data (one datum per centroid).
+
+        Parameters
+        ----------
+        rust_mesh : VtkMeshData
+            Parsed VTK data from the Rust reader.
+
+        Returns
+        -------
+        Mesh
+            Point-cloud mesh (``cells=None``).
+        """
+        from tensordict import TensorDict
+
+        n_cells = rust_mesh.n_cells  # ty: ignore[unresolved-attribute]
+        connectivity = rust_mesh.cells  # ty: ignore[unresolved-attribute]
+
+        points_raw = torch.from_numpy(
+            rust_mesh.points.copy()  # ty: ignore[unresolved-attribute]
+        )
+        offsets = rust_mesh.cell_offsets  # ty: ignore[unresolved-attribute]
+
+        if (
+            connectivity is not None
+            and connectivity.size > 0
+            and offsets is not None
+            and offsets.size > 1
+            and n_cells > 0
+        ):
+            nodes_per_cell = int(offsets[1] - offsets[0])
+            conn = torch.from_numpy(connectivity.reshape(n_cells, nodes_per_cell)).to(torch.int64)
+            cell_points = points_raw[conn]  # (n_cells, nodes_per_cell, 3)
+            centroids = cell_points.mean(dim=1)  # (n_cells, 3)
+        else:
+            centroids = points_raw
+
+        # Cell data becomes point_data for the centroid point-cloud
+        point_data_dict: dict[str, torch.Tensor] = {}
+        for name, data in rust_mesh.cell_data.items():  # ty: ignore[unresolved-attribute]
+            arr = torch.from_numpy(data.copy())
+            point_data_dict[name] = arr
+
+        n_pts = centroids.shape[0]
+        point_data = (
+            TensorDict(point_data_dict, batch_size=[n_pts])  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+            if point_data_dict
+            else None
+        )
+
+        return Mesh(points=centroids, cells=None, point_data=point_data)
 
     def _read_surface(self, path: str) -> Mesh:
         """Read a boundary VTP file as a surface mesh with cell data only.
@@ -869,7 +953,6 @@ class DrivAerMLSource(Source[Mesh]):
             Surface mesh with cell connectivity and cell data.
         """
         if self._backend == "rust":
-            import numpy as np
             from tensordict import TensorDict
 
             from physicsnemo_curator._lib import vtk
@@ -880,22 +963,23 @@ class DrivAerMLSource(Source[Mesh]):
                 logger.debug("Rust VTK reader does not support %s, falling back to pyvista", path)
                 return self._read_surface_pyvista(path)
 
-            has_data = bool(rust_mesh.point_data()) or bool(rust_mesh.cell_data()) or rust_mesh.connectivity().size > 0
+            has_data = (
+                bool(rust_mesh.point_data)
+                or bool(rust_mesh.cell_data)
+                or (rust_mesh.cells is not None and rust_mesh.cells.size > 0)
+            )
             if rust_mesh.n_points > 0 and not has_data:
                 logger.debug("Rust reader returned empty data for %s, falling back to pyvista", path)
                 return self._read_surface_pyvista(path)
 
-            n_points = rust_mesh.n_points
             n_cells = rust_mesh.n_cells
-            points = torch.from_numpy(rust_mesh.points()[: n_points * 3].reshape(-1, 3))
+            points = torch.from_numpy(rust_mesh.points.copy())
             cells = self._build_cells_from_rust(rust_mesh)
 
             # Only extract cell data for surface meshes
             cell_data_dict: dict[str, torch.Tensor] = {}
-            for name, (data, num_components) in rust_mesh.cell_data().items():
-                arr = torch.from_numpy(np.asarray(data)[: n_cells * num_components])
-                if num_components > 1:
-                    arr = arr.reshape(-1, num_components)
+            for name, data in rust_mesh.cell_data.items():
+                arr = torch.from_numpy(data.copy())
                 cell_data_dict[name] = arr
 
             cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]

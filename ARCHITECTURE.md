@@ -201,7 +201,7 @@ its sources, filters, and sinks at import time:
 ```python
 registry.register_submodule("mesh", "Mesh processing", "physicsnemo.mesh")
 registry.register_source("mesh", VTKSource)
-registry.register_filter("mesh", StatsFilter)
+registry.register_filter("mesh", MeshStatsFilter)
 registry.register_sink("mesh", MeshSink)
 ```
 

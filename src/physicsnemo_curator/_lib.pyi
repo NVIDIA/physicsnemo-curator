@@ -23,63 +23,64 @@ def rust_version() -> str:
     """Return the version of the native Rust library."""
     ...
 
-class VTKMesh:  # noqa: N801
-    """A VTK mesh parsed from a VTU or VTP file.
+class VtkMeshData:
+    """VTK mesh data with NumPy arrays.
+
+    Returned by :func:`read_vtk`, :func:`read_vtk_parallel`, and
+    :func:`read_vtk_from_bytes`.  All heavy data is stored as NumPy
+    arrays with native dtypes (float32, float64, int32, int64, etc.).
 
     This class is exposed via the ``_lib.vtk`` submodule.
     """
 
-    @property
-    def n_points(self) -> int:
-        """Number of points in the mesh."""
-        ...
+    n_points: int
+    """Number of points in the mesh."""
 
-    @property
-    def n_cells(self) -> int:
-        """Number of cells in the mesh."""
-        ...
+    n_cells: int
+    """Number of cells in the mesh."""
 
-    @property
-    def format(self) -> str:
-        """File format (e.g., 'vtu', 'vtp')."""
-        ...
+    points: npt.NDArray[np.floating]
+    """Point coordinates, shape ``(n_points, 3)``."""
 
-    def points(self) -> npt.NDArray[np.float64]:
-        """Point coordinates as a flattened NumPy array (n_points * 3)."""
-        ...
+    cells: npt.NDArray[np.integer] | None
+    """Cell connectivity indices (flat), or ``None`` if no cells."""
 
-    def connectivity(self) -> npt.NDArray[np.int64]:
-        """Cell connectivity as a NumPy array."""
-        ...
+    cell_offsets: npt.NDArray[np.integer] | None
+    """Cell offsets into connectivity, or ``None`` if no cells."""
 
-    def offsets(self) -> npt.NDArray[np.int64]:
-        """Cell offsets as a NumPy array."""
-        ...
+    cell_types: npt.NDArray[np.uint8] | None
+    """VTK cell type IDs, or ``None`` if no cells."""
 
-    def types(self) -> npt.NDArray[np.uint8]:
-        """Cell types as a NumPy array."""
-        ...
+    point_data: dict[str, npt.NDArray[np.generic]]
+    """Per-point data arrays: ``{name: array}``."""
 
-    def point_data(self) -> dict[str, tuple[npt.NDArray[np.float64], int]]:
-        """Point data arrays as {name: (data, num_components)}."""
-        ...
-
-    def cell_data(self) -> dict[str, tuple[npt.NDArray[np.float64], int]]:
-        """Cell data arrays as {name: (data, num_components)}."""
-        ...
+    cell_data: dict[str, npt.NDArray[np.generic]]
+    """Per-cell data arrays: ``{name: array}``."""
 
 # VTK submodule functions (accessible via _lib.vtk.read_vtk, etc.)
-def read_vtk(path: str) -> VTKMesh:
+def read_vtk(
+    path: str,
+    *,
+    include_arrays: list[str] | None = None,
+    exclude_arrays: list[str] | None = None,
+    skip_cells: bool = False,
+) -> VtkMeshData:
     """Read a single VTK file.
 
     Parameters
     ----------
     path : str
         Path to the VTK file (.vtu, .vtp, .vtk, .vts, .vtm).
+    include_arrays : list[str] | None
+        If set, only include these named data arrays.
+    exclude_arrays : list[str] | None
+        If set, exclude these named data arrays.
+    skip_cells : bool
+        If ``True``, skip all cell topology and cell data.
 
     Returns
     -------
-    VTKMesh
+    VtkMeshData
         Parsed mesh with data accessible as NumPy arrays.
 
     Note
@@ -88,22 +89,68 @@ def read_vtk(path: str) -> VTKMesh:
     """
     ...
 
-def read_vtk_parallel(paths: list[str]) -> list[VTKMesh]:
+def read_vtk_parallel(
+    paths: list[str],
+    *,
+    include_arrays: list[str] | None = None,
+    exclude_arrays: list[str] | None = None,
+    skip_cells: bool = False,
+) -> list[VtkMeshData]:
     """Read multiple VTK files in parallel using Rayon.
 
     Parameters
     ----------
     paths : list[str]
         List of paths to VTK files.
+    include_arrays : list[str] | None
+        If set, only include these named data arrays.
+    exclude_arrays : list[str] | None
+        If set, exclude these named data arrays.
+    skip_cells : bool
+        If ``True``, skip all cell topology and cell data.
 
     Returns
     -------
-    list[VTKMesh]
+    list[VtkMeshData]
         List of parsed meshes.
 
     Note
     ----
     This function is accessible via ``_lib.vtk.read_vtk_parallel()``.
+    """
+    ...
+
+def read_vtk_from_bytes(
+    data: bytes,
+    *,
+    include_arrays: list[str] | None = None,
+    exclude_arrays: list[str] | None = None,
+    skip_cells: bool = False,
+) -> VtkMeshData:
+    """Read a VTK mesh from an in-memory byte buffer.
+
+    This avoids writing data to a temporary file when the raw bytes are
+    already available (e.g. after concatenating split volume parts).
+
+    Parameters
+    ----------
+    data : bytes
+        Raw bytes of the VTK file content.
+    include_arrays : list[str] | None
+        If set, only include these named data arrays.
+    exclude_arrays : list[str] | None
+        If set, exclude these named data arrays.
+    skip_cells : bool
+        If ``True``, skip all cell topology and cell data.
+
+    Returns
+    -------
+    VtkMeshData
+        Parsed mesh with data accessible as NumPy arrays.
+
+    Note
+    ----
+    This function is accessible via ``_lib.vtk.read_vtk_from_bytes()``.
     """
     ...
 

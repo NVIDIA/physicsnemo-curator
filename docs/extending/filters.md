@@ -111,7 +111,7 @@ method.  The pipeline calls `flush()` automatically after all items have
 been processed:
 
 ```python
-class StatsFilter(Filter["Mesh"]):
+class MeshStatsFilter(Filter["Mesh"]):
     def __init__(self, output: str) -> None:
         self._output = output
         self._rows: list[dict] = []

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for new mesh filters: MeshInfoFilter, StatsFilter, PrecisionFilter."""
+"""Tests for new mesh filters: MeshInfoFilter, MeshStatsFilter, PrecisionFilter."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ import torch  # noqa: E402
 from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter  # noqa: E402
 from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter  # noqa: E402
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter  # noqa: E402
-from physicsnemo_curator.domains.mesh.filters.stats import StatsFilter, merge_welford_stats  # noqa: E402
+from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter, merge_welford_stats  # noqa: E402
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink  # noqa: E402
 from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource  # noqa: E402
 
@@ -249,19 +249,19 @@ class TestMeshInfoFilter:
 
 
 # ---------------------------------------------------------------------------
-# StatsFilter tests
+# MeshStatsFilter tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
-class TestStatsFilter:
+class TestMeshStatsFilter:
     def test_yields_mesh_unchanged(self, tmp_path):
-        """StatsFilter should yield the mesh without modification."""
+        """MeshStatsFilter should yield the mesh without modification."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
         source = VTKSource(str(tmp_path / "vtk"))
         mesh_before = next(source[0])
 
-        filt = StatsFilter(output=str(tmp_path / "stats.parquet"))
+        filt = MeshStatsFilter(output=str(tmp_path / "stats.parquet"))
 
         def gen():
             yield mesh_before
@@ -271,12 +271,12 @@ class TestStatsFilter:
         assert meshes_out[0] is mesh_before
 
     def test_writes_parquet_with_stats(self, tmp_path):
-        """StatsFilter should write Parquet file with comprehensive statistics."""
+        """MeshStatsFilter should write Parquet file with comprehensive statistics."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
         source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
-        filt = StatsFilter(output=str(parquet_path))
+        filt = MeshStatsFilter(output=str(parquet_path))
         list(filt(source[0]))
         filt.flush()
 
@@ -304,12 +304,12 @@ class TestStatsFilter:
             assert col in table.column_names, f"Missing column: {col}"
 
     def test_mean_values_correct(self, tmp_path):
-        """StatsFilter should compute correct mean values."""
+        """MeshStatsFilter should compute correct mean values."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
         source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
-        filt = StatsFilter(output=str(parquet_path))
+        filt = MeshStatsFilter(output=str(parquet_path))
         list(filt(source[0]))
         filt.flush()
 
@@ -326,12 +326,12 @@ class TestStatsFilter:
             pytest.fail("temperature field not found in stats")
 
     def test_std_values_correct(self, tmp_path):
-        """StatsFilter should compute correct standard deviation."""
+        """MeshStatsFilter should compute correct standard deviation."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
         source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
-        filt = StatsFilter(output=str(parquet_path))
+        filt = MeshStatsFilter(output=str(parquet_path))
         list(filt(source[0]))
         filt.flush()
 
@@ -347,12 +347,12 @@ class TestStatsFilter:
                 break
 
     def test_min_max_values_correct(self, tmp_path):
-        """StatsFilter should compute correct min/max values."""
+        """MeshStatsFilter should compute correct min/max values."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
         source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
-        filt = StatsFilter(output=str(parquet_path))
+        filt = MeshStatsFilter(output=str(parquet_path))
         list(filt(source[0]))
         filt.flush()
 
@@ -367,12 +367,12 @@ class TestStatsFilter:
                 break
 
     def test_vector_field_per_component_stats(self, tmp_path):
-        """StatsFilter should compute per-component stats for vector fields."""
+        """MeshStatsFilter should compute per-component stats for vector fields."""
         _create_vtk_with_vector_field(tmp_path / "vtk", "vector.vtu")
         source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
-        filt = StatsFilter(output=str(parquet_path), per_component=True)
+        filt = MeshStatsFilter(output=str(parquet_path), per_component=True)
         list(filt(source[0]))
         filt.flush()
 
@@ -394,12 +394,12 @@ class TestStatsFilter:
         assert components == {0, 1, 2}
 
     def test_scalar_field_component_is_minus_one(self, tmp_path):
-        """StatsFilter should mark scalar fields with component=-1."""
+        """MeshStatsFilter should mark scalar fields with component=-1."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
         source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
-        filt = StatsFilter(output=str(parquet_path))
+        filt = MeshStatsFilter(output=str(parquet_path))
         list(filt(source[0]))
         filt.flush()
 
@@ -412,17 +412,17 @@ class TestStatsFilter:
                 break
 
     def test_flush_empty_returns_none(self, tmp_path):
-        """StatsFilter.flush() should return None when no data processed."""
-        filt = StatsFilter(output=str(tmp_path / "stats.parquet"))
+        """MeshStatsFilter.flush() should return None when no data processed."""
+        filt = MeshStatsFilter(output=str(tmp_path / "stats.parquet"))
         assert filt.flush() is None
 
     def test_welford_state_stored(self, tmp_path):
-        """StatsFilter should store Welford accumulator state for merging."""
+        """MeshStatsFilter should store Welford accumulator state for merging."""
         _create_vtk_file(tmp_path / "vtk", "test.vtu")
         source = VTKSource(str(tmp_path / "vtk"))
 
         parquet_path = tmp_path / "stats.parquet"
-        filt = StatsFilter(output=str(parquet_path))
+        filt = MeshStatsFilter(output=str(parquet_path))
         list(filt(source[0]))
         filt.flush()
 
@@ -449,12 +449,12 @@ class TestMergeWelfordStats:
 
         # Create two separate stats files
         source1 = VTKSource(str(tmp_path / "vtk1"))
-        filt1 = StatsFilter(output=str(tmp_path / "stats1.parquet"))
+        filt1 = MeshStatsFilter(output=str(tmp_path / "stats1.parquet"))
         list(filt1(source1[0]))
         filt1.flush()
 
         source2 = VTKSource(str(tmp_path / "vtk2"))
-        filt2 = StatsFilter(output=str(tmp_path / "stats2.parquet"))
+        filt2 = MeshStatsFilter(output=str(tmp_path / "stats2.parquet"))
         list(filt2(source2[0]))
         filt2.flush()
 
@@ -559,64 +559,62 @@ class TestMeanFilterMerge:
 
 
 # ---------------------------------------------------------------------------
-# StatsFilter.merge tests
+# MeshStatsFilter.merge tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
-class TestStatsFilterMerge:
-    """Tests for StatsFilter.merge() classmethod."""
+class TestMeshStatsFilterMerge:
+    """Tests for MeshStatsFilter.merge() classmethod."""
 
     def test_merge_two_parquets(self, tmp_path):
-        """StatsFilter.merge should produce correct merged statistics."""
+        """MeshStatsFilter.merge should concatenate per-worker stats."""
         _create_vtk_file(tmp_path / "vtk1", "a.vtu")
         _create_vtk_file(tmp_path / "vtk2", "b.vtu")
 
         source1 = VTKSource(str(tmp_path / "vtk1"))
-        filt1 = StatsFilter(output=str(tmp_path / "stats_0.parquet"))
+        filt1 = MeshStatsFilter(output=str(tmp_path / "stats_0.parquet"))
         list(filt1(source1[0]))
         filt1.flush()
 
         source2 = VTKSource(str(tmp_path / "vtk2"))
-        filt2 = StatsFilter(output=str(tmp_path / "stats_1.parquet"))
+        filt2 = MeshStatsFilter(output=str(tmp_path / "stats_1.parquet"))
         list(filt2(source2[0]))
         filt2.flush()
 
-        merged_path = StatsFilter.merge(
+        merged_path = MeshStatsFilter.merge(
             [str(tmp_path / "stats_0.parquet"), str(tmp_path / "stats_1.parquet")],
             output=str(tmp_path / "merged_stats.parquet"),
         )
 
         table = pq.read_table(merged_path)
 
-        # Find temperature row
-        for i in range(table.num_rows):
-            if table["field_key"][i].as_py() == "point_data/temperature":
-                welford_n = table["welford_n"][i].as_py()
-                mean_val = table["mean"][i].as_py()
-                assert welford_n == 8  # 4 + 4
-                assert abs(mean_val - 250.0) < 1e-5
-                break
-        else:
-            pytest.fail("temperature field not found in merged stats")
+        # Merge concatenates rows — expect 2 temperature rows (one per shard)
+        temp_rows = [i for i in range(table.num_rows) if table["field_key"][i].as_py() == "point_data/temperature"]
+        assert len(temp_rows) == 2
+        for i in temp_rows:
+            welford_n = table["welford_n"][i].as_py()
+            mean_val = table["mean"][i].as_py()
+            assert welford_n == 4
+            assert abs(mean_val - 250.0) < 1e-5
 
     def test_merge_writes_file(self, tmp_path):
-        """StatsFilter.merge should write the output file."""
+        """MeshStatsFilter.merge should write the output file."""
         _create_vtk_file(tmp_path / "vtk", "a.vtu")
         source = VTKSource(str(tmp_path / "vtk"))
-        filt = StatsFilter(output=str(tmp_path / "stats.parquet"))
+        filt = MeshStatsFilter(output=str(tmp_path / "stats.parquet"))
         list(filt(source[0]))
         filt.flush()
 
         out = tmp_path / "merged.parquet"
-        result = StatsFilter.merge([str(tmp_path / "stats.parquet")], output=str(out))
+        result = MeshStatsFilter.merge([str(tmp_path / "stats.parquet")], output=str(out))
         assert out.exists()
         assert result == str(out)
 
     def test_merge_empty_raises(self):
-        """StatsFilter.merge should raise ValueError on empty list."""
+        """MeshStatsFilter.merge should raise ValueError on empty list."""
         with pytest.raises(ValueError, match="non-empty"):
-            StatsFilter.merge([], output="out.parquet")
+            MeshStatsFilter.merge([], output="out.parquet")
 
 
 # ---------------------------------------------------------------------------
@@ -771,7 +769,7 @@ class TestNewFiltersPipeline:
 
         info_filter = MeshInfoFilter(output=str(info_path))
         precision_filter = PrecisionFilter(target_dtype="float32")
-        stats_filter = StatsFilter(output=str(stats_path))
+        stats_filter = MeshStatsFilter(output=str(stats_path))
 
         pipeline = (
             VTKSource(str(vtk_dir))

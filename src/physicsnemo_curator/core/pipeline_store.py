@@ -1133,6 +1133,50 @@ class PipelineStore:
         finally:
             conn.close()
 
+    def replace_filter_artifacts(
+        self,
+        filter_name: str,
+        filter_order: int,
+        old_paths: list[str],
+        merged_path: str,
+    ) -> None:
+        """Replace shard artifact paths with a single merged path.
+
+        Removes all rows matching *old_paths* for the given filter and
+        inserts one row pointing to *merged_path*.  This keeps the
+        dashboard pointing at the final merged file after
+        :func:`~physicsnemo_curator.run.gather_pipeline` completes.
+
+        Parameters
+        ----------
+        filter_name : str
+            Human-readable name of the filter.
+        filter_order : int
+            Position of the filter in the pipeline (0-indexed).
+        old_paths : list[str]
+            Shard file paths to remove from the artifact table.
+        merged_path : str
+            Path to the merged output file.
+        """
+        conn = self._connect()
+        try:
+            # Remove old shard records
+            placeholders = ",".join("?" for _ in old_paths)
+            conn.execute(
+                f"DELETE FROM filter_artifacts WHERE run_id = ? AND path IN ({placeholders})",  # noqa: S608
+                (self._run_id, *old_paths),
+            )
+            # Insert merged path (use idx=0 as representative)
+            conn.execute(
+                "INSERT OR REPLACE INTO filter_artifacts "
+                "(path, idx, run_id, filter_name, filter_order) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (merged_path, 0, self._run_id, filter_name, filter_order),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def filter_artifacts_for_index(self, index: int) -> dict[str, list[str]]:
         """Return filter artifact paths for a given source index.
 

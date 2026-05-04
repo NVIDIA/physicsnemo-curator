@@ -93,22 +93,22 @@ class TestRustVTKReader:
 
         assert mesh.n_points == 4
         assert mesh.n_cells == 1
-        assert mesh.format == "vtu"
 
     def test_read_vtu_points(self, simple_vtu_file: pathlib.Path) -> None:
         """Test that points match expected values."""
         mesh = vtk.read_vtk(str(simple_vtu_file))
-        points = mesh.points()
+        points = np.asarray(mesh.points)
 
-        expected = np.array([0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0], dtype=np.float64)
+        expected = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], dtype=np.float64)
+        assert points.shape == (4, 3)
         np.testing.assert_array_almost_equal(points, expected)
 
     def test_read_vtu_connectivity(self, simple_vtu_file: pathlib.Path) -> None:
         """Test that cell connectivity is correct."""
         mesh = vtk.read_vtk(str(simple_vtu_file))
-        connectivity = mesh.connectivity()
-        offsets = mesh.offsets()
-        types = mesh.types()
+        connectivity = np.asarray(mesh.cells)
+        offsets = np.asarray(mesh.cell_offsets)
+        types = np.asarray(mesh.cell_types)
 
         np.testing.assert_array_equal(connectivity, [0, 1, 2, 3])
         np.testing.assert_array_equal(offsets, [4])
@@ -117,18 +117,18 @@ class TestRustVTKReader:
     def test_read_vtu_point_data(self, simple_vtu_file: pathlib.Path) -> None:
         """Test that point data arrays are read correctly."""
         mesh = vtk.read_vtk(str(simple_vtu_file))
-        point_data = mesh.point_data()
+        point_data = mesh.point_data
 
         assert "Temperature" in point_data
-        temp_data, temp_components = point_data["Temperature"]
-        assert temp_components == 1
-        np.testing.assert_array_almost_equal(temp_data, [100.0, 200.0, 300.0, 400.0])
+        temp = np.asarray(point_data["Temperature"])
+        assert temp.shape == (4,)
+        np.testing.assert_array_almost_equal(temp, [100.0, 200.0, 300.0, 400.0])
 
         assert "Velocity" in point_data
-        vel_data, vel_components = point_data["Velocity"]
-        assert vel_components == 3
-        expected_vel = [1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1]
-        np.testing.assert_array_almost_equal(vel_data, expected_vel)
+        vel = np.asarray(point_data["Velocity"])
+        assert vel.shape == (4, 3)
+        expected_vel = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]]
+        np.testing.assert_array_almost_equal(vel, expected_vel)
 
     def test_read_vtp_basic(self, simple_vtp_file: pathlib.Path) -> None:
         """Test reading a VTP PolyData file."""
@@ -136,7 +136,6 @@ class TestRustVTKReader:
 
         assert mesh.n_points == 3
         assert mesh.n_cells == 1
-        assert mesh.format == "vtp"
 
     def test_read_parallel(self, simple_vtu_file: pathlib.Path, simple_vtp_file: pathlib.Path) -> None:
         """Test parallel reading of multiple files."""
@@ -147,6 +146,39 @@ class TestRustVTKReader:
         assert meshes[0].n_points == 4
         assert meshes[1].n_points == 3
 
+    def test_skip_cells(self, simple_vtu_file: pathlib.Path) -> None:
+        """Test that skip_cells=True omits cell topology."""
+        mesh = vtk.read_vtk(str(simple_vtu_file), skip_cells=True)
+
+        assert mesh.n_points == 4
+        assert mesh.cells is None
+        assert mesh.cell_offsets is None
+        assert mesh.cell_types is None
+
+    def test_include_arrays(self, simple_vtu_file: pathlib.Path) -> None:
+        """Test that include_arrays filters point data."""
+        mesh = vtk.read_vtk(str(simple_vtu_file), include_arrays=["Temperature"])
+
+        assert "Temperature" in mesh.point_data
+        assert "Velocity" not in mesh.point_data
+
+    def test_exclude_arrays(self, simple_vtu_file: pathlib.Path) -> None:
+        """Test that exclude_arrays filters point data."""
+        mesh = vtk.read_vtk(str(simple_vtu_file), exclude_arrays=["Velocity"])
+
+        assert "Temperature" in mesh.point_data
+        assert "Velocity" not in mesh.point_data
+
+    def test_read_from_bytes(self, simple_vtu_file: pathlib.Path) -> None:
+        """Test reading from bytes buffer."""
+        data = simple_vtu_file.read_bytes()
+        mesh = vtk.read_vtk_from_bytes(data)
+
+        assert mesh.n_points == 4
+        assert mesh.n_cells == 1
+        points = np.asarray(mesh.points)
+        assert points.shape == (4, 3)
+
 
 class TestRustVsPyVistaConsistency:
     """Tests comparing Rust reader output against PyVista."""
@@ -156,7 +188,7 @@ class TestRustVsPyVistaConsistency:
         rust_mesh = vtk.read_vtk(str(simple_vtu_file))
         pv_mesh = pv.read(str(simple_vtu_file))
 
-        rust_points = rust_mesh.points().reshape(-1, 3)
+        rust_points = np.asarray(rust_mesh.points)
         pv_points = np.array(pv_mesh.points)
 
         np.testing.assert_array_almost_equal(rust_points, pv_points)
@@ -180,17 +212,15 @@ class TestRustVsPyVistaConsistency:
         rust_mesh = vtk.read_vtk(str(simple_vtu_file))
         pv_mesh = pv.read(str(simple_vtu_file))
 
-        rust_point_data = rust_mesh.point_data()
-
         # Check Temperature
-        rust_temp, _ = rust_point_data["Temperature"]
+        rust_temp = np.asarray(rust_mesh.point_data["Temperature"])
         pv_temp = pv_mesh.point_data["Temperature"]
         np.testing.assert_array_almost_equal(rust_temp, pv_temp)
 
         # Check Velocity
-        rust_vel, num_comp = rust_point_data["Velocity"]
-        pv_vel = pv_mesh.point_data["Velocity"].flatten()
-        assert num_comp == 3
+        rust_vel = np.asarray(rust_mesh.point_data["Velocity"])
+        pv_vel = pv_mesh.point_data["Velocity"]
+        assert rust_vel.shape == (4, 3)
         np.testing.assert_array_almost_equal(rust_vel, pv_vel)
 
 
@@ -202,9 +232,9 @@ class TestErrorHandling:
         with pytest.raises(IOError):
             vtk.read_vtk("/nonexistent/path.vtu")
 
-    def test_invalid_extension(self, tmp_path: pathlib.Path) -> None:
-        """Test that invalid extension raises IOError."""
-        path = tmp_path / "test.xyz"
-        path.write_text("invalid")
+    def test_invalid_xml(self, tmp_path: pathlib.Path) -> None:
+        """Test that invalid XML raises IOError."""
+        path = tmp_path / "test.vtu"
+        path.write_text("not valid xml <><><>")
         with pytest.raises(IOError):
             vtk.read_vtk(str(path))

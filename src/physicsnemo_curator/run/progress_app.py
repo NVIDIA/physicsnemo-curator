@@ -16,25 +16,62 @@
 
 """Textual TUI application for pipeline progress display.
 
-Renders a full-screen terminal UI with an overall progress bar and a
-grid of per-worker progress tiles.  Polls the SQLite database every
-0.5 seconds for live updates.
+Renders a full-screen terminal UI with an overall progress bar, a grid
+of per-worker progress tiles, and a live log panel.  Polls the SQLite
+database every 0.5 seconds for live updates.  Print statements and
+Python logging output are captured and displayed in the log panel.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from typing import TYPE_CHECKING
 
 from textual.app import App, ComposeResult
 from textual.containers import Grid, Vertical
-from textual.widgets import Footer, Header, ProgressBar, Static
+from textual.widgets import Footer, Header, ProgressBar, RichLog, Static
 
 if TYPE_CHECKING:
     from threading import Event
 
+    from textual.events import Print
+
     from physicsnemo_curator.core.pipeline_store import PipelineStore
+
+
+class _TUILogHandler(logging.Handler):
+    """Logging handler that routes records into a Textual RichLog widget.
+
+    Uses :meth:`App.call_from_thread` so it is safe to call from any
+    thread (main thread, worker threads, or the Textual event-loop
+    thread).
+
+    Parameters
+    ----------
+    app : PipelineProgressApp
+        The running Textual app instance.
+    """
+
+    def __init__(self, app: PipelineProgressApp) -> None:
+        """Initialise the handler with a reference to the app."""
+        super().__init__()
+        self._app = app
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Format and route a log record to the TUI log panel.
+
+        Parameters
+        ----------
+        record : logging.LogRecord
+            The log record to display.
+        """
+        try:
+            msg = self.format(record)
+            self._app.call_from_thread(self._app.append_log, msg)
+        except Exception:  # noqa: BLE001
+            self.handleError(record)
 
 
 class WorkerTile(Static):
@@ -93,6 +130,10 @@ class WorkerTile(Static):
 class PipelineProgressApp(App[None]):
     """Full-screen Textual app for pipeline progress monitoring.
 
+    Displays an overall progress bar, a grid of per-worker tiles, and
+    a scrolling log panel that captures ``print()`` output and Python
+    ``logging`` messages.
+
     Parameters
     ----------
     store : PipelineStore
@@ -123,6 +164,11 @@ class PipelineProgressApp(App[None]):
         padding: 1 2;
         height: 1fr;
     }
+    #log-panel {
+        height: 12;
+        border: solid $accent;
+        margin: 0 2 1 2;
+    }
     """
 
     BINDINGS = [("q", "quit", "Quit")]
@@ -144,21 +190,67 @@ class PipelineProgressApp(App[None]):
         self._invocation_id = invocation_id
         self._start_time = time.monotonic()
         self._worker_tiles: dict[str, WorkerTile] = {}
+        self._log_handler: _TUILogHandler | None = None
 
     def compose(self) -> ComposeResult:
         """Build the top-level layout."""
         yield Header()
         yield Vertical(
             ProgressBar(total=self._total, show_eta=True, id="overall-bar"),
-            Static("Completed: 0 | Failed: 0 | Remaining: 0 | Elapsed: 0s", id="overall-label"),
+            Static(
+                "Completed: 0 | Failed: 0 | Remaining: 0 | Elapsed: 0s",
+                id="overall-label",
+            ),
             id="overall-container",
         )
         yield Grid(id="worker-grid")
+        yield RichLog(id="log-panel", max_lines=500, markup=True)
         yield Footer()
 
     def on_mount(self) -> None:
-        """Start the polling interval on mount."""
+        """Start polling and set up print/logging capture."""
         self.set_interval(0.5, self._poll)
+
+        # Capture print() calls (stdout + stderr) into Print events
+        self.begin_capture_print(self, stdout=True, stderr=True)
+
+        # Attach a logging handler to the root logger so library log
+        # messages appear in the TUI log panel instead of corrupting
+        # the alternate screen buffer.
+        self._log_handler = _TUILogHandler(self)
+        self._log_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s", datefmt="%H:%M:%S")
+        )
+        logging.getLogger().addHandler(self._log_handler)
+
+        log_panel = self.query_one("#log-panel", RichLog)
+        log_panel.border_title = "Log"
+
+    def on_print(self, event: Print) -> None:
+        """Handle captured print() output by writing it to the log panel.
+
+        Parameters
+        ----------
+        event : Print
+            Textual event containing the captured text.
+        """
+        text = event.text.rstrip("\n")
+        if text:
+            self.append_log(text)
+
+    def append_log(self, text: str) -> None:
+        """Append a line of text to the log panel.
+
+        Parameters
+        ----------
+        text : str
+            Text to write.
+        """
+        try:
+            log_panel = self.query_one("#log-panel", RichLog)
+            log_panel.write(text)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _poll(self) -> None:
         """Poll the database and update all widgets."""
@@ -202,4 +294,11 @@ class PipelineProgressApp(App[None]):
 
         # Check if pipeline is done
         if self._stop_event.is_set():
+            self._cleanup_logging()
             self.exit()
+
+    def _cleanup_logging(self) -> None:
+        """Remove the TUI log handler from the root logger."""
+        if self._log_handler is not None:
+            logging.getLogger().removeHandler(self._log_handler)
+            self._log_handler = None

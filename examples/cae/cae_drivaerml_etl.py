@@ -57,8 +57,6 @@ To download two examples use the following command:
         --repo-type dataset \\
         --include "run_1/*" "run_2/*" \\
         --local-dir input/drivaerml
-
-Then pass ``url="file:///path/to/drivaerml"`` to the source constructor.
 """
 
 # %%
@@ -72,7 +70,6 @@ Then pass ``url="file:///path/to/drivaerml"`` to the source constructor.
 
 from pathlib import Path
 
-from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.filters.random_permutation import RandomPermutationFilter
 from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
@@ -103,6 +100,7 @@ source = DrivAerMLSource(
     mesh_type="multi",
     manifold_dim="auto",
     point_source="vertices",
+    backend="rust",
 )
 
 n_runs = len(source)
@@ -116,17 +114,14 @@ print(f"Total runs available: {n_runs}")
 # :class:`~physicsnemo_curator.core.base.Pipeline`.  Nothing is
 # executed until we explicitly process indices.
 #
-# 1. :class:`~physicsnemo_curator.domains.mesh.filters.mesh_info.MeshInfoFilter`
-#    logs structured metadata for each mesh (point/cell counts, field
-#    names and shapes) to a JSON-lines file.
-# 2. :class:`~physicsnemo_curator.domains.mesh.filters.stats.MeshStatsFilter`
+# 1. :class:`~physicsnemo_curator.domains.mesh.filters.stats.MeshStatsFilter`
 #    computes per-field statistics (mean, std, skewness, kurtosis) using
 #    numerically stable Welford accumulators that merge across workers.
-# 3. :class:`~physicsnemo_curator.domains.mesh.filters.precision.PrecisionFilter`
+# 2. :class:`~physicsnemo_curator.domains.mesh.filters.precision.PrecisionFilter`
 #    casts all float64 fields to float32 for training consistency.
-# 4. :class:`~physicsnemo_curator.domains.mesh.filters.random_permutation.RandomPermutationFilter`
+# 3. :class:`~physicsnemo_curator.domains.mesh.filters.random_permutation.RandomPermutationFilter`
 #    randomly shuffles point and cell ordering to remove spatial bias.
-# 5. :class:`~physicsnemo_curator.domains.mesh.sinks.mesh_writer.MeshSink`
+# 4. :class:`~physicsnemo_curator.domains.mesh.sinks.mesh_writer.MeshSink`
 #    writes each mesh in PhysicsNeMo's native format — ``.pdmsh`` for
 #    :class:`DomainMesh` and ``.pmsh`` for plain :class:`Mesh`.
 #
@@ -137,8 +132,7 @@ print(f"Total runs available: {n_runs}")
 # ``run_1/domain_1.pdmsh``, ``run_1/drivaer_1.stl.pmsh``, etc.
 
 pipeline = (
-    source.filter(MeshInfoFilter(output=str(_OUTPUT_DIR / "mesh_info.jsonl")))
-    .filter(MeshStatsFilter(output=str(_OUTPUT_DIR / "stats.parquet")))
+    source.filter(MeshStatsFilter(output=str(_OUTPUT_DIR / "stats.parquet")))
     .filter(PrecisionFilter(target_dtype="float32"))
     .filter(RandomPermutationFilter(seed=42))
     .write(
@@ -154,16 +148,11 @@ pipeline = (
 # ---------------
 #
 # :func:`~physicsnemo_curator.run.run_pipeline` dispatches work to a
-# ``process_pool`` backend with 4 workers.  Each worker gets an
+# ``process_pool`` backend with 2 workers.  Each worker gets an
 # independent copy of the pipeline, so meshes are read, filtered, and
 # written concurrently.
 
-results = run_pipeline(
-    pipeline,
-    n_jobs=3,
-    backend="process_pool",
-    progress=True,
-)
+results = run_pipeline(pipeline, n_jobs=2, backend="process_pool")
 
 # %%
 # Inspect Results
@@ -173,15 +162,15 @@ results = run_pipeline(
 # each containing the file paths written by the sink.
 
 print(f"Processed {len(results)} runs")
-for i, paths in enumerate(results[:3]):
+for i, paths in enumerate(results):
     print(f"  Run {i}: {paths}")
 
 # %%
 # Gather Statistics
 # -----------------
 #
-# When running in parallel, each worker writes per-index shard files for
-# stateful filters (MeshStatsFilter and MeshInfoFilter).
+# When running in parallel, each worker writes per-worker shard files for
+# stateful filters (e.g. MeshStatsFilter).
 # :func:`~physicsnemo_curator.run.gather_pipeline` discovers those
 # shards, merges them into single output files, and cleans up the
 # temporary shard files.
@@ -190,6 +179,7 @@ for i, paths in enumerate(results[:3]):
 # mean, std, skewness, and kurtosis computed across all processed meshes.
 
 merged = gather_pipeline(pipeline)
+print(merged)
 for path in merged:
     print(f"Merged statistics: {path}")
 

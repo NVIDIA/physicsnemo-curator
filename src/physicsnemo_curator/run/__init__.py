@@ -303,11 +303,11 @@ def run_pipeline(
 
 
 def gather_pipeline(pipeline: Pipeline[Any]) -> list[str]:
-    """Merge per-index shard files produced by stateful filters.
+    """Merge per-worker shard files produced by stateful filters.
 
     When :func:`run_pipeline` runs with a parallel backend, each worker
     flushes stateful filters to shard files named
-    ``{stem}_shard_{index:06d}{suffix}``.  This function discovers those
+    ``{stem}_worker_{worker_id}{suffix}``.  This function discovers those
     shards, calls the filter's :meth:`merge` method to combine them into
     a single output file, and removes the shard files.
 
@@ -334,19 +334,32 @@ def gather_pipeline(pipeline: Pipeline[Any]) -> list[str]:
 
     merged_paths: list[str] = []
 
-    for f in pipeline.filters:
+    # Access the pipeline store (if available) to update artifact records
+    store = None
+    if pipeline.track_metrics:
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            store = pipeline._get_store()  # noqa: SLF001
+
+    for i_f, f in enumerate(pipeline.filters):
         if not (hasattr(f, "flush") and hasattr(f, "_output_path") and hasattr(f, "merge")):
             continue
 
         output_path = pathlib.Path(str(f._output_path))  # noqa: SLF001
-        shard_pattern = f"{output_path.stem}_shard_*{output_path.suffix}"
-        shard_files = sorted(str(p) for p in output_path.parent.glob(shard_pattern))
+        worker_pattern = f"{output_path.stem}_worker_*{output_path.suffix}"
+        shard_files = sorted(str(p) for p in output_path.parent.glob(worker_pattern))
 
         if not shard_files:
             continue
 
         merged = f.merge(shard_files, str(output_path))  # ty: ignore[call-non-callable]
         merged_paths.append(merged)
+
+        # Update artifact records in the DB: replace shard paths with merged
+        if store is not None:
+            filter_name = type(f).name
+            store.replace_filter_artifacts(filter_name, i_f, shard_files, merged)
 
         # Clean up shard files
         for shard in shard_files:

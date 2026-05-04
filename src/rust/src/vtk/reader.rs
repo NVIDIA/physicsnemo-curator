@@ -5,13 +5,12 @@
 //! Multi-threaded VTK file reader using Rayon.
 
 use rayon::prelude::*;
-use std::fs::File;
-use std::io::BufReader;
+use std::fs;
 use std::path::Path;
 use thiserror::Error;
 
-use super::mesh::VTKMesh;
-use super::parser::{parse_vtk, VTKParseError};
+use super::mesh::{ArrayFilter, MeshArrays};
+use super::parser::{parse_vtk_xml, VTKParseError};
 
 /// Errors that can occur during VTK file reading.
 #[derive(Error, Debug)]
@@ -22,43 +21,26 @@ pub enum VTKReadError {
     /// Error parsing the VTK content.
     #[error("Parse error: {0}")]
     Parse(#[from] VTKParseError),
-    /// File has an unknown or unsupported extension.
-    #[error("Unknown file format: {0}")]
-    UnknownFormat(String),
 }
 
-/// Determine VTK format from file extension.
-fn get_vtk_format(path: &Path) -> Result<&'static str, VTKReadError> {
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("vtu") => Ok("vtu"),
-        Some("vtp") => Ok("vtp"),
-        Some("vtk") => Ok("vtk"),
-        Some("vts") => Ok("vts"),
-        Some("vtm") => Ok("vtm"),
-        Some(ext) => Err(VTKReadError::UnknownFormat(ext.to_string())),
-        None => Err(VTKReadError::UnknownFormat("no extension".to_string())),
-    }
-}
-
-/// Read a single VTK file.
+/// Read a single VTK file and parse it.
 ///
 /// # Arguments
 ///
 /// * `path` - Path to the VTK file
+/// * `filter` - Array include/exclude filter
+/// * `skip_cells` - If true, skip cell topology and cell data
 ///
 /// # Returns
 ///
-/// A `VTKMesh` structure populated with the parsed data.
-///
-/// # Errors
-///
-/// Returns `VTKReadError` if the file cannot be read or parsed.
-pub fn read_vtk_file<P: AsRef<Path>>(path: P) -> Result<VTKMesh, VTKReadError> {
-    let path = path.as_ref();
-    let format = get_vtk_format(path)?;
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let mesh = parse_vtk(reader, format)?;
+/// A `MeshArrays` structure populated with the parsed data.
+pub fn read_vtk_file_raw<P: AsRef<Path>>(
+    path: P,
+    filter: &ArrayFilter,
+    skip_cells: bool,
+) -> Result<MeshArrays, VTKReadError> {
+    let raw = fs::read(path.as_ref())?;
+    let mesh = parse_vtk_xml(&raw, filter, skip_cells)?;
     Ok(mesh)
 }
 
@@ -70,19 +52,23 @@ pub fn read_vtk_file<P: AsRef<Path>>(path: P) -> Result<VTKMesh, VTKReadError> {
 /// # Arguments
 ///
 /// * `paths` - Slice of paths to VTK files
-///
-/// # Returns
-///
-/// A vector of results, one per input path, in the same order as the input.
-pub fn read_vtk_files_parallel<P: AsRef<Path> + Sync>(
+/// * `filter` - Array include/exclude filter (shared across all files)
+/// * `skip_cells` - If true, skip cell topology and cell data
+pub fn read_vtk_files_parallel_raw<P: AsRef<Path> + Sync>(
     paths: &[P],
-) -> Vec<Result<VTKMesh, VTKReadError>> {
-    paths.par_iter().map(read_vtk_file).collect()
+    filter: &ArrayFilter,
+    skip_cells: bool,
+) -> Vec<Result<MeshArrays, VTKReadError>> {
+    paths
+        .par_iter()
+        .map(|p| read_vtk_file_raw(p, filter, skip_cells))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
     use std::io::Write;
     use tempfile::tempdir;
 
@@ -119,11 +105,15 @@ mod tests {
         path
     }
 
+    fn no_filter() -> ArrayFilter {
+        ArrayFilter::new(None, None)
+    }
+
     #[test]
     fn test_read_single_file() {
         let dir = tempdir().unwrap();
         let path = create_test_vtu(dir.path(), "test.vtu");
-        let mesh = read_vtk_file(&path).unwrap();
+        let mesh = read_vtk_file_raw(&path, &no_filter(), false).unwrap();
         assert_eq!(mesh.n_points, 3);
         assert_eq!(mesh.n_cells, 1);
     }
@@ -132,10 +122,10 @@ mod tests {
     fn test_read_parallel() {
         let dir = tempdir().unwrap();
         let paths: Vec<_> = (0..4)
-            .map(|i| create_test_vtu(dir.path(), &format!("test_{}.vtu", i)))
+            .map(|i| create_test_vtu(dir.path(), &format!("test_{i}.vtu")))
             .collect();
 
-        let results = read_vtk_files_parallel(&paths);
+        let results = read_vtk_files_parallel_raw(&paths, &no_filter(), false);
         assert_eq!(results.len(), 4);
         for result in results {
             let mesh = result.unwrap();
@@ -144,26 +134,8 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_format() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("test.xyz");
-        File::create(&path).unwrap();
-        let result = read_vtk_file(&path);
-        assert!(matches!(result, Err(VTKReadError::UnknownFormat(_))));
-    }
-
-    #[test]
     fn test_file_not_found() {
-        let result = read_vtk_file("/nonexistent/path/file.vtu");
+        let result = read_vtk_file_raw("/nonexistent/path/file.vtu", &no_filter(), false);
         assert!(matches!(result, Err(VTKReadError::Io(_))));
-    }
-
-    #[test]
-    fn test_no_extension() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("test_file");
-        File::create(&path).unwrap();
-        let result = read_vtk_file(&path);
-        assert!(matches!(result, Err(VTKReadError::UnknownFormat(ref s)) if s == "no extension"));
     }
 }

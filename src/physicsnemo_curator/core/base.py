@@ -374,6 +374,7 @@ class Pipeline[T]:
     db_dir: pathlib.Path | None = None
     resume: bool = False
     _store: PipelineStore | None = field(default=None, init=False, repr=False, compare=False)
+    _db_path: pathlib.Path | None = field(default=None, init=False, repr=False, compare=False)
     invocation_id: str | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -643,14 +644,15 @@ class Pipeline[T]:
         created with a unique timestamp suffix so each pipeline run starts
         fresh.  When ``True``, the stable config-hash name is reused,
         enabling checkpoint resumption from a previous run.
+
+        If ``_db_path`` is already set (e.g. after unpickling), the store
+        reconnects to that exact database rather than generating a new path.
         """
         if self._store is not None:
             return
 
         import pathlib
-        import time
 
-        from physicsnemo_curator.core.cache import default_cache_dir
         from physicsnemo_curator.core.pipeline_store import (
             PipelineStore,
             _config_hash,
@@ -660,17 +662,29 @@ class Pipeline[T]:
         config = _pipeline_config(self)
         hash_ = _config_hash(config)
 
-        if self.resume:
+        if self._db_path is not None:
+            # Reconnect to an existing DB (e.g. child process after pickle)
+            db_path = self._db_path
+        elif self.resume:
             # Stable filename — reuses existing DB for checkpoint resumption
+            from physicsnemo_curator.core.cache import default_cache_dir
+
             filename = f"{hash_[:16]}.db"
+            base_dir = pathlib.Path(self.db_dir) if self.db_dir is not None else default_cache_dir()
+            db_path = base_dir / filename
         else:
             # Unique filename — each pipeline gets a fresh database
+            import time
+
+            from physicsnemo_curator.core.cache import default_cache_dir
+
             ts = int(time.time() * 1_000_000)
             filename = f"{hash_[:16]}_{ts}.db"
-
-        db_path = pathlib.Path(self.db_dir) / filename if self.db_dir is not None else default_cache_dir() / filename
+            base_dir = pathlib.Path(self.db_dir) if self.db_dir is not None else default_cache_dir()
+            db_path = base_dir / filename
 
         self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_)
+        self._db_path = db_path
 
     @staticmethod
     def _gpu_setup() -> int | None:

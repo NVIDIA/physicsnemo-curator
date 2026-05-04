@@ -56,7 +56,7 @@ Which submodule does this filter belong to?
 | `MeshInfoFilter` | `mesh/filters/mesh_info.py` | Mesh | Pass-through + logging + JSON-lines | Optional output, log levels |
 | `MeanFilter` | `mesh/filters/mean.py` | Mesh | Pass-through + accumulate rows | Parquet output, simple flush |
 | `PrecisionFilter` | `mesh/filters/precision.py` | Mesh | In-place modification | Dtype conversion, validation in init |
-| `StatsFilter` | `mesh/filters/stats.py` | Mesh | Pass-through + Welford accumulator | Complex statistics, merge function |
+| `MeshStatsFilter` | `mesh/filters/stats.py` | Mesh | Pass-through + Welford accumulator | Complex statistics, merge |
 | `MomentsFilter` | `da/filters/moments.py` | DataArray | Pass-through + running moments | Zarr output, helper class |
 
 ## Step 1: Create the Filter Module
@@ -224,7 +224,7 @@ def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:
         yield mesh  # unchanged
 ```
 
-Examples: `MeshInfoFilter`, `MeanFilter`, `StatsFilter`, `MomentsFilter`
+Examples: `MeshInfoFilter`, `MeanFilter`, `MeshStatsFilter`, `MomentsFilter`
 
 #### Pattern B: In-Place Modification
 
@@ -271,12 +271,12 @@ def flush(self) -> str | None:
     return str(self._output_path)
 ```
 
-Examples: `MeanFilter` (Parquet), `StatsFilter` (Parquet),
+Examples: `MeanFilter` (Parquet), `MeshStatsFilter` (Parquet),
 `MeshInfoFilter` (JSON-lines), `MomentsFilter` (Zarr)
 
 ### Output Format Patterns
 
-#### Parquet Output (MeanFilter / StatsFilter pattern)
+#### Parquet Output (MeanFilter / MeshStatsFilter pattern)
 
 ```python
 import pyarrow as pa
@@ -676,7 +676,7 @@ the same pattern using `"da"` as the submodule name.
 ### Export any public helpers
 
 If the filter provides a public helper function (like `merge_welford_stats`
-in `StatsFilter`), add it to the import and `__all__` as well:
+in `MeshStatsFilter`), add it to the import and `__all__` as well:
 
 ```python
 from physicsnemo_curator.domains.mesh.filters.<module> import <ClassName>, <helper_func>

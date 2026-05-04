@@ -194,5 +194,5 @@ for i, paths in enumerate(results):
 #
 # For **stateful** filters (like statistics accumulators), add a
 # ``flush()`` method and an ``_output_path`` attribute.  See
-# :class:`~physicsnemo_curator.domains.mesh.filters.stats.StatsFilter` for
+# :class:`~physicsnemo_curator.domains.mesh.filters.stats.MeshStatsFilter` for
 # an example with Welford accumulators and cross-worker merging.

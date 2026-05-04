@@ -379,12 +379,11 @@ class MeshStatsFilter(Filter["Mesh"]):
 
     @staticmethod
     def merge(parquet_paths: list[str], output: str) -> str:
-        """Merge statistics Parquet files produced by parallel workers.
+        """Concatenate per-worker statistics Parquet files into one.
 
-        Uses the parallel Welford algorithm (Chan et al., 1979) to combine
-        per-worker statistics into exact aggregate statistics without
-        re-reading the raw tensor data.  This is a convenience wrapper
-        around :func:`merge_welford_stats` that also writes the result.
+        Each worker produces its own Parquet file containing per-mesh
+        statistics rows.  This method simply concatenates all rows into a
+        single output file without any aggregation.
 
         Parameters
         ----------
@@ -403,11 +402,6 @@ class MeshStatsFilter(Filter["Mesh"]):
         ValueError
             If *parquet_paths* is empty.
 
-        Notes
-        -----
-        Median and absolute-max cannot be recovered from Welford state
-        alone, so the merged table will contain ``NaN`` for those columns.
-
         Examples
         --------
         >>> paths = ["worker_0/stats.parquet", "worker_1/stats.parquet"]
@@ -418,7 +412,8 @@ class MeshStatsFilter(Filter["Mesh"]):
             msg = "parquet_paths must be a non-empty list."
             raise ValueError(msg)
 
-        merged = merge_welford_stats(parquet_paths)
+        tables = [pq.read_table(p) for p in parquet_paths]
+        merged = pa.concat_tables(tables)
 
         out_path = pathlib.Path(output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -521,8 +516,7 @@ class MeshStatsFilter(Filter["Mesh"]):
 
         Displays a single scatter plot with a controls sidebar. Users can
         select X/Y axes from available statistics columns and filter by
-        field location (point_data, cell_data, interior, boundary) and
-        by individual field name.
+        field key.
 
         Parameters
         ----------
@@ -578,55 +572,15 @@ class MeshStatsFilter(Filter["Mesh"]):
         df = df.reset_index(drop=True)
         df["index"] = df.index
 
-        # Derive a "location" column from field_key prefix for filtering
-        def _location_from_key(key: str) -> str:
-            if key.startswith("interior/"):
-                return "interior"
-            if key.startswith("boundary."):
-                # Extract boundary name: boundary.{name}/...
-                rest = key[len("boundary.") :]
-                bnd_name = rest.split("/", 1)[0] if "/" in rest else rest
-                return f"boundary.{bnd_name}"
-            if key.startswith("point_data/"):
-                return "point_data"
-            if key.startswith("cell_data/"):
-                return "cell_data"
-            return "other"
-
-        # Strip all prefixes from field_key to get the bare field name
-        def _short_field_name(key: str) -> str:
-            if key.startswith("interior/point_data/"):
-                return key[len("interior/point_data/") :]
-            if key.startswith("interior/cell_data/"):
-                return key[len("interior/cell_data/") :]
-            if key.startswith("boundary."):
-                parts = key.split("/")
-                return parts[-1] if len(parts) > 1 else key
-            if key.startswith("point_data/"):
-                return key[len("point_data/") :]
-            if key.startswith("cell_data/"):
-                return key[len("cell_data/") :]
-            return key
-
-        df["location"] = df["field_key"].apply(_location_from_key)
-        df["field_name"] = df["field_key"].apply(_short_field_name)
-
         # Create widgets
         x_select = pn.widgets.Select(name="X-Axis", options=stat_columns, value="mean")
         y_select = pn.widgets.Select(name="Y-Axis", options=stat_columns, value="std")
-        available_locations = sorted(df["location"].unique().tolist())
-        location_filter = pn.widgets.CheckBoxGroup(
-            name="Filter Locations",
-            options=available_locations,
-            value=available_locations,
-        )
-        # Use short field names for display, map back to field_key for filtering
-        available_field_names = sorted(df["field_name"].unique().tolist())
-        field_filter = pn.widgets.MultiSelect(
-            name="Fields",
-            options=available_field_names,
-            value=available_field_names,
-            size=min(8, len(available_field_names)),
+        available_keys = sorted(df["field_key"].unique().tolist())
+        field_key_filter = pn.widgets.MultiSelect(
+            name="Field Keys",
+            options=available_keys,
+            value=available_keys,
+            size=min(12, len(available_keys)),
         )
 
         sidebar = pn.Column(
@@ -634,44 +588,37 @@ class MeshStatsFilter(Filter["Mesh"]):
             x_select,
             y_select,
             "---",
-            "### Filter by Location",
-            location_filter,
-            "---",
-            "### Filter by Field",
-            field_filter,
-            width=250,
+            "### Field Keys",
+            field_key_filter,
+            width=300,
             sizing_mode="fixed",
         )
 
         @pn.depends(  # ty: ignore[invalid-argument-type]
             x_select.param.value,
             y_select.param.value,
-            location_filter.param.value,
-            field_filter.param.value,
+            field_key_filter.param.value,
         )
         def update_plot(
             x_col: str,
             y_col: str,
-            selected_locations: list[str],
-            selected_fields: list[str],
+            selected_keys: list[str],
         ) -> hv.Points:
             """Update scatter plot based on widget selections."""
-            filtered_df = df[df["location"].isin(selected_locations)] if selected_locations else df
-            if selected_fields:
-                filtered_df = filtered_df[filtered_df["field_name"].isin(selected_fields)]
+            filtered_df = df[df["field_key"].isin(selected_keys)] if selected_keys else df
             if filtered_df.empty:
                 return hv.Points([]).opts(title="No data matches filters")
             points = hv.Points(
                 filtered_df,
                 kdims=[x_col, y_col],
-                vdims=["index", "field_key", "field_name"],
+                vdims=["index", "field_key"],
             )
             hover = HoverTool(
                 tooltips=[
                     (x_col, "@{" + x_col + "}{0.4f}"),
                     (y_col, "@{" + y_col + "}{0.4f}"),
                     ("index", "@index"),
-                    ("field", "@field_name"),
+                    ("field_key", "@field_key"),
                 ],
                 point_policy="follow_mouse",
             )
@@ -705,11 +652,6 @@ class MeshStatsFilter(Filter["Mesh"]):
             Full width (12 columns), 3 rows tall.
         """
         return {"cols": 12, "rows": 3}
-
-
-# Backward-compatible alias.
-StatsFilter = MeshStatsFilter
-"""Deprecated alias for :class:`MeshStatsFilter`."""
 
 
 def merge_welford_stats(parquet_paths: list[str]) -> pa.Table:

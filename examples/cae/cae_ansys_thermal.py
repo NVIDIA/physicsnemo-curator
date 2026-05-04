@@ -45,7 +45,6 @@ single precision, and writes the processed meshes to disk.
 # writing outputs, and :func:`~physicsnemo_curator.run.run_pipeline` for
 # parallel execution.
 
-from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
@@ -94,8 +93,7 @@ source = AnsysRSTSource(
 OUTPUT_DIR = "output/ansys_thermal"
 
 pipeline = (
-    source.filter(MeshInfoFilter(output=f"{OUTPUT_DIR}/mesh_info.jsonl"))
-    .filter(MeshStatsFilter(output=f"{OUTPUT_DIR}/stats.parquet"))
+    source.filter(MeshStatsFilter(output=f"{OUTPUT_DIR}/stats.parquet"))
     .filter(PrecisionFilter(target_dtype="float32"))
     .write(MeshSink(output_dir=OUTPUT_DIR))
 )
