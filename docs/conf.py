@@ -16,10 +16,6 @@
 
 """Sphinx configuration for physicsnemo-curator documentation."""
 
-import os
-
-from sphinx_gallery.sorting import ExplicitOrder, FileNameSortKey
-
 project = "physicsnemo-curator"
 copyright = "2025 - 2026, NVIDIA CORPORATION & AFFILIATES"  # noqa: A001
 author = "NVIDIA"
@@ -35,33 +31,10 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx_autodoc_typehints",
-    "sphinx_gallery.gen_gallery",
     "myst_parser",
     "sphinx_copybutton",
     "sphinx_design",
 ]
-
-# ---------------------------------------------------------------------------
-# Sphinx-Gallery (executable examples)
-# ---------------------------------------------------------------------------
-# Set PLOT_GALLERY=0 to skip example execution during doc builds.
-sphinx_gallery_conf = {
-    "examples_dirs": ["../examples"],
-    "gallery_dirs": ["auto_examples"],
-    "filename_pattern": r"/.+\.py$",
-    "run_stale_examples": os.environ.get("RUN_STALE_EXAMPLES", "False").lower() in ("1", "true"),
-    "plot_gallery": os.environ.get("PLOT_GALLERY", "0"),
-    "subsection_order": ExplicitOrder(
-        [
-            "../examples/getting_started",
-            "../examples/cae",
-            "../examples/earth2",
-            "../examples/atm",
-            "../examples/extending",
-        ]
-    ),
-    "within_subsection_order": FileNameSortKey,
-}
 
 # ---------------------------------------------------------------------------
 # AutoAPI (static analysis — reads .pyi stubs without importing)
@@ -128,10 +101,6 @@ source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
 }
-
-# Suppress "cannot cache unpickleable configuration value" for sphinx_gallery_conf
-# (contains class references for sorting which are not pickleable).
-suppress_warnings = ["config.cache"]
 
 # Exclude internal working documents from the Sphinx build.
 exclude_patterns = ["superpowers/**", "specs/**"]

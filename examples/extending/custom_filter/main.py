@@ -14,40 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Creating a Custom Filter
-=========================
+"""Creating a Custom Filter."""
 
-This example shows how to implement and register a custom
-:class:`~physicsnemo_curator.core.base.Filter`.
-
-We create a ``LogTransformFilter`` that applies a ``log1p`` transform
-to a chosen variable in an :class:`xarray.DataArray` — a common
-preprocessing step for ERA5 total precipitation (``tp``), which has
-a highly skewed distribution.
-
-A filter is a callable that receives a **generator** of items and
-yields transformed (or unchanged) items downstream.  Filters can be
-**pass-through** (side-effect only), **in-place** (modify items),
-or **stateful** (accumulate results and flush at the end).
-
-.. note::
-
-   Install the DataArray extras before running::
-
-       pip install physicsnemo-curator[da]
-"""
-
-# %%
 # Step 1 — Define the Filter
-# ----------------------------
 #
-# A filter inherits from :class:`~physicsnemo_curator.core.base.Filter`
-# and implements three things:
+# A filter inherits from Filter and implements three things:
 #
-# 1. ``name`` / ``description`` class variables (for CLI discovery)
-# 2. ``params()`` class method (parameter descriptors)
-# 3. ``__call__(items)`` (the transform logic)
+# 1. name / description class variables (for CLI discovery)
+# 2. params() class method (parameter descriptors)
+# 3. __call__(items) (the transform logic)
 
 from __future__ import annotations
 
@@ -124,12 +99,10 @@ class LogTransformFilter(Filter["xr.DataArray"]):
                 yield da
 
 
-# %%
 # Step 2 — Register the Filter (Optional)
-# ----------------------------------------
 #
 # Registration makes the filter discoverable via the global registry
-# and the interactive CLI.  This is optional — unregistered filters
+# and the interactive CLI. This is optional — unregistered filters
 # work fine in pipelines built with Python code.
 
 from physicsnemo_curator.core.registry import registry
@@ -141,9 +114,7 @@ registered = registry.filters("da")
 print(f"Registered DA filters: {list(registered.keys())}")
 assert "Log Transform" in registered
 
-# %%
 # Step 3 — Use in a Pipeline
-# ---------------------------
 #
 # The custom filter plugs into the standard pipeline API just like
 # any built-in filter.
@@ -179,20 +150,16 @@ print(f"\nProcessed {len(results)} items")
 for i, paths in enumerate(results):
     print(f"  Index {i}: {paths}")
 
-# %%
 # Summary
-# -------
 #
 # To create a custom filter:
 #
-# 1. Subclass :class:`~physicsnemo_curator.core.base.Filter` with a
-#    type parameter (``Filter["xr.DataArray"]``, ``Filter["Mesh"]``,
-#    etc.)
-# 2. Set ``name`` and ``description`` class variables
-# 3. Implement ``params()`` and ``__call__(items)``
-# 4. Optionally register with ``registry.register_filter()``
+# 1. Subclass Filter with a type parameter (Filter["xr.DataArray"],
+#    Filter["Mesh"], etc.)
+# 2. Set name and description class variables
+# 3. Implement params() and __call__(items)
+# 4. Optionally register with registry.register_filter()
 #
-# For **stateful** filters (like statistics accumulators), add a
-# ``flush()`` method and an ``_output_path`` attribute.  See
-# :class:`~physicsnemo_curator.domains.mesh.filters.stats.MeshStatsFilter` for
-# an example with Welford accumulators and cross-worker merging.
+# For stateful filters (like statistics accumulators), add a flush()
+# method and an _output_path attribute. See MeshStatsFilter for an
+# example with Welford accumulators and cross-worker merging.

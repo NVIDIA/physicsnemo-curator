@@ -14,29 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Profiling a Pipeline
-====================
-
-This example demonstrates how to measure pipeline performance using
-:class:`~physicsnemo_curator.core.profiling.ProfiledPipeline`.
-
-``ProfiledPipeline`` is a transparent wrapper that records per-index
-and per-stage wall-clock timing without changing the pipeline's
-behaviour.  It can be passed directly to
-:func:`~physicsnemo_curator.run.run_pipeline` — backends see it as a
-regular pipeline.
-
-.. note::
-
-   Install the mesh extras before running::
-
-       pip install physicsnemo-curator[mesh]
-"""
-
-# %%
-# Imports
-# -------
+"""Profiling a Pipeline."""
 
 from physicsnemo_curator.core.profiling import ProfiledPipeline
 
@@ -46,14 +24,10 @@ from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 from physicsnemo_curator.run import run_pipeline
 
-# %%
 # Build and Wrap the Pipeline
-# ----------------------------
 #
-# First build a normal pipeline, then wrap it with
-# :class:`~physicsnemo_curator.core.profiling.ProfiledPipeline`.
-# The wrapper records timing for each stage: source, every filter,
-# and sink.
+# First build a normal pipeline, then wrap it with ProfiledPipeline.
+# The wrapper records timing for each stage: source, every filter, and sink.
 
 pipeline = (
     NavierStokesCylinderSource()
@@ -64,12 +38,10 @@ pipeline = (
 
 profiled = ProfiledPipeline(pipeline)
 
-# %%
 # Run with Profiling
-# ------------------
 #
-# Pass the ``ProfiledPipeline`` to ``run_pipeline`` exactly as you
-# would a normal pipeline.  Timing data is collected transparently.
+# Pass the ProfiledPipeline to run_pipeline exactly as you would a normal
+# pipeline. Timing data is collected transparently.
 
 results = run_pipeline(
     profiled,
@@ -81,23 +53,17 @@ results = run_pipeline(
 
 print(f"Processed {len(results)} indices")
 
-# %%
 # View Timing Summary
-# -------------------
 #
-# The :attr:`~physicsnemo_curator.core.profiling.ProfiledPipeline.metrics`
-# property returns a
-# :class:`~physicsnemo_curator.core.profiling.PipelineMetrics` object
-# with aggregated timing data.
+# The metrics property returns a PipelineMetrics object with aggregated
+# timing data.
 
 metrics = profiled.metrics
 
 print("\n--- Console Summary ---")
 metrics.to_console()
 
-# %%
 # Export Metrics
-# --------------
 #
 # Metrics can be exported to JSON or CSV for further analysis.
 
@@ -106,21 +72,16 @@ metrics.to_csv("output/profiling/timing.csv")
 
 print("\nExported timing.json and timing.csv")
 
-# %%
 # Inspect Per-Index Breakdown
-# ---------------------------
 #
-# Each :class:`~physicsnemo_curator.core.profiling.IndexMetrics` entry
-# contains per-stage durations.
+# Each IndexMetrics entry contains per-stage durations.
 
 summary = metrics.summary()
 print(f"\nTotal wall time: {summary['total_wall_time_ns'] / 1e9:.2f}s")
 print(f"Mean time per index: {summary['mean_index_time_ns'] / 1e9:.2f}s")
 print(f"Indices profiled: {summary['n_indices']}")
 
-# %%
 # Cleanup
-# -------
 #
 # Remove temporary metrics files created during profiling.
 

@@ -130,7 +130,7 @@ outputs/era5/
 
 ## Next Steps
 
-- See the full [Examples gallery](https://nvidia.github.io/physicsnemo-curator/auto_examples/index.html)
+- See the full [Examples](https://github.com/NVIDIA/physicsnemo-curator/tree/main/examples)
   for crash simulation, external aerodynamics, and more.
 - Read the {doc}`parallel` guide for details on execution backends and
   stateful filter handling.

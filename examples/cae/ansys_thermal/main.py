@@ -14,36 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Ansys Thermal Simulation ETL Pipeline
-======================================
+"""Ansys Thermal Simulation ETL."""
 
-This example demonstrates a **Source → Filter → Sink** pipeline for
-curating Ansys thermal simulation data.
-
-Ansys solvers produce ``.rst`` result files containing mesh coordinates,
-temperature distributions, heat flux vectors, and other physics fields.
-The pipeline reads these files with
-:class:`~physicsnemo_curator.domains.mesh.sources.ansys_rst.AnsysRSTSource`,
-logs mesh metadata, computes summary statistics, converts fields to
-single precision, and writes the processed meshes to disk.
-
-.. note::
-
-   This example requires the ``ansys-dpf-core`` package for reading
-   ``.rst`` files.  Install it with ``pip install ansys-dpf-core``.
-   Reading real ``.rst`` files additionally requires an Ansys
-   installation (2021 R1+) with a valid license.
-"""
-
-# %%
-# Imports
-# -------
-#
-# Import the pipeline building blocks: a **Source** for Ansys ``.rst``
-# files, informational / statistics / precision filters, a **Sink** for
-# writing outputs, and :func:`~physicsnemo_curator.run.run_pipeline` for
-# parallel execution.
+# Import the pipeline building blocks: a Source for Ansys .rst files,
+# informational / statistics / precision filters, a Sink for writing
+# outputs, and run_pipeline for parallel execution.
 
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
@@ -51,19 +26,16 @@ from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.ansys_rst import AnsysRSTSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
-# %%
 # Configure the Source
-# --------------------
 #
-# :class:`~physicsnemo_curator.domains.mesh.sources.ansys_rst.AnsysRSTSource`
-# scans ``input_dir`` for files matching ``*.rst``.  Each file
+# AnsysRSTSource scans input_dir for files matching *.rst. Each file
 # corresponds to one simulation case (e.g. a different thermal scenario).
 #
-# The source auto-discovers available result types in each file.  To
+# The source auto-discovers available result types in each file. To
 # limit extraction to specific fields, pass a list of result type names
-# such as ``["temperature", "heat_flux"]`` via the ``result_types``
-# parameter.  Leaving ``result_types`` empty (the default) extracts
-# every field the solver wrote.
+# such as ["temperature", "heat_flux"] via the result_types parameter.
+# Leaving result_types empty (the default) extracts every field the
+# solver wrote.
 
 INPUT_DIR = "input/ansys_thermal"
 
@@ -72,22 +44,17 @@ source = AnsysRSTSource(
     result_types=["temperature", "heat_flux"],
 )
 
-# %%
 # Build the Pipeline
-# ------------------
 #
 # Chain several filters in order:
 #
-# 1. **MeshInfoFilter** — Logs mesh metadata (node and element counts,
-#    field names and shapes) and writes a JSON-lines summary.
-#
-# 2. **MeshStatsFilter** — Computes per-field statistics (mean, standard
+# 1. MeshStatsFilter — Computes per-field statistics (mean, standard
 #    deviation, min, max) and writes them to a Parquet file.
 #
-# 3. **PrecisionFilter** — Converts floating-point fields from float64
+# 2. PrecisionFilter — Converts floating-point fields from float64
 #    to float32 to halve memory and storage requirements.
 #
-# Finally a **MeshSink** writes each processed mesh as a TensorDict
+# Finally a MeshSink writes each processed mesh as a TensorDict
 # memory-mapped directory.
 
 OUTPUT_DIR = "output/ansys_thermal"
@@ -98,12 +65,10 @@ pipeline = (
     .write(MeshSink(output_dir=OUTPUT_DIR))
 )
 
-# %%
 # Run the Pipeline
-# ----------------
 #
 # Process the first 3 simulation files in parallel using a process pool
-# with 4 workers.  Thermal simulations are typically smaller than crash
+# with 4 workers. Thermal simulations are typically smaller than crash
 # or CFD datasets, so more workers can be used.
 
 results = run_pipeline(
@@ -114,11 +79,9 @@ results = run_pipeline(
     progress=True,
 )
 
-# %%
 # Inspect Results
-# ---------------
 #
-# ``run_pipeline`` returns a list of output paths per index.  Each entry
+# run_pipeline returns a list of output paths per index. Each entry
 # is the list of files written by the sink for that simulation.
 
 for idx, paths in enumerate(results):
@@ -126,9 +89,7 @@ for idx, paths in enumerate(results):
     for p in paths:
         print(f"  {p}")
 
-# %%
 # Gather Statistics
-# -----------------
 #
 # Merge per-index shard files written by stateful filters into final outputs.
 
@@ -136,20 +97,17 @@ merged = gather_pipeline(pipeline)
 for path in merged:
     print(f"Merged statistics: {path}")
 
-# %%
 # Summary
-# -------
 #
 # This example showed how to:
 #
-# - Read Ansys ``.rst`` thermal simulation results with
-#   :class:`~physicsnemo_curator.domains.mesh.sources.ansys_rst.AnsysRSTSource`.
+# - Read Ansys .rst thermal simulation results with AnsysRSTSource.
 # - Auto-discover or explicitly select result fields (temperature,
 #   heat flux, displacement, stress, etc.).
 # - Log mesh metadata, compute statistics, and convert precision in a
 #   composable filter chain.
-# - Write processed meshes in parallel with ``run_pipeline``.
+# - Write processed meshes in parallel with run_pipeline.
 #
 # The same source works for structural analyses — just point it at
-# ``.rst`` files from a structural solver and the source will
+# .rst files from a structural solver and the source will
 # auto-discover displacement, stress, and strain fields.

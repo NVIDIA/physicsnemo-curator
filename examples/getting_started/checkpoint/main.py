@@ -14,31 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Checkpointing a Pipeline
-=========================
-
-This example demonstrates how to checkpoint pipeline execution using
-:class:`~physicsnemo_curator.core.checkpoint.CheckpointedPipeline`.
-
-``CheckpointedPipeline`` wraps a pipeline and records completed indices
-in a SQLite database.  If the pipeline is interrupted and restarted,
-already-completed indices are skipped and their cached output paths are
-returned immediately.
-
-This is especially useful for long-running pipelines over large
-datasets where you want crash resilience without re-processing.
-
-.. note::
-
-   Install the mesh extras before running::
-
-       pip install physicsnemo-curator[mesh]
-"""
-
-# %%
-# Imports
-# -------
+"""Checkpointing a Pipeline."""
 
 from physicsnemo_curator.core.checkpoint import CheckpointedPipeline
 
@@ -47,14 +23,10 @@ from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 from physicsnemo_curator.run import run_pipeline
 
-# %%
 # Build and Wrap the Pipeline
-# ----------------------------
 #
-# First build a normal pipeline, then wrap it with
-# :class:`~physicsnemo_curator.core.checkpoint.CheckpointedPipeline`.
-# The ``db_path`` argument specifies where the SQLite checkpoint file
-# is stored.
+# First build a normal pipeline, then wrap it with CheckpointedPipeline.
+# The db_path argument specifies where the SQLite checkpoint file is stored.
 
 pipeline = (
     NavierStokesCylinderSource()
@@ -67,9 +39,7 @@ checkpointed = CheckpointedPipeline(
     db_path="output/checkpoint/pipeline.db",
 )
 
-# %%
 # First Run — Process 5 Indices
-# ------------------------------
 #
 # On the first run, all indices are new and will be fully executed.
 
@@ -84,12 +54,10 @@ results = run_pipeline(
 print(f"First run processed {len(results)} indices")
 print(f"Checkpoint summary: {checkpointed.summary()}")
 
-# %%
 # Second Run — Resume from Checkpoint
-# ------------------------------------
 #
 # If we run the same pipeline again (even with overlapping indices),
-# completed indices are skipped.  Their cached output paths are returned
+# completed indices are skipped. Their cached output paths are returned
 # from the database without re-executing the pipeline.
 
 results_resumed = run_pipeline(
@@ -103,9 +71,7 @@ results_resumed = run_pipeline(
 print(f"\nSecond run returned {len(results_resumed)} results")
 print(f"Checkpoint summary: {checkpointed.summary()}")
 
-# %%
 # Query Checkpoint State
-# ----------------------
 #
 # The checkpoint database tracks which indices have been completed,
 # which failed, and which remain.
@@ -115,15 +81,10 @@ print(f"Remaining (of 500): {len(checkpointed.remaining_indices)}")
 print(f"Config hash: {checkpointed.config_hash[:16]}...")
 print(f"Database: {checkpointed.db_path}")
 
-# %%
 # Composing with ProfiledPipeline
-# --------------------------------
 #
-# ``CheckpointedPipeline`` composes with
-# :class:`~physicsnemo_curator.core.profiling.ProfiledPipeline` — you
-# can profile *and* checkpoint at the same time:
-#
-# .. code-block:: python
+# CheckpointedPipeline composes with ProfiledPipeline — you can profile
+# and checkpoint at the same time:
 #
 #     from physicsnemo_curator.core.profiling import ProfiledPipeline
 #
@@ -134,11 +95,9 @@ print(f"Database: {checkpointed.db_path}")
 # The checkpoint wraps the profiled pipeline, so skipped indices bypass
 # both profiling and execution.
 
-# %%
 # Reset Checkpoint
-# ----------------
 #
-# To re-process all indices from scratch, call ``reset()``:
+# To re-process all indices from scratch, call reset():
 
 checkpointed.reset()
 print(f"\nAfter reset: {checkpointed.summary()}")

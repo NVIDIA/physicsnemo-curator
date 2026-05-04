@@ -117,5 +117,5 @@ registry.register_sink("mymodule", MySink)
 
 ## Gallery Example
 
-For a complete worked example, see
-{doc}`/auto_examples/extending/extending_custom_sink`.
+For a complete worked example, see the
+[custom_sink example](https://github.com/NVIDIA/physicsnemo-curator/tree/main/examples/extending/custom_sink).

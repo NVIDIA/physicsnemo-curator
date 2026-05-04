@@ -8,7 +8,7 @@
 Welcome to the PhysicsNeMo Curator user guide.  This guide covers installation,
 core concepts, and the tools needed to build and run data-curation pipelines.
 If you want to skip straight to running code, have a look at the
-[Examples](../auto_examples/index) instead and come back here when you have
+[Examples](https://github.com/NVIDIA/physicsnemo-curator/tree/main/examples) instead and come back here when you have
 questions.
 
 ## Getting Started

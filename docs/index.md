@@ -79,9 +79,9 @@ domains/index
 ## Examples
 
 ```{toctree}
-:maxdepth: 2
+:hidden:
 
-auto_examples/index
+Examples <https://github.com/NVIDIA/physicsnemo-curator/tree/main/examples>
 ```
 
 ## Benchmarks

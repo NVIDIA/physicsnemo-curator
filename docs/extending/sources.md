@@ -127,5 +127,5 @@ registry.register_source("mymodule", MySource)
 
 ## Gallery Example
 
-For a complete worked example, see
-{doc}`/auto_examples/extending/extending_custom_source`.
+For a complete worked example, see the
+[custom_source example](https://github.com/NVIDIA/physicsnemo-curator/tree/main/examples/extending/custom_source).

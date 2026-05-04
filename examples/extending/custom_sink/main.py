@@ -14,36 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Creating a Custom Sink
-=======================
+"""Creating a Custom Sink."""
 
-This example shows how to implement and register a custom
-:class:`~physicsnemo_curator.core.base.Sink`.
-
-We create an ``HDF5Sink`` that writes :class:`xarray.DataArray` fields
-to HDF5 files — one file per source index, with each variable stored
-as a separate dataset.  This demonstrates the core sink contract:
-consume an iterator of items, persist them, and return the paths of
-written files.
-
-.. note::
-
-   Install the DataArray extras and h5py before running::
-
-       pip install physicsnemo-curator[da] h5py
-"""
-
-# %%
 # Step 1 — Define the Sink
-# -------------------------
 #
-# A sink inherits from :class:`~physicsnemo_curator.core.base.Sink` and
-# implements three things:
+# A sink inherits from Sink and implements three things:
 #
-# 1. ``name`` / ``description`` class variables
-# 2. ``params()`` class method
-# 3. ``__call__(items, index)`` — consume the iterator, write data,
+# 1. name / description class variables
+# 2. params() class method
+# 3. __call__(items, index) — consume the iterator, write data,
 #    return a list of written file paths
 
 from __future__ import annotations
@@ -171,9 +150,7 @@ class HDF5Sink(Sink["xr.DataArray"]):
         return paths
 
 
-# %%
 # Step 2 — Register the Sink (Optional)
-# ----------------------------------------
 #
 # Registration makes the sink discoverable in the global registry.
 
@@ -185,11 +162,9 @@ registered = registry.sinks("da")
 print(f"Registered DA sinks: {list(registered.keys())}")
 assert "HDF5 Writer" in registered
 
-# %%
 # Step 3 — Use in a Pipeline
-# ---------------------------
 #
-# The custom sink plugs into the standard pipeline API.  We fetch
+# The custom sink plugs into the standard pipeline API. We fetch
 # ERA5 temperature and wind data, then write each timestep to a
 # separate HDF5 file.
 
@@ -220,9 +195,7 @@ print(f"\nProcessed {len(results)} items")
 for i, paths in enumerate(results):
     print(f"  Index {i}: {paths}")
 
-# %%
 # Step 4 — Verify Output
-# -----------------------
 #
 # Read back the HDF5 file to confirm the data was written correctly.
 
@@ -235,19 +208,17 @@ with h5py.File(first_path, "r") as f:
         ds = f[key]
         print(f"  {key}: shape={ds.shape}, dtype={ds.dtype}")
 
-# %%
 # Summary
-# -------
 #
 # To create a custom sink:
 #
-# 1. Subclass :class:`~physicsnemo_curator.core.base.Sink` with a
-#    type parameter (``Sink["xr.DataArray"]``, ``Sink["Mesh"]``, etc.)
-# 2. Set ``name`` and ``description`` class variables
-# 3. Implement ``params()`` and ``__call__(items, index) -> list[str]``
+# 1. Subclass Sink with a type parameter (Sink["xr.DataArray"],
+#    Sink["Mesh"], etc.)
+# 2. Set name and description class variables
+# 3. Implement params() and __call__(items, index) -> list[str]
 # 4. Ensure the output directory is created automatically
-# 5. Return ``[]`` for empty iterators (no crash, no empty files)
-# 6. Optionally register with ``registry.register_sink()``
+# 5. Return [] for empty iterators (no crash, no empty files)
+# 6. Optionally register with registry.register_sink()
 #
-# For **append** semantics (multiple indices writing to the same file),
-# see :class:`~physicsnemo_curator.domains.da.sinks.zarr_writer.ZarrSink`.
+# For append semantics (multiple indices writing to the same file),
+# see ZarrSink.
