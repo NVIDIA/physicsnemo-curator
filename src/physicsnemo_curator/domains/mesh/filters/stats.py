@@ -246,20 +246,19 @@ class MeshStatsFilter(Filter["Mesh"]):
     Parameters
     ----------
     output : str
-        File path for the output Parquet file.  May contain a
-        ``{worker_id}`` placeholder which is substituted with a unique
-        per-worker identifier (PID + thread ID) at flush time so that
-        each parallel worker writes to its own file.
+        File path for the output Parquet file.  When the pipeline is run
+        in parallel, the runner automatically rewrites the path to include
+        a unique per-worker suffix so that each worker writes to its own
+        file.
     per_component : bool
         Whether to compute separate statistics for each vector component.
         Default is ``True``.
 
     Examples
     --------
-    >>> filt = MeshStatsFilter(output="output/stats_{worker_id}.parquet")
+    >>> filt = MeshStatsFilter(output="output/stats.parquet")
     >>> pipeline = source.filter(filt).write(sink)
-    >>> results = run_pipeline(pipeline, n_jobs=4, backend="thread_pool")
-    >>> # Each worker writes: output/stats_<pid>_<tid>.parquet
+    >>> results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
     """
 
     name: ClassVar[str] = "Mesh Statistics"
@@ -287,33 +286,17 @@ class MeshStatsFilter(Filter["Mesh"]):
         ]
 
     def __init__(self, output: str, per_component: bool = True) -> None:
-        import threading
-
         self._output_path = pathlib.Path(output)
         self._per_component = per_component
-        self._local = threading.local()
+        self._rows: list[_StatsRow] = []
         self._last_artifacts: list[str] = []
-
-    @property
-    def _rows(self) -> list[_StatsRow]:
-        """Return the thread-local rows list.
-
-        Each thread gets its own accumulator to avoid races when the
-        same filter instance is shared across threads in a thread-pool
-        backend.
-        """
-        if not hasattr(self._local, "rows"):
-            self._local.rows: list[_StatsRow] = []
-        return self._local.rows
 
     def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:
         """Compute statistics for each mesh and yield it unchanged.
 
-        Statistics are accumulated in thread-local memory and written to
-        the output Parquet file when :meth:`flush` is called (typically
-        by the pipeline runner after each index is processed).  Using
-        thread-local storage ensures each worker accumulates its own
-        rows independently.
+        Statistics are accumulated in memory and written to the output
+        Parquet file when :meth:`flush` is called (typically by the
+        pipeline runner after each index is processed).
 
         Parameters
         ----------
@@ -331,7 +314,7 @@ class MeshStatsFilter(Filter["Mesh"]):
             yield mesh
 
     def _flush_rows(self) -> str | None:
-        """Write current thread's accumulated rows to Parquet (append if exists).
+        """Write accumulated rows to Parquet (append if file exists).
 
         Returns
         -------

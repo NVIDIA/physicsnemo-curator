@@ -34,7 +34,6 @@ results = run_pipeline(pipeline, indices=[0, 5, 10])
 | `"process_pool"` | None | `ProcessPoolExecutor`.  True parallelism for CPU-bound tasks. |
 | `"loky"` | `joblib` | joblib's robust process pool.  Better memory handling for large arrays. |
 | `"dask"` | `dask` | `dask.bag` for distributed execution.  Scales to clusters. |
-| `"prefect"` | `prefect` | Prefect workflow orchestration with observability, retries, and scheduling. |
 | `"auto"` | Varies | Picks the best available: dask → loky → process_pool. |
 
 ### Installing optional backends
@@ -43,7 +42,6 @@ results = run_pipeline(pipeline, indices=[0, 5, 10])
 # Install individual backend extras
 pip install 'physicsnemo-curator[loky]'
 pip install 'physicsnemo-curator[dask]'
-pip install 'physicsnemo-curator[prefect]'
 
 # Or install multiple
 pip install 'physicsnemo-curator[loky,dask]'
@@ -81,7 +79,7 @@ run_pipeline(
     pipeline,          # Pipeline with source + filters + sink
     *,
     n_jobs=1,          # Workers.  -1 = all CPUs.
-    backend="auto",    # "auto", "sequential", "thread_pool", "process_pool", "loky", "dask", "prefect"
+    backend="auto",    # "auto", "sequential", "thread_pool", "process_pool", "loky", "dask"
     indices=None,      # Subset of source indices, or None for all
     progress=True,     # Show progress (Textual TUI for sequential, tqdm for parallel)
     **backend_kwargs,  # Extra args forwarded to the backend executor
@@ -93,7 +91,7 @@ list contains file paths returned by the sink for that index.
 
 ## Process Isolation
 
-All multiprocess backends (`"process_pool"`, `"loky"`, `"dask"`, `"prefect"`) execute each
+All multiprocess backends (`"process_pool"`, `"loky"`, `"dask"`) execute each
 index in a **separate process**.  This means:
 
 - Each worker gets an independent copy of the pipeline, source, filters, and sink.
@@ -151,21 +149,6 @@ pipeline = (
 
 # Process first 10 runs in parallel
 results = run_pipeline(pipeline, n_jobs=4, indices=list(range(10)))
-```
-
-### Using Prefect with retries
-
-```python
-from physicsnemo_curator import run_pipeline
-
-# Prefect provides automatic retries, logging, and observability
-results = run_pipeline(
-    pipeline,
-    n_jobs=4,
-    backend="prefect",
-    retries=3,
-    retry_delay_seconds=10,
-)
 ```
 
 ### Choosing a backend at runtime

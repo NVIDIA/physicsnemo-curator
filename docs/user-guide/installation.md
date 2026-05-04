@@ -41,7 +41,6 @@ advanced backends, install the corresponding extra:
 |-------|---------|---------|
 | **loky** | joblib/loky (robust process pool) | `pip install 'physicsnemo-curator[loky]'` |
 | **dask** | Dask bags (distributed execution) | `pip install 'physicsnemo-curator[dask]'` |
-| **prefect** | Prefect (workflow orchestration) | `pip install 'physicsnemo-curator[prefect]'` |
 
 ```bash
 # Install multiple backend extras

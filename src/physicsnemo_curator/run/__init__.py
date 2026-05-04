@@ -31,8 +31,6 @@ Available Backends
   (requires ``joblib``).
 * ``"dask"`` — ``dask.bag`` for parallel/distributed execution
   (requires ``dask``).
-* ``"prefect"`` — Prefect workflow orchestration with observability
-  (requires ``prefect``).
 * ``"auto"`` — picks the best available backend automatically.
 
 Custom Backends
@@ -66,7 +64,6 @@ from typing import TYPE_CHECKING, Any, Literal
 from physicsnemo_curator.run.base import RunBackend, RunConfig
 from physicsnemo_curator.run.dask import DaskBackend
 from physicsnemo_curator.run.loky import LokyBackend
-from physicsnemo_curator.run.prefect import PrefectBackend
 from physicsnemo_curator.run.process_pool import ProcessPoolBackend
 from physicsnemo_curator.run.sequential import SequentialBackend
 from physicsnemo_curator.run.thread_pool import ThreadPoolBackend
@@ -181,7 +178,6 @@ register_backend(ThreadPoolBackend)
 register_backend(ProcessPoolBackend)
 register_backend(LokyBackend)
 register_backend(DaskBackend)
-register_backend(PrefectBackend)
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +209,7 @@ def run_pipeline(
     backend : str
         Execution backend. One of ``"auto"``, ``"sequential"``,
         ``"thread_pool"``, ``"process_pool"``, ``"loky"``, ``"dask"``,
-        ``"prefect"``, or any custom registered backend.
+        or any custom registered backend.
     indices : Iterable[int] | None
         Specific source indices to process. ``None`` (default) processes
         all indices ``range(len(pipeline))``.
@@ -256,16 +252,6 @@ def run_pipeline(
     Parallel with 4 processes:
 
     >>> results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
-
-    Using Prefect with retries:
-
-    >>> results = run_pipeline(
-    ...     pipeline,
-    ...     n_jobs=4,
-    ...     backend="prefect",
-    ...     retries=3,
-    ...     retry_delay_seconds=10,
-    ... )
 
     Process only a subset of indices:
 

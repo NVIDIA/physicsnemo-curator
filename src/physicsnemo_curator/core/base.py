@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -374,8 +373,18 @@ class Pipeline[T]:
     track_gpu: bool = False
     db_dir: pathlib.Path | None = None
     _store: PipelineStore | None = field(default=None, init=False, repr=False, compare=False)
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
     invocation_id: str | None = field(default=None, init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        """Eagerly create the pipeline store when metrics are enabled.
+
+        The store is only created for complete pipelines (those with a
+        sink attached).  Intermediate pipelines built via :meth:`filter`
+        skip store creation — the final pipeline produced by
+        :meth:`write` will create it.
+        """
+        if self.track_metrics and self.sink is not None:
+            self._init_store()
 
     def filter(self, f: Filter[T]) -> Pipeline[T]:
         """Return a new pipeline with an additional filter appended.
@@ -596,10 +605,12 @@ class Pipeline[T]:
                 tracemalloc.stop()
 
     def _get_store(self) -> PipelineStore:
-        """Lazily create and return the pipeline store.
+        """Return the pipeline store, creating it if necessary.
 
-        Thread-safe via a lock to prevent multiple stores from being
-        created when threads race on ``_get_store()``.
+        The store is normally created eagerly during ``__post_init__``
+        for complete pipelines.  This method handles the edge case where
+        a user accesses store-backed properties before attaching a sink,
+        or after deserialization.
 
         The database path is resolved in priority order:
 
@@ -616,30 +627,36 @@ class Pipeline[T]:
         if self._store is not None:
             return self._store
 
-        with self._lock:
-            # Double-check after acquiring lock
-            if self._store is not None:
-                return self._store
+        self._init_store()
+        assert self._store is not None  # noqa: S101
+        return self._store
 
-            import pathlib
+    def _init_store(self) -> None:
+        """Create the SQLite-backed pipeline store.
 
-            from physicsnemo_curator.core.cache import default_cache_dir
-            from physicsnemo_curator.core.pipeline_store import (
-                PipelineStore,
-                _config_hash,
-                _pipeline_config,
-            )
+        Idempotent — if the store already exists, this is a no-op.
+        """
+        if self._store is not None:
+            return
 
-            config = _pipeline_config(self)
-            hash_ = _config_hash(config)
+        import pathlib
 
-            if self.db_dir is not None:
-                db_path = pathlib.Path(self.db_dir) / f"{hash_[:16]}.db"
-            else:
-                db_path = default_cache_dir() / f"{hash_[:16]}.db"
+        from physicsnemo_curator.core.cache import default_cache_dir
+        from physicsnemo_curator.core.pipeline_store import (
+            PipelineStore,
+            _config_hash,
+            _pipeline_config,
+        )
 
-            self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_)
-            return self._store
+        config = _pipeline_config(self)
+        hash_ = _config_hash(config)
+
+        if self.db_dir is not None:
+            db_path = pathlib.Path(self.db_dir) / f"{hash_[:16]}.db"
+        else:
+            db_path = default_cache_dir() / f"{hash_[:16]}.db"
+
+        self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_)
 
     @staticmethod
     def _gpu_setup() -> int | None:
@@ -679,16 +696,15 @@ class Pipeline[T]:
         return torch.cuda.max_memory_allocated() - baseline
 
     def __getstate__(self) -> dict[str, Any]:
-        """Return picklable state, dropping the non-serializable store and lock.
+        """Return picklable state, dropping the non-serializable store.
 
         Returns
         -------
         dict[str, Any]
-            Instance state with ``_store`` and ``_lock`` excluded.
+            Instance state with ``_store`` excluded.
         """
         state = self.__dict__.copy()
         state["_store"] = None
-        state.pop("_lock", None)
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -700,7 +716,6 @@ class Pipeline[T]:
             Pickled state dictionary.
         """
         state["_store"] = None
-        state["_lock"] = threading.Lock()
         self.__dict__.update(state)
 
     # -- Query API (delegates to store) ----------------------------------------

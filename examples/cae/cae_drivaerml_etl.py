@@ -20,13 +20,7 @@ DrivAerML End-to-End ETL Pipeline
 
 This example demonstrates a complete **Source → Filter → Sink** pipeline
 that reads `DrivAerML <https://huggingface.co/datasets/neashton/drivaerml>`_
-meshes in **multi** mode, producing:
-
-- A :class:`~physicsnemo.mesh.domain_mesh.DomainMesh` per run — combining
-  the volumetric interior (point-cloud from VTU cell centroids), boundary
-  surface (triangulated VTP with flow fields), and global reference data
-  (``U_inf``, ``rho_inf``).
-- STL geometry meshes (with and without solid merging) for reference.
+meshes.
 
 The pipeline showcases:
 
@@ -37,6 +31,8 @@ The pipeline showcases:
   parallel workers.
 - **PrecisionFilter** — casts float64 fields to float32, halving storage
   and matching training precision.
+- **RandomPermutationFilter** — randomly shuffles point and cell ordering
+  to remove spatial bias before training.
 - **MeshSink with run-grouped naming** — uses ``run_{run_id}/{mesh_name}``
   to organise outputs into per-run subdirectories matching the canonical
   DrivAerML structure (e.g. ``run_1/domain_1.pdmsh``,
@@ -48,10 +44,9 @@ Data Access
 By default, :class:`~physicsnemo_curator.domains.mesh.sources.drivaerml.DrivAerMLSource`
 streams data directly from HuggingFace Hub (no manual download required).
 Files are cached locally after the first access.
-
-To use a **pre-downloaded local copy** instead (recommended for repeated
-runs or air-gapped environments), download with the HuggingFace CLI and
-point the source at the local path:
+But this dataset has very large files, thus its suggested users explcitly manage the
+download process with HuggingFace CLI.
+To download two examples use the following command:
 
 .. code-block:: bash
 
@@ -61,7 +56,7 @@ point the source at the local path:
     huggingface-cli download neashton/drivaerml \\
         --repo-type dataset \\
         --include "run_1/*" "run_2/*" \\
-        --local-dir /path/to/drivaerml
+        --local-dir input/drivaerml
 
 Then pass ``url="file:///path/to/drivaerml"`` to the source constructor.
 """
@@ -79,19 +74,11 @@ from pathlib import Path
 
 from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
+from physicsnemo_curator.domains.mesh.filters.random_permutation import RandomPermutationFilter
 from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
-
-# %%
-# Output Directory
-# ----------------
-#
-# All outputs are written relative to this example file.
-
-_HERE = Path(__file__).resolve().parent
-_OUTPUT_DIR = _HERE / "output" / "drivaerml"
 
 # %%
 # Configure the Source
@@ -106,13 +93,13 @@ _OUTPUT_DIR = _HERE / "output" / "drivaerml"
 # - **domain** — DomainMesh combining volume interior + boundary surface
 # - **stl** — vehicle geometry from the STL file
 # - **single_solid** — same STL merged into one contiguous solid
-#
-# .. note::
-#
-#    To use a local copy instead of streaming, pass:
-#    ``url="file:///path/to/drivaerml"``
+
+_HERE = Path(__file__).resolve().parent.parent
+_INPUT_DIR = _HERE / "input" / "drivaerml"
+_OUTPUT_DIR = _HERE / "output" / "drivaerml"
 
 source = DrivAerMLSource(
+    url=f"file://{_INPUT_DIR}",
     mesh_type="multi",
     manifold_dim="auto",
     point_source="vertices",
@@ -137,7 +124,9 @@ print(f"Total runs available: {n_runs}")
 #    numerically stable Welford accumulators that merge across workers.
 # 3. :class:`~physicsnemo_curator.domains.mesh.filters.precision.PrecisionFilter`
 #    casts all float64 fields to float32 for training consistency.
-# 4. :class:`~physicsnemo_curator.domains.mesh.sinks.mesh_writer.MeshSink`
+# 4. :class:`~physicsnemo_curator.domains.mesh.filters.random_permutation.RandomPermutationFilter`
+#    randomly shuffles point and cell ordering to remove spatial bias.
+# 5. :class:`~physicsnemo_curator.domains.mesh.sinks.mesh_writer.MeshSink`
 #    writes each mesh in PhysicsNeMo's native format — ``.pdmsh`` for
 #    :class:`DomainMesh` and ``.pmsh`` for plain :class:`Mesh`.
 #
@@ -151,6 +140,7 @@ pipeline = (
     source.filter(MeshInfoFilter(output=str(_OUTPUT_DIR / "mesh_info.jsonl")))
     .filter(MeshStatsFilter(output=str(_OUTPUT_DIR / "stats.parquet")))
     .filter(PrecisionFilter(target_dtype="float32"))
+    .filter(RandomPermutationFilter(seed=42))
     .write(
         MeshSink(
             output_dir=str(_OUTPUT_DIR),
@@ -170,7 +160,7 @@ pipeline = (
 
 results = run_pipeline(
     pipeline,
-    n_jobs=4,
+    n_jobs=3,
     backend="process_pool",
     progress=True,
 )
@@ -207,10 +197,6 @@ for path in merged:
 # Output Structure
 # ----------------
 #
-# The output directory structure is directly compatible with
-# ``MeshReader`` from `PhysicsNeMo PR #1512
-# <https://github.com/NVIDIA/physicsnemo/pull/1512>`_:
-#
 # .. code-block:: text
 #
 #     output/drivaerml/
@@ -225,15 +211,3 @@ for path in merged:
 #     │   ├── drivaer_2.stl.pmsh/
 #     │   └── drivaer_2_single_solid.stl.pmsh/
 #     └── ...
-#
-# Point a training config at the output:
-#
-# .. code-block:: yaml
-#
-#     datadir: output/drivaerml/
-#
-#     pipeline:
-#       reader:
-#         _target_: ${dp:MeshReader}
-#         path: ${datadir}
-#         pattern: "**/*.pdmsh"
