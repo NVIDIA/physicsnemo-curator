@@ -101,7 +101,6 @@ class TestBackendRegistry:
         assert "process_pool" in backends
         assert "loky" in backends
         assert "dask" in backends
-        assert "prefect" in backends
 
     def test_backend_info_structure(self):
         """Backend info should contain expected fields."""
@@ -182,7 +181,6 @@ class TestImports:
         from physicsnemo_curator.run import (
             DaskBackend,
             LokyBackend,
-            PrefectBackend,
             ProcessPoolBackend,
             SequentialBackend,
             ThreadPoolBackend,
@@ -193,4 +191,3 @@ class TestImports:
         assert ProcessPoolBackend.name == "process_pool"
         assert LokyBackend.name == "loky"
         assert DaskBackend.name == "dask"
-        assert PrefectBackend.name == "prefect"

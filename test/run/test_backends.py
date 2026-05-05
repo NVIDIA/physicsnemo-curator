@@ -308,28 +308,6 @@ class TestDaskBackend:
 
 
 # ---------------------------------------------------------------------------
-# Prefect backend tests (optional dependency)
-# ---------------------------------------------------------------------------
-
-
-class TestPrefectBackend:
-    """Integration tests for the prefect backend (requires prefect)."""
-
-    def test_prefect_runs(self, simple_pipeline):
-        """Prefect backend should produce correct results."""
-        pytest.importorskip("prefect")
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="prefect", progress=False)
-        assert len(results) == 5
-        assert results[0] == ["item_0_0"]
-        assert results[4] == ["item_4_12"]
-
-    def test_prefect_missing_raises(self, simple_pipeline):
-        """Missing prefect should raise ImportError with helpful message."""
-        with patch.dict("sys.modules", {"prefect": None}), pytest.raises(ImportError, match="prefect"):
-            run_pipeline(simple_pipeline, n_jobs=2, backend="prefect", progress=False)
-
-
-# ---------------------------------------------------------------------------
 # Auto backend tests
 # ---------------------------------------------------------------------------
 

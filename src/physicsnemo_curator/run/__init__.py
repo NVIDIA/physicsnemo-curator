@@ -371,7 +371,6 @@ def gather_pipeline(pipeline: Pipeline[Any]) -> list[str]:
 __all__ = [
     "DaskBackend",
     "LokyBackend",
-    "PrefectBackend",
     "ProcessPoolBackend",
     "RunBackend",
     "RunConfig",

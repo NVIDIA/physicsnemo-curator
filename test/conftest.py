@@ -98,7 +98,6 @@ _GROUP_SENTINELS: dict[str, list[str]] = {
     "cli": ["click", "questionary"],
     "loky": ["joblib"],
     "dask": ["dask"],
-    "prefect": ["prefect"],
 }
 
 # Maps test subdirectory names to the dependency group they require.

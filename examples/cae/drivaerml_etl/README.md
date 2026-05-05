@@ -18,6 +18,9 @@ The pipeline:
 ## Prerequisites
 
 ```bash
+uv sync --group mesh
+
+# or with pip
 pip install physicsnemo-curator[mesh]
 pip install huggingface_hub[cli]
 ```

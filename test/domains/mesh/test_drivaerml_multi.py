@@ -272,6 +272,9 @@ class TestDrivAerMLMultiMeshContent:
             grid.point_data["Velocity"] = np.random.default_rng(run_id).standard_normal((4, 3)).astype(np.float64)
             grid.cell_data["Pressure"] = np.array([1.0 * run_id], dtype=np.float64)
             grid.save(str(run_dir / f"volume_{run_id}.vtu"))
+            # STL geometry file
+            stl_sphere = pv.Sphere(radius=0.5, theta_resolution=4, phi_resolution=4)
+            stl_sphere.save(str(run_dir / f"drivaer_{run_id}.stl"))
         return tmp_path
 
     def test_multi_yields_three_meshes(self, local_drivaerml: pathlib.Path) -> None:
@@ -283,7 +286,7 @@ class TestDrivAerMLMultiMeshContent:
         assert len(meshes) == 3
 
     def test_domain_mesh_is_fp32(self, local_drivaerml: pathlib.Path) -> None:
-        """Domain mesh has float32 points and data."""
+        """Domain mesh interior has float32 points and data."""
         import torch
 
         from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
@@ -291,8 +294,9 @@ class TestDrivAerMLMultiMeshContent:
         source = DrivAerMLSource(mesh_type="multi", url=str(local_drivaerml))
         meshes = list(source[0])
         domain = meshes[0]
-        # Points should be fp32
-        assert domain.points.dtype == torch.float32
+        # DomainMesh exposes sub-meshes via all_meshes(); check interior points
+        interior = list(domain.all_meshes())[0][1]
+        assert interior.points.dtype == torch.float32
 
     def test_stl_mesh_is_fp32(self, local_drivaerml: pathlib.Path) -> None:
         """STL mesh has float32 points and data."""
@@ -324,7 +328,8 @@ class TestDrivAerMLMultiMeshContent:
         domain = meshes[0]
         # With cell_centroids on a tetrahedron, n_points should equal n_cells (1 cell)
         # The volume has 1 tetrahedron → 1 centroid point
-        assert domain.n_points == 1
+        interior = list(domain.all_meshes())[0][1]
+        assert interior.n_points == 1
 
     def test_mesh_parts_domain_only(self, local_drivaerml: pathlib.Path) -> None:
         """mesh_parts=['domain'] yields only the domain mesh."""
@@ -365,6 +370,10 @@ class TestDrivAerMLMultiPipeline:
             grid = pv.UnstructuredGrid(cells, cell_types, points)
             grid.cell_data["Pressure"] = np.array([1.0 * run_id])
             grid.save(str(run_dir / f"volume_{run_id}.vtu"))
+
+            # STL geometry file
+            stl_sphere = pv.Sphere(radius=0.5, theta_resolution=4, phi_resolution=4)
+            stl_sphere.save(str(run_dir / f"drivaer_{run_id}.stl"))
         return tmp_path
 
     def test_full_multi_pipeline(self, local_drivaerml: pathlib.Path, tmp_path: pathlib.Path) -> None:
@@ -394,13 +403,13 @@ class TestDrivAerMLMultiPipeline:
         assert len(paths0) == 3
         assert len(paths1) == 3
 
-        # Check expected directory names
-        assert (output_dir / "run_1" / "domain_1").exists()
-        assert (output_dir / "run_1" / "drivaer_1.stl").exists()
-        assert (output_dir / "run_1" / "drivaer_1_single_solid.stl").exists()
-        assert (output_dir / "run_5" / "domain_5").exists()
-        assert (output_dir / "run_5" / "drivaer_5.stl").exists()
-        assert (output_dir / "run_5" / "drivaer_5_single_solid.stl").exists()
+        # Check expected directory names (MeshSink appends .pdmsh/.pmsh extensions)
+        assert (output_dir / "run_1" / "domain_1.pdmsh").exists()
+        assert (output_dir / "run_1" / "drivaer_1.stl.pmsh").exists()
+        assert (output_dir / "run_1" / "drivaer_1_single_solid.stl.pmsh").exists()
+        assert (output_dir / "run_5" / "domain_5.pdmsh").exists()
+        assert (output_dir / "run_5" / "drivaer_5.stl.pmsh").exists()
+        assert (output_dir / "run_5" / "drivaer_5_single_solid.stl.pmsh").exists()
 
     def test_subset_pipeline(self, local_drivaerml: pathlib.Path, tmp_path: pathlib.Path) -> None:
         """Pipeline with mesh_parts subset writes only requested meshes."""
@@ -423,6 +432,6 @@ class TestDrivAerMLMultiPipeline:
 
         paths = pipeline[0]
         assert len(paths) == 1
-        assert (output_dir / "run_1" / "drivaer_1.stl").exists()
+        assert (output_dir / "run_1" / "drivaer_1.stl.pmsh").exists()
         # domain should NOT exist
-        assert not (output_dir / "run_1" / "domain_1").exists()
+        assert not (output_dir / "run_1" / "domain_1.pdmsh").exists()
