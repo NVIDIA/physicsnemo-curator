@@ -686,7 +686,7 @@ class PipelineStore:
             msg = f"Database file not found: {db_path}"
             raise FileNotFoundError(msg)
 
-        conn = sqlite3.connect(str(db_path), timeout=30)
+        conn = cls._open_connection(db_path)
         try:
             row = conn.execute(
                 "SELECT config_hash, config_json FROM pipeline_runs ORDER BY run_id DESC LIMIT 1",
@@ -701,6 +701,51 @@ class PipelineStore:
         config_hash, config_json = row
         pipeline_config = json.loads(config_json)
         return cls(db_path, pipeline_config, config_hash)
+
+    @staticmethod
+    def _open_connection(db_path: pathlib.Path) -> sqlite3.Connection:
+        """Open a WAL-aware connection with retry logic.
+
+        This is used by :meth:`from_db` and other entry points that need
+        to open a database file that may have been written with WAL mode
+        enabled.  It sets a busy timeout and attempts to read the WAL
+        so that any uncommitted WAL data is visible.
+
+        Parameters
+        ----------
+        db_path : pathlib.Path
+            Path to the database file.
+
+        Returns
+        -------
+        sqlite3.Connection
+            A connection with WAL mode and busy timeout configured.
+        """
+        import time
+
+        conn = sqlite3.connect(str(db_path), timeout=30)
+        conn.execute("PRAGMA busy_timeout=30000")
+
+        max_retries = 10
+        delay = 0.05
+        for attempt in range(max_retries):
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError:
+                if attempt == max_retries - 1:
+                    with contextlib.suppress(sqlite3.OperationalError):
+                        conn.execute("PRAGMA journal_mode=DELETE")
+                else:
+                    time.sleep(delay)
+                    delay = min(delay * 2, 2.0)
+
+        # Force a WAL checkpoint to ensure all committed data is in the
+        # main database file, making it readable by other processes.
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+
+        return conn
 
     def _connect(self) -> sqlite3.Connection:
         """Open a WAL-mode connection to the database.
@@ -870,6 +915,10 @@ class PipelineStore:
                 )
 
             conn.commit()
+            # Flush WAL to main DB so out-of-process readers (dashboard)
+            # see this result immediately.
+            with contextlib.suppress(sqlite3.OperationalError):
+                conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
         finally:
             conn.close()
 
@@ -896,6 +945,10 @@ class PipelineStore:
                 (index, self._run_id, now, wall_time_ns, error),
             )
             conn.commit()
+            # Flush WAL to main DB so out-of-process readers (dashboard)
+            # see this result immediately.
+            with contextlib.suppress(sqlite3.OperationalError):
+                conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
         finally:
             conn.close()
 
@@ -998,6 +1051,23 @@ class PipelineStore:
             "total_elapsed_s": total_elapsed_ns / 1e9,
             "workers": worker_count,
         }
+
+    def checkpoint(self) -> None:
+        """Force a WAL checkpoint to flush data to the main database file.
+
+        This ensures that all committed writes are transferred from the
+        WAL file into the main ``.db`` file, making them visible to
+        readers that open the database in a separate process (e.g. the
+        dashboard).
+
+        Uses ``PASSIVE`` mode which does not block concurrent readers or
+        writers.  It is safe to call at any time.
+        """
+        conn = self._connect()
+        try:
+            conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        finally:
+            conn.close()
 
     def reset(self) -> None:
         """Clear all records for this run and re-register.

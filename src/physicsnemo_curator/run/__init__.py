@@ -299,7 +299,19 @@ def run_pipeline(
 
     # Execute
     runner = backend_cls()
-    return runner.run(pipeline, config)
+    results = runner.run(pipeline, config)
+
+    # Checkpoint the WAL to ensure all data is flushed to the main database
+    # file. This guarantees the dashboard and other out-of-process readers
+    # can see the complete results immediately after run_pipeline returns.
+    if pipeline.track_metrics:
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            store = pipeline._get_store()  # noqa: SLF001
+            store.checkpoint()
+
+    return results
 
 
 def gather_pipeline(pipeline: Pipeline[Any]) -> list[str]:
