@@ -64,7 +64,7 @@ class DashboardStore(param.Parameterized):
         """Clear cached DataFrames so the next access re-queries."""
         self._cache.clear()
 
-    @param.depends("refresh", watch=True)  # ty: ignore[invalid-argument-type]
+    @param.depends("refresh", watch=True)
     def _on_refresh(self) -> None:
         """Invalidate cache when refresh is triggered."""
         self._invalidate()

@@ -13,6 +13,8 @@ import numpy as np
 if TYPE_CHECKING:
     from pathlib import Path
 
+    import xarray as xr
+
 
 def create_temp_dir() -> str:
     """Create and return a temporary directory path."""
@@ -202,7 +204,7 @@ def make_synthetic_dataarray(
     n_lon: int = 72,
     *,
     seed: int = 42,
-) -> object:
+) -> xr.DataArray:
     """Create a synthetic xarray DataArray mimicking ERA5 output.
 
     Parameters

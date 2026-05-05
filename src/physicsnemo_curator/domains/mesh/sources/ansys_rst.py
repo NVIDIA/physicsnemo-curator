@@ -388,8 +388,8 @@ class AnsysRSTSource(Source["Mesh"]):  # noqa: F821
                     )
 
         # -- Build TensorDicts -----------------------------------------------
-        point_data = TensorDict(pd_dict, batch_size=[n_nodes]) if pd_dict else None  # ty: ignore[invalid-argument-type]
-        cell_data = TensorDict(cd_dict, batch_size=[n_elements]) if cd_dict else None  # ty: ignore[invalid-argument-type]
+        point_data = TensorDict(pd_dict, batch_size=[n_nodes]) if pd_dict else None
+        cell_data = TensorDict(cd_dict, batch_size=[n_elements]) if cd_dict else None
 
         global_data = TensorDict(
             {

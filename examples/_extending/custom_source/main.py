@@ -233,7 +233,7 @@ for i, paths in enumerate(results):
 #
 # Load a saved mesh and inspect its contents.
 
-mesh = Mesh.load(results[0][0])  # ty: ignore[unresolved-attribute]
+mesh = Mesh.load(results[0][0])
 print(f"\nLoaded mesh from {results[0][0]}:")
 print(f"  Points: {mesh.n_points}")
 print(f"  Cells: {mesh.n_cells}")

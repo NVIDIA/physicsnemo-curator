@@ -127,6 +127,9 @@ def main() -> None:
     # Use thread_pool backend since ERA5 fetching is I/O-bound (network downloads).
     # Use progress="log" for simple timestamped output that coexists with
     # earth2studio's loguru logging (the default TUI can conflict with it).
+    import os
+
+    os.environ["LOGURU_LEVEL"] = "ERROR"
     results = run_pipeline(pipeline, n_jobs=args.workers, backend="thread_pool", progress="log")
 
     print(f"\nProcessed {len(results)} timesteps")
