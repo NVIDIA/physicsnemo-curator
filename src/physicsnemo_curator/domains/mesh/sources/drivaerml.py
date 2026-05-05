@@ -573,6 +573,132 @@ class DrivAerMLSource(Source[Mesh]):
         cells = torch.from_numpy(connectivity.reshape(n_cells, nodes_per_cell)).to(torch.int64)
         return cells
 
+    @staticmethod
+    def _tessellate_polygons(
+        connectivity: Any,
+        offsets: Any,
+        n_cells: int,
+    ) -> torch.Tensor:
+        """Fan-tessellate mixed polygons into triangles.
+
+        Converts arbitrary polygons (3–N vertices) into triangles using
+        fan triangulation from the first vertex of each polygon. A polygon
+        with *k* vertices produces *k - 2* triangles.
+
+        Parameters
+        ----------
+        connectivity : numpy.ndarray
+            Flat connectivity array (vertex indices for all cells).
+        offsets : numpy.ndarray
+            Offset into *connectivity* for each cell (length ``n_cells + 1``
+            in VTK convention, or ``n_cells`` with implicit 0 start).
+        n_cells : int
+            Number of polygons.
+
+        Returns
+        -------
+        torch.Tensor
+            Triangle cells of shape ``(n_triangles, 3)`` with dtype int64.
+        """
+        import numpy as np
+
+        conn = np.asarray(connectivity, dtype=np.int64)
+        offs = np.asarray(offsets, dtype=np.int64)
+
+        # VTK offsets: [end0, end1, ...] (cumulative, 1-based)
+        # Convert to start/end pairs
+        if offs.size == n_cells:
+            # Offsets give the *end* of each cell's connectivity
+            starts = np.empty(n_cells, dtype=np.int64)
+            starts[0] = 0
+            starts[1:] = offs[:-1]
+            ends = offs
+        else:
+            # Offset array has n_cells+1 entries: [0, end0, end1, ...]
+            starts = offs[:-1]
+            ends = offs[1:]
+
+        # Count vertices per cell and total triangles
+        n_verts = ends - starts  # vertices per polygon
+        n_tris_per_cell = n_verts - 2  # triangles per polygon
+        total_tris = int(n_tris_per_cell.sum())
+
+        # Vectorized fan triangulation:
+        # For each polygon, fan from vertex 0: tri_j = (v0, v_{j}, v_{j+1})
+        # Build index arrays for all triangles simultaneously.
+
+        # Repeat the start offset for each triangle from that polygon
+        # cell_of_tri[t] = which polygon triangle t belongs to
+        cell_of_tri = np.repeat(np.arange(n_cells, dtype=np.int64), n_tris_per_cell)
+
+        # local_j[t] = which fan triangle within the polygon (0-based)
+        # For polygon with k verts -> tris 0..k-3, local_j = 0,1,...,k-3
+        local_j = np.arange(total_tris, dtype=np.int64)
+        # Subtract cumulative tris-per-cell to get local index
+        cum_tris = np.zeros(n_cells + 1, dtype=np.int64)
+        np.cumsum(n_tris_per_cell, out=cum_tris[1:])
+        local_j -= cum_tris[cell_of_tri]
+
+        # Start of each polygon's connectivity
+        poly_starts = starts[cell_of_tri]
+
+        triangles = np.empty((total_tris, 3), dtype=np.int64)
+        triangles[:, 0] = conn[poly_starts]  # fan center (vertex 0)
+        triangles[:, 1] = conn[poly_starts + local_j + 1]
+        triangles[:, 2] = conn[poly_starts + local_j + 2]
+
+        return torch.from_numpy(triangles)
+
+    @staticmethod
+    def _expand_cell_data_for_tessellation(
+        cell_data_dict: dict[str, torch.Tensor],
+        offsets: Any,
+        n_cells: int,
+    ) -> dict[str, torch.Tensor]:
+        """Repeat cell data entries for tessellated triangles.
+
+        When a polygon with *k* vertices is split into *k - 2* triangles,
+        the cell data value must be repeated *k - 2* times.
+
+        Parameters
+        ----------
+        cell_data_dict : dict
+            Mapping of field name to tensor of shape ``(n_cells, ...)``.
+        offsets : numpy.ndarray
+            Cell offsets (same convention as ``_tessellate_polygons``).
+        n_cells : int
+            Number of original polygons.
+
+        Returns
+        -------
+        dict
+            Expanded cell data with shape ``(n_triangles, ...)``.
+        """
+        import numpy as np
+
+        offs = np.asarray(offsets, dtype=np.int64)
+
+        if offs.size == n_cells:
+            starts = np.empty(n_cells, dtype=np.int64)
+            starts[0] = 0
+            starts[1:] = offs[:-1]
+            ends = offs
+        else:
+            starts = offs[:-1]
+            ends = offs[1:]
+
+        n_verts = ends - starts
+        n_tris_per_cell = (n_verts - 2).astype(np.int64)
+
+        # Build repeat indices: each cell i is repeated n_tris_per_cell[i] times
+        repeat_counts = torch.from_numpy(n_tris_per_cell)
+
+        expanded = {}
+        for name, tensor in cell_data_dict.items():
+            expanded[name] = torch.repeat_interleave(tensor, repeat_counts, dim=0)
+
+        return expanded
+
     # -- Volume reading -------------------------------------------------------
 
     def _read_volume(self, index: int) -> Generator[Mesh]:
@@ -1012,16 +1138,23 @@ class DrivAerMLSource(Source[Mesh]):
             points = torch.from_numpy(rust_mesh.points)
             cells = self._build_cells_from_rust(rust_mesh)
 
-            # For mixed cell types, create a placeholder 1-column cells tensor
-            # so that Mesh.n_cells matches cell_data batch size.
-            if cells is None and n_cells > 0:
-                cells = torch.arange(n_cells, dtype=torch.int64).unsqueeze(1)
-
             # Only extract cell data for surface meshes
             cell_data_dict: dict[str, torch.Tensor] = {}
             for name, data in rust_mesh.cell_data.items():
                 arr = torch.from_numpy(data)
                 cell_data_dict[name] = arr
+
+            # For mixed cell types, tessellate polygons into triangles
+            if cells is None and n_cells > 0:
+                connectivity = rust_mesh.cells
+                offsets = rust_mesh.cell_offsets
+                if connectivity is not None and offsets is not None and connectivity.size > 0:
+                    cells = self._tessellate_polygons(connectivity, offsets, n_cells)
+                    cell_data_dict = self._expand_cell_data_for_tessellation(cell_data_dict, offsets, n_cells)
+                    n_cells = cells.shape[0]
+                else:
+                    # Fallback: no connectivity available
+                    cells = torch.arange(n_cells, dtype=torch.int64).unsqueeze(1)
 
             cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
