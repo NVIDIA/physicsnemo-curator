@@ -158,9 +158,7 @@ struct DaAttrs {
     is_ascii: bool,
 }
 
-fn parse_da_attrs(
-    e: &quick_xml::events::BytesStart<'_>,
-) -> DaAttrs {
+fn parse_da_attrs(e: &quick_xml::events::BytesStart<'_>) -> DaAttrs {
     let mut name = String::new();
     let mut type_str = String::new();
     let mut num_comp: usize = 1;
@@ -343,8 +341,7 @@ pub fn parse_vtk_xml(
                 match tag {
                     "VTKFile" => {
                         for attr in e.attributes().flatten() {
-                            let key =
-                                std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
+                            let key = std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
                             let val = std::str::from_utf8(&attr.value).unwrap_or("");
                             match key {
                                 "header_type" => {
@@ -361,8 +358,7 @@ pub fn parse_vtk_xml(
                     }
                     "Piece" => {
                         for attr in e.attributes().flatten() {
-                            let key =
-                                std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
+                            let key = std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
                             let val = std::str::from_utf8(&attr.value).unwrap_or("");
                             match key {
                                 "NumberOfPoints" => {
@@ -392,7 +388,8 @@ pub fn parse_vtk_xml(
                     "FieldData" => section = Section::FieldData,
                     "DataArray" => {
                         let da = parse_da_attrs(e);
-                        let skip = should_skip(&da.name, section, skip_cells, skip_point_data, filter);
+                        let skip =
+                            should_skip(&da.name, section, skip_cells, skip_point_data, filter);
 
                         if da.is_appended {
                             if !skip {
@@ -417,8 +414,7 @@ pub fn parse_vtk_xml(
                     }
                     "AppendedData" => {
                         for attr in e.attributes().flatten() {
-                            let key =
-                                std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
+                            let key = std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
                             let val = std::str::from_utf8(&attr.value).unwrap_or("");
                             if key == "encoding" && val == "raw" {
                                 appended_enc = AppendedEncoding::Raw;
@@ -460,14 +456,12 @@ pub fn parse_vtk_xml(
                 let qname = e.name();
                 let tag = std::str::from_utf8(qname.as_ref()).unwrap_or("");
                 match tag {
-                    "PointData" | "CellData" | "Points" | "Cells" | "Verts"
-                    | "Lines" | "Strips" | "Polys" | "FieldData" => {
+                    "PointData" | "CellData" | "Points" | "Cells" | "Verts" | "Lines"
+                    | "Strips" | "Polys" | "FieldData" => {
                         section = Section::None;
                     }
                     "DataArray" => {
-                        if let Some((target, scalar_type, num_comp, name, _is_ascii)) =
-                            cur.take()
-                        {
+                        if let Some((target, scalar_type, num_comp, name, _is_ascii)) = cur.take() {
                             pending.push(PendingArray {
                                 name,
                                 target,
@@ -550,14 +544,9 @@ pub fn parse_vtk_xml(
             appended_entries
                 .into_par_iter()
                 .map(|entry| {
-                    let data = decode_appended(
-                        raw,
-                        data_start,
-                        entry.offset,
-                        encoding,
-                        appended_enc,
-                    )
-                    .map_err(|e| format!("appended array '{}': {e}", entry.name))?;
+                    let data =
+                        decode_appended(raw, data_start, entry.offset, encoding, appended_enc)
+                            .map_err(|e| format!("appended array '{}': {e}", entry.name))?;
                     Ok((
                         entry.target,
                         entry.name,
@@ -587,10 +576,9 @@ pub fn parse_vtk_xml(
 
     for result in decoded_inline
         .into_iter()
-        .chain(decoded_appended.into_iter())
+        .chain(decoded_appended)
     {
-        let (target, name, arr) =
-            result.map_err(|e| VTKParseError::InvalidFormat(e))?;
+        let (target, name, arr) = result.map_err(VTKParseError::InvalidFormat)?;
         match target {
             ArrayTarget::Points => points = Some(arr),
             ArrayTarget::Connectivity => connectivity = Some(arr),
@@ -605,9 +593,8 @@ pub fn parse_vtk_xml(
         }
     }
 
-    let points = points.ok_or_else(|| {
-        VTKParseError::InvalidFormat("No Points array found in VTK file".into())
-    })?;
+    let points = points
+        .ok_or_else(|| VTKParseError::InvalidFormat("No Points array found in VTK file".into()))?;
 
     Ok(MeshArrays {
         n_points,
@@ -656,10 +643,7 @@ fn decode_data_array(text: &str, ei: EncodingInfo) -> Result<Vec<u8>, String> {
 ///
 /// VTK writes the compression header and data as independently base64-encoded
 /// segments concatenated together.
-fn decode_compressed_inline(
-    b64_text: &str,
-    ei: EncodingInfo,
-) -> Result<Vec<u8>, String> {
+fn decode_compressed_inline(b64_text: &str, ei: EncodingInfo) -> Result<Vec<u8>, String> {
     let hdr_bytes = ei.header_bytes();
 
     // Step 1: decode nb (number of blocks)
@@ -687,8 +671,7 @@ fn decode_compressed_inline(
 
     let mut compressed_sizes = Vec::with_capacity(nb);
     for i in 0..nb {
-        compressed_sizes
-            .push(read_header_val(&full_hdr_raw, (3 + i) * hdr_bytes, ei) as usize);
+        compressed_sizes.push(read_header_val(&full_hdr_raw, (3 + i) * hdr_bytes, ei) as usize);
     }
     let total_compressed: usize = compressed_sizes.iter().sum();
 
@@ -737,11 +720,7 @@ fn decode_appended(
 }
 
 /// Decode raw-encoded appended data.
-fn decode_appended_raw(
-    raw: &[u8],
-    start: usize,
-    ei: EncodingInfo,
-) -> Result<Vec<u8>, String> {
+fn decode_appended_raw(raw: &[u8], start: usize, ei: EncodingInfo) -> Result<Vec<u8>, String> {
     let hdr = ei.header_bytes();
     if start + hdr > raw.len() {
         return Err("appended raw: header out of bounds".into());
@@ -778,8 +757,7 @@ fn decode_compressed_appended_raw(
 
     let mut compressed_sizes = Vec::with_capacity(nb);
     for i in 0..nb {
-        compressed_sizes
-            .push(read_header_val(raw, start + (3 + i) * hdr, ei) as usize);
+        compressed_sizes.push(read_header_val(raw, start + (3 + i) * hdr, ei) as usize);
     }
     let total_compressed: usize = compressed_sizes.iter().sum();
 
@@ -793,11 +771,7 @@ fn decode_compressed_appended_raw(
 }
 
 /// Decode base64-encoded appended data (fallback).
-fn decode_appended_base64(
-    raw: &[u8],
-    start: usize,
-    ei: EncodingInfo,
-) -> Result<Vec<u8>, String> {
+fn decode_appended_base64(raw: &[u8], start: usize, ei: EncodingInfo) -> Result<Vec<u8>, String> {
     // Find the end of the base64 segment (next `<` or EOF)
     let end = raw[start..]
         .iter()
@@ -805,8 +779,8 @@ fn decode_appended_base64(
         .map(|i| start + i)
         .unwrap_or(raw.len());
 
-    let b64_text = std::str::from_utf8(&raw[start..end])
-        .map_err(|e| format!("appended base64 utf8: {e}"))?;
+    let b64_text =
+        std::str::from_utf8(&raw[start..end]).map_err(|e| format!("appended base64 utf8: {e}"))?;
     let clean: String = b64_text
         .as_bytes()
         .iter()
@@ -861,8 +835,7 @@ fn decompress_blocks(
                 ));
             }
             let expected = if i < nb - 1 { nu } else { last_block_size };
-            let mut decoder =
-                flate2::read::ZlibDecoder::new(&compressed_data[c_start..c_end]);
+            let mut decoder = flate2::read::ZlibDecoder::new(&compressed_data[c_start..c_end]);
             let mut out = Vec::with_capacity(expected);
             decoder
                 .read_to_end(&mut out)
@@ -889,7 +862,7 @@ fn decompress_blocks(
 
 /// Number of base64 characters needed to encode `n` bytes.
 fn b64_len(n: usize) -> usize {
-    (n + 2) / 3 * 4
+    n.div_ceil(3) * 4
 }
 
 /// Read a single header value (u32 or u64 depending on header_type).

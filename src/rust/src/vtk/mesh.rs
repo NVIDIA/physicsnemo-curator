@@ -183,14 +183,12 @@ fn native_numpy(py: Python<'_>, arr: &DecodedArray) -> PyResult<Py<PyAny>> {
     let flat: Py<PyAny> = match arr.scalar_type {
         ScalarType::Float32 => {
             let n = arr.data.len() / 4;
-            let s =
-                unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const f32, n) };
+            let s = unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const f32, n) };
             PyArray1::from_slice(py, s).into_any().unbind()
         }
         ScalarType::Float64 => {
             let n = arr.data.len() / 8;
-            let s =
-                unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const f64, n) };
+            let s = unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const f64, n) };
             PyArray1::from_slice(py, s).into_any().unbind()
         }
         ScalarType::Int8 => {
@@ -201,39 +199,33 @@ fn native_numpy(py: Python<'_>, arr: &DecodedArray) -> PyResult<Py<PyAny>> {
         }
         ScalarType::Int16 => {
             let n = arr.data.len() / 2;
-            let s =
-                unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const i16, n) };
+            let s = unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const i16, n) };
             PyArray1::from_slice(py, s).into_any().unbind()
         }
         ScalarType::Int32 => {
             let n = arr.data.len() / 4;
-            let s =
-                unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const i32, n) };
+            let s = unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const i32, n) };
             PyArray1::from_slice(py, s).into_any().unbind()
         }
         ScalarType::Int64 => {
             let n = arr.data.len() / 8;
-            let s =
-                unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const i64, n) };
+            let s = unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const i64, n) };
             PyArray1::from_slice(py, s).into_any().unbind()
         }
         ScalarType::UInt8 => PyArray1::from_slice(py, &arr.data).into_any().unbind(),
         ScalarType::UInt16 => {
             let n = arr.data.len() / 2;
-            let s =
-                unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const u16, n) };
+            let s = unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const u16, n) };
             PyArray1::from_slice(py, s).into_any().unbind()
         }
         ScalarType::UInt32 => {
             let n = arr.data.len() / 4;
-            let s =
-                unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const u32, n) };
+            let s = unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const u32, n) };
             PyArray1::from_slice(py, s).into_any().unbind()
         }
         ScalarType::UInt64 => {
             let n = arr.data.len() / 8;
-            let s =
-                unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const u64, n) };
+            let s = unsafe { std::slice::from_raw_parts(arr.data.as_ptr() as *const u64, n) };
             PyArray1::from_slice(py, s).into_any().unbind()
         }
     };
@@ -241,8 +233,7 @@ fn native_numpy(py: Python<'_>, arr: &DecodedArray) -> PyResult<Py<PyAny>> {
     // Reshape to (N, num_comp) for multi-component arrays
     if arr.num_comp > 1 {
         let bound = flat.bind(py);
-        let reshaped =
-            bound.call_method1("reshape", ((-1i64, arr.num_comp as i64),))?;
+        let reshaped = bound.call_method1("reshape", ((-1i64, arr.num_comp as i64),))?;
         Ok(reshaped.unbind())
     } else {
         Ok(flat)
@@ -250,10 +241,7 @@ fn native_numpy(py: Python<'_>, arr: &DecodedArray) -> PyResult<Py<PyAny>> {
 }
 
 /// Convert a HashMap of DecodedArrays to a Python dict of NumPy arrays.
-fn decoded_to_pydict(
-    py: Python<'_>,
-    map: HashMap<String, DecodedArray>,
-) -> PyResult<Py<PyAny>> {
+fn decoded_to_pydict(py: Python<'_>, map: HashMap<String, DecodedArray>) -> PyResult<Py<PyAny>> {
     let dict = PyDict::new(py);
     for (name, arr) in &map {
         let np_arr = native_numpy(py, arr)?;

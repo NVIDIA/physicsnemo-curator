@@ -40,9 +40,8 @@ pub fn py_read_vtk(
         PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Cannot read {path}: {e}"))
     })?;
     let filter = ArrayFilter::new(include_arrays, exclude_arrays);
-    let arrays = parse_vtk_xml(&raw, &filter, skip_cells, skip_point_data).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())
-    })?;
+    let arrays = parse_vtk_xml(&raw, &filter, skip_cells, skip_point_data)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
     arrays.into_py_mesh(py)
 }
 
@@ -110,9 +109,8 @@ pub fn py_read_vtk_from_bytes(
     skip_point_data: bool,
 ) -> PyResult<VtkMeshData> {
     let filter = ArrayFilter::new(include_arrays, exclude_arrays);
-    let arrays = parse_vtk_xml(data, &filter, skip_cells, skip_point_data).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())
-    })?;
+    let arrays = parse_vtk_xml(data, &filter, skip_cells, skip_point_data)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
     arrays.into_py_mesh(py)
 }
 
