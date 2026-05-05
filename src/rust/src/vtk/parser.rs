@@ -574,10 +574,7 @@ pub fn parse_vtk_xml(
     let mut cell_data: std::collections::HashMap<String, DecodedArray> =
         std::collections::HashMap::new();
 
-    for result in decoded_inline
-        .into_iter()
-        .chain(decoded_appended)
-    {
+    for result in decoded_inline.into_iter().chain(decoded_appended) {
         let (target, name, arr) = result.map_err(VTKParseError::InvalidFormat)?;
         match target {
             ArrayTarget::Points => points = Some(arr),
