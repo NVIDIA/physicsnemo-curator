@@ -158,8 +158,8 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
     """Flush stateful filters after processing an index.
 
     For each filter that has a ``flush`` method and an ``_output_path``
-    attribute, this function sets the output path to a worker-specific
-    path before flushing (idempotent — only resolved once per worker).
+    attribute, this function resolves a worker-specific output path and
+    flushes the filter's accumulated state.
 
     If the original path contains ``{worker_id}`` it is treated as a
     template and the placeholder is substituted with the unique worker
@@ -169,6 +169,10 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
     The worker ID is derived from a combination of PID and thread ID so
     that both process-based and thread-based backends produce unique
     per-worker output files.
+
+    The worker-specific path is stored in a thread-local attribute on the
+    filter (``_worker_output_path``) so that concurrent threads do not
+    race on a shared ``_output_path`` attribute.
 
     After flushing, any filter artifacts (reported via
     :meth:`~Filter.artifacts`) are recorded in the pipeline store when
@@ -183,6 +187,7 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
         tracking).
     """
     import pathlib
+    import threading
 
     worker_id = _get_worker_id()
 
@@ -190,9 +195,7 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
         if not (hasattr(f, "flush") and hasattr(f, "_output_path")):
             continue
 
-        # Resolve the worker-specific path once. We store the original
-        # template in _output_path_template so we only do the resolution
-        # on the first call per worker.
+        # Store the original template path once (first thread to arrive).
         if not hasattr(f, "_output_path_template"):
             f._output_path_template = f._output_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
 
@@ -204,6 +207,14 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
             p = pathlib.Path(template_str)
             worker_path = p.parent / f"{p.stem}_worker_{worker_id}{p.suffix}"
 
+        # Store the resolved path in a thread-local so that flush() can
+        # pick it up without racing with other threads.
+        if not hasattr(f, "_local"):
+            f._local = threading.local()  # noqa: SLF001  # ty: ignore[invalid-assignment]
+        f._local.output_path = worker_path  # noqa: SLF001  # ty: ignore[unresolved-attribute]
+
+        # Also set _output_path for backward compat with filters that
+        # read self._output_path in flush() (single-threaded/process case).
         f._output_path = worker_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
         f.flush()  # ty: ignore[call-non-callable]
 

@@ -224,7 +224,7 @@ class DashboardStore(param.Parameterized):
         return self._store.output_paths_for_index(index)
 
     def artifacts(self, index: int) -> dict[str, list[str]]:
-        """Return filter artifacts for a given index.
+        """Return filter artifacts for a given index, resolved to absolute paths.
 
         Parameters
         ----------
@@ -234,16 +234,18 @@ class DashboardStore(param.Parameterized):
         Returns
         -------
         dict[str, list[str]]
-            Mapping of filter name to list of artifact paths.
+            Mapping of filter name to list of resolved artifact paths.
         """
-        return self._store.filter_artifacts_for_index(index)
+        raw = self._store.filter_artifacts_for_index(index)
+        return {name: [str(self._store.resolve_artifact(p)) for p in paths] for name, paths in raw.items()}
 
     def all_artifacts(self) -> dict[str, list[str]]:
-        """Return all filter artifacts across all indices.
+        """Return all filter artifacts across all indices, resolved to absolute paths.
 
         Returns
         -------
         dict[str, list[str]]
-            Mapping of filter name to list of all artifact paths.
+            Mapping of filter name to list of all resolved artifact paths.
         """
-        return self._store.all_filter_artifacts()
+        raw = self._store.all_filter_artifacts()
+        return {name: [str(self._store.resolve_artifact(p)) for p in paths] for name, paths in raw.items()}

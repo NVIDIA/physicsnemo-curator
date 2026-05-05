@@ -6,7 +6,7 @@ Cloud-Optimized (ARCO) store.
 
 The pipeline:
 
-1. **MomentsFilter** -- computes running statistics (mean, variance,
+1. **DataArrayStatsFilter** -- computes running statistics (mean, variance,
    skewness, min, max) per spatial grid point using Welford's online
    algorithm.
 2. **ZarrSink** -- writes each timestep to a Zarr v3 store with one

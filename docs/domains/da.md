@@ -47,25 +47,26 @@ ERA5's native 0.25° resolution (721 lat × 1440 lon).
 
 **Time range**: 1940-01-01 through ~2023-11-11, hourly resolution.
 
-### MomentsFilter
+### DataArrayStatsFilter
 
 Computes running statistical moments (mean, variance, skewness, min, max)
 along specified dimensions using Welford's online algorithm.  The DataArray
 is yielded unchanged (pass-through).
 
 ```python
-from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 
-filt = MomentsFilter(
+filt = DataArrayStatsFilter(
     output="stats.zarr",
     dims=("time",),  # reduce over time → per-spatial-point statistics
 )
 ```
 
-Call {meth}`~physicsnemo_curator.domains.da.filters.moments.MomentsFilter.flush` after processing
-to write accumulated statistics to the output Zarr store.  Each variable gets
-its own group with arrays: ``mean``, ``variance``, ``skewness``, ``min``,
-``max``, plus a ``count`` attribute.
+Statistics are automatically flushed to disk after each pipeline index.
+Each variable gets its own group with arrays: ``mean``, ``variance``,
+``skewness``, ``min``, ``max``, plus a ``count`` attribute.  When
+multiple workers write to the same path, results are merged using
+Chan's parallel Welford algorithm.
 
 ### ZarrSink
 
@@ -137,7 +138,7 @@ The ``time`` dimension is unlimited by default, allowing efficient appends.
 from datetime import datetime
 from physicsnemo_curator import run_pipeline
 from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
-from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
 # Fetch 24 hours of surface weather data
@@ -148,7 +149,7 @@ source = ERA5Source(
     variables=["t2m", "u10m", "v10m", "sp"],
 )
 
-filt = MomentsFilter(output="era5_stats.zarr", dims=("time",))
+filt = DataArrayStatsFilter(output="era5_stats.zarr", dims=("time",))
 sink = ZarrSink(
     output_path="era5_output.zarr",
     chunks={"time": 1, "lat": 721, "lon": 1440},
@@ -225,7 +226,7 @@ export EARTH2STUDIO_CACHE=/fast-scratch/era5-cache
 ## Process Isolation
 
 When using ``run_pipeline`` with ``n_jobs > 1``, each worker process gets
-its own copy of the pipeline.  Stateful filters like ``MomentsFilter``
+its own copy of the pipeline.  Stateful filters like ``DataArrayStatsFilter``
 accumulate statistics **independently** in each process — their results are
 **not merged** automatically.  For accurate statistics across all indices,
 use ``n_jobs=1`` (sequential) or post-process the per-worker outputs.

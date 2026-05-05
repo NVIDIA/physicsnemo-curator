@@ -129,3 +129,10 @@ class WidgetRegistry:
             self.register(MeanFilter)
         except Exception:  # noqa: BLE001
             logger.debug("MeanFilter not available", exc_info=True)
+
+        try:
+            from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
+
+            self.register(DataArrayStatsFilter)
+        except Exception:  # noqa: BLE001
+            logger.debug("DataArrayStatsFilter not available", exc_info=True)

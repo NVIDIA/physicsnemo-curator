@@ -21,13 +21,16 @@ max, and count — along specified dimensions of each incoming
 :class:`xarray.DataArray`.  The DataArray is yielded unchanged
 (pass-through).  Call :meth:`flush` to write the accumulated statistics
 to a Zarr store.
+
+The ``DataArrayStatsFilter`` name follows the same naming convention
+as ``MeshStatsFilter`` in the CAE domain.
 """
 
 from __future__ import annotations
 
 import pathlib
 import threading
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 import xarray as xr
@@ -38,7 +41,7 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 
-class MomentsFilter(Filter["xr.DataArray"]):
+class DataArrayStatsFilter(Filter["xr.DataArray"]):
     r"""Compute running statistical moments and accumulate to a Zarr store.
 
     For each incoming DataArray the filter updates online accumulators for
@@ -51,8 +54,11 @@ class MomentsFilter(Filter["xr.DataArray"]):
     still receive the full data.
 
     Statistics are accumulated in memory using Welford's online algorithm
-    for numerically stable computation.  Call :meth:`flush` after
-    processing to write the results.
+    for numerically stable computation.  When run via :func:`run_pipeline`,
+    the framework automatically flushes statistics after each index and
+    records artifacts in the pipeline database.  If the output Zarr store
+    already exists, new statistics are merged using Chan's parallel
+    algorithm so multi-worker pipelines produce correct results.
 
     Parameters
     ----------
@@ -64,19 +70,17 @@ class MomentsFilter(Filter["xr.DataArray"]):
 
     Examples
     --------
-    >>> filt = MomentsFilter(output="stats.zarr", dims=("time",))
+    >>> filt = DataArrayStatsFilter(output="stats.zarr", dims=("time",))
     >>> pipeline = source.filter(filt).write(sink)
-    >>> for i in range(len(pipeline)):
-    ...     pipeline[i]
-    >>> filt.flush()  # write accumulated statistics
+    >>> run_pipeline(pipeline, n_jobs=4)  # flush is automatic
     """
 
-    name: ClassVar[str] = "Statistical Moments"
-    description: ClassVar[str] = "Compute running moments (mean, var, skew, min, max) along given dimensions"
+    name: ClassVar[str] = "DataArray Statistics"
+    description: ClassVar[str] = "Compute running statistics (mean, var, skew, min, max) along given dimensions"
 
     @classmethod
     def params(cls) -> list[Param]:
-        """Return parameter descriptors for the moments filter.
+        """Return parameter descriptors for the statistics filter.
 
         Returns
         -------
@@ -96,13 +100,25 @@ class MomentsFilter(Filter["xr.DataArray"]):
     def __init__(self, output: str, dims: tuple[str, ...] = ("time",)) -> None:
         self._output_path = pathlib.Path(output)
         self._dims = dims
-        self._last_artifacts: list[str] = []
-        self._lock = threading.Lock()
 
-        # Welford accumulators keyed by variable name.
-        # Each entry stores: count, mean (M1), M2, M3, min, max
-        # with shapes equal to the remaining (non-reduced) dimensions.
-        self._accumulators: dict[str, _MomentAccumulator] = {}
+        # Thread-local storage for accumulators and artifacts.  Each
+        # worker thread gets its own independent dict of Welford
+        # accumulators so there is no shared mutable state during
+        # parallel processing.
+        self._local = threading.local()
+
+    @property
+    def _accumulators(self) -> dict[str, _MomentAccumulator]:
+        """Return the thread-local accumulator dict, creating if needed."""
+        accs: dict[str, _MomentAccumulator] | None = getattr(self._local, "accumulators", None)
+        if accs is None:
+            accs = {}
+            self._local.accumulators = accs
+        return accs
+
+    @_accumulators.setter
+    def _accumulators(self, value: dict[str, _MomentAccumulator]) -> None:
+        self._local.accumulators = value
 
     def __call__(self, items: Generator[xr.DataArray]) -> Generator[xr.DataArray]:
         """Update running statistics for each DataArray and yield it unchanged.
@@ -124,14 +140,18 @@ class MomentsFilter(Filter["xr.DataArray"]):
     def flush(self) -> str | None:
         """Write accumulated statistics to the output Zarr store.
 
+        Called automatically by the framework after each pipeline index
+        via :func:`~physicsnemo_curator.run.base._flush_filters`.  Can
+        also be called manually in custom loops.
+
         The output store contains one group per variable, each with
         arrays: ``mean``, ``variance``, ``skewness``, ``min``, ``max``,
         ``count``.
 
         If the output store already exists (e.g., from a previous flush in
-        the same worker process), the statistics are merged using Chan's
-        parallel Welford algorithm. This enables worker-level aggregation
-        when running pipelines in parallel.
+        the same worker), the statistics are merged using Chan's parallel
+        Welford algorithm.  This enables incremental aggregation across
+        multiple indices processed by the same worker.
 
         Returns
         -------
@@ -142,25 +162,29 @@ class MomentsFilter(Filter["xr.DataArray"]):
         if not self._accumulators:
             return None
 
-        with self._lock:
-            self._output_path.mkdir(parents=True, exist_ok=True)
+        # Use thread-local output path set by _flush_filters when running
+        # in parallel, falling back to self._output_path for sequential or
+        # manual use.
+        output_path = getattr(self._local, "output_path", None) or self._output_path
+        output_path = pathlib.Path(output_path) if not isinstance(output_path, pathlib.Path) else output_path
+        output_path.mkdir(parents=True, exist_ok=True)
 
-            # Build xarray Dataset for each variable and write/merge to Zarr
-            for var_name, acc in self._accumulators.items():
-                new_stats = acc.finalize()
-                group_path = self._output_path / var_name
+        # Build xarray Dataset for each variable and write/merge to Zarr
+        for var_name, acc in self._accumulators.items():
+            new_stats = acc.finalize()
+            group_path = output_path / var_name
 
-                # Merge with existing data if it exists (worker-level aggregation)
-                if group_path.exists():
-                    existing_stats = xr.open_zarr(str(group_path))
-                    merged_stats = _merge_moment_datasets([existing_stats, new_stats])
-                    merged_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
-                else:
-                    new_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
+            # Merge with existing data if it exists (worker-level aggregation)
+            if group_path.exists():
+                existing_stats = xr.open_zarr(str(group_path))
+                merged_stats = _merge_moment_datasets([existing_stats, new_stats])
+                merged_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
+            else:
+                new_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
 
-            path = str(self._output_path)
-            self._accumulators.clear()
-            self._last_artifacts = [path]
+        path = str(output_path)
+        self._accumulators.clear()
+        self._local.last_artifacts = [path]
         return path
 
     def artifacts(self) -> list[str]:
@@ -171,8 +195,8 @@ class MomentsFilter(Filter["xr.DataArray"]):
         list[str]
             Paths of files written since the last call, or ``[]``.
         """
-        paths = self._last_artifacts
-        self._last_artifacts = []
+        paths: list[str] = getattr(self._local, "last_artifacts", [])
+        self._local.last_artifacts = []
         return paths
 
     def _update(self, da: xr.DataArray) -> None:
@@ -184,14 +208,13 @@ class MomentsFilter(Filter["xr.DataArray"]):
             Input DataArray.  If it has a ``variable`` dimension, each
             variable is accumulated separately.
         """
-        with self._lock:
-            if "variable" in da.dims:
-                for var_name in da.coords["variable"].values:
-                    var_da = da.sel(variable=var_name).drop_vars("variable")
-                    var_str = str(var_name)
-                    self._update_single(var_str, var_da)
-            else:
-                self._update_single("data", da)
+        if "variable" in da.dims:
+            for var_name in da.coords["variable"].values:
+                var_da = da.sel(variable=var_name).drop_vars("variable")
+                var_str = str(var_name)
+                self._update_single(var_str, var_da)
+        else:
+            self._update_single("data", da)
 
     def _update_single(self, var_name: str, da: xr.DataArray) -> None:
         """Update the accumulator for a single variable.
@@ -258,7 +281,7 @@ class MomentsFilter(Filter["xr.DataArray"]):
         Examples
         --------
         >>> paths = ["worker_0/stats.zarr", "worker_1/stats.zarr"]
-        >>> MomentsFilter.merge(paths, output="merged.zarr")  # doctest: +SKIP
+        >>> DataArrayStatsFilter.merge(paths, output="merged.zarr")  # doctest: +SKIP
         'merged.zarr'
         """
         if not zarr_paths:
@@ -293,6 +316,157 @@ class MomentsFilter(Filter["xr.DataArray"]):
             merged_ds.to_zarr(str(group_path), mode="w", zarr_format=3)
 
         return str(out_path)
+
+    # -- Dashboard ------------------------------------------------------------
+
+    @classmethod
+    def dashboard_panel(
+        cls,
+        artifact_paths: list[str],
+        selected_index: int | None = None,
+    ) -> Any:
+        """Return an interactive panel for viewing accumulated statistics.
+
+        Displays either an ``imshow`` heatmap (for 2D spatial data per
+        variable) or a scatter plot (for 1D data per variable).
+
+        Parameters
+        ----------
+        artifact_paths : list[str]
+            Paths to Zarr stores produced by this filter.
+        selected_index : int or None
+            Currently selected pipeline index, if any.
+
+        Returns
+        -------
+        pn.viewable.Viewable or None
+            A Panel layout with variable selector and appropriate plot,
+            or a Markdown message if no data is available.
+        """
+        import holoviews as hv
+        import panel as pn
+
+        hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
+
+        if not artifact_paths:
+            return pn.pane.Markdown("*No DataArray Statistics artifacts found.*")
+
+        # Load the first valid Zarr store
+        store_path: pathlib.Path | None = None
+        for path in artifact_paths:
+            candidate = pathlib.Path(path)
+            if candidate.exists() and candidate.is_dir():
+                store_path = candidate
+                break
+        else:
+            paths_str = ", ".join(artifact_paths[:3])
+            return pn.pane.Markdown(
+                f"*Could not read any DataArray Statistics artifacts.*\n\nPaths checked: `{paths_str}`"
+            )
+
+        assert store_path is not None  # noqa: S101
+
+        # Discover variable groups
+        var_names = sorted(d.name for d in store_path.iterdir() if d.is_dir())
+        if not var_names:
+            return pn.pane.Markdown("*No variable groups found in statistics store.*")
+
+        stat_names = ["mean", "variance", "skewness", "min", "max"]
+
+        # Widgets
+        var_select = pn.widgets.Select(name="Variable", options=var_names, value=var_names[0])
+        stat_select = pn.widgets.Select(name="Statistic", options=stat_names, value="mean")
+
+        @pn.depends(  # ty: ignore[invalid-argument-type]
+            var_select.param.value,
+            stat_select.param.value,
+        )
+        def update_plot(var_name: str, stat_name: str) -> object:
+            """Update plot based on variable and statistic selection."""
+            group_path = store_path / var_name  # type: ignore[operator]
+            try:
+                ds_var = xr.open_zarr(str(group_path))
+            except Exception:  # noqa: BLE001
+                return hv.Div("<p>Could not load variable data.</p>")
+
+            if stat_name not in ds_var:
+                return hv.Div(f"<p>Statistic '{stat_name}' not found.</p>")
+
+            arr = ds_var[stat_name]
+            ndim = len(arr.dims)
+
+            if ndim >= 2:
+                # 2D+ data: show imshow heatmap of first two spatial dims
+                dim_y, dim_x = arr.dims[0], arr.dims[1]
+                # If more than 2D, select first slice of remaining dims
+                if ndim > 2:
+                    sel = {str(d): 0 for d in arr.dims[2:]}
+                    arr = arr.isel(sel)
+
+                img = hv.Image(
+                    (arr.coords[dim_x].values, arr.coords[dim_y].values, arr.values),
+                    kdims=[str(dim_x), str(dim_y)],
+                    vdims=[stat_name],
+                )
+                return img.opts(
+                    colorbar=True,
+                    cmap="viridis",
+                    responsive=True,
+                    height=450,
+                    title=f"{var_name} — {stat_name}",
+                    tools=["hover", "pan", "wheel_zoom", "reset"],
+                )
+            elif ndim == 1:
+                # 1D data: scatter plot
+                dim_x = str(arr.dims[0])
+                coords = arr.coords[dim_x].values
+                values = arr.values
+
+                scatter = hv.Scatter(
+                    (coords, values),
+                    kdims=[dim_x],
+                    vdims=[stat_name],
+                )
+                return scatter.opts(
+                    color="#1f77b4",
+                    size=6,
+                    responsive=True,
+                    height=450,
+                    title=f"{var_name} — {stat_name}",
+                    tools=["hover", "pan", "wheel_zoom", "reset"],
+                )
+            else:
+                # 0D scalar — just display text
+                val = float(arr.values)
+                return hv.Div(f"<h3>{var_name} — {stat_name}: {val:.6g}</h3>")
+
+        sidebar = pn.Column(
+            "### Controls",
+            var_select,
+            stat_select,
+            width=250,
+            sizing_mode="fixed",
+        )
+
+        plot_pane = pn.pane.HoloViews(update_plot, sizing_mode="stretch_both", min_height=450)
+
+        return pn.Row(
+            sidebar,
+            plot_pane,
+            sizing_mode="stretch_width",
+            min_height=500,
+        )
+
+    @classmethod
+    def dashboard_layout_hints(cls) -> dict[str, int]:
+        """Declare grid space for the statistics widget.
+
+        Returns
+        -------
+        dict[str, int]
+            Full width (12 columns), 3 rows tall.
+        """
+        return {"cols": 12, "rows": 3}
 
 
 class _MomentAccumulator:
@@ -389,11 +563,19 @@ class _MomentAccumulator:
     def finalize(self) -> xr.Dataset:
         """Compute final statistics and return as an xarray Dataset.
 
+        The output includes both user-facing statistics and the raw
+        Welford accumulator state (``welford_mean``, ``welford_m2``,
+        ``welford_m3``) so that runs can be resumed exactly without
+        recovering state from derived statistics.
+
         Returns
         -------
         xr.Dataset
             Dataset with variables: ``mean``, ``variance``,
-            ``skewness``, ``min``, ``max``, ``count``.
+            ``skewness``, ``min``, ``max``, ``welford_mean``,
+            ``welford_m2``, ``welford_m3``.  The attribute ``count``
+            stores the total number of samples (elements along the
+            reduced dimensions) incorporated.
         """
         if self._mean is None or self._count == 0:
             return xr.Dataset()
@@ -419,12 +601,16 @@ class _MomentAccumulator:
             "skewness": (self._remaining_dims, skewness),
             "min": (self._remaining_dims, self._min),
             "max": (self._remaining_dims, self._max),
+            # Raw Welford state for exact resumption
+            "welford_mean": (self._remaining_dims, self._mean.copy()),
+            "welford_m2": (self._remaining_dims, self._m2.copy()),
+            "welford_m3": (self._remaining_dims, self._m3.copy()),
         }
 
         ds = xr.Dataset(
             data_vars=data_vars,
             coords=self._remaining_coords,
-            attrs={"count": self._count},
+            attrs={"count": int(self._count)},
         )
         return ds
 
@@ -434,9 +620,9 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
 
     Each dataset must contain ``mean``, ``variance``, ``skewness``,
     ``min``, ``max`` data variables and a ``count`` attribute.
-
-    The Welford accumulator state (count, mean, M2, M3) is recovered
-    from the finalized statistics and merged pairwise.
+    If ``welford_mean``, ``welford_m2``, ``welford_m3`` are present,
+    the Welford state is used directly for exact merging; otherwise it
+    is recovered from the derived statistics (backward compatible).
 
     Parameters
     ----------
@@ -451,33 +637,35 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
     if len(datasets) == 1:
         return datasets[0]
 
-    # Recover Welford state from first dataset.
-    ds_a = datasets[0]
-    n_a = int(ds_a.attrs["count"])
-    mean_a = ds_a["mean"].values.astype(np.float64)
-    var_a = ds_a["variance"].values.astype(np.float64)
-    m2_a = var_a * n_a
-    skew_a = ds_a["skewness"].values.astype(np.float64)
-    # Recover m3: skewness = sqrt(n) * m3 / m2^1.5
-    # => m3 = skewness * m2^1.5 / sqrt(n)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        m2_safe = np.where(m2_a > 0, m2_a, np.nan)
-        m3_a = np.where(m2_a > 0, skew_a * np.power(m2_safe, 1.5) / np.sqrt(n_a), 0.0)
-    min_a = ds_a["min"].values.astype(np.float64)
-    max_a = ds_a["max"].values.astype(np.float64)
+    def _extract_state(ds: xr.Dataset) -> tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Extract (count, mean, m2, m3, min, max) from a dataset."""
+        n = int(ds.attrs["count"])
+        min_val = ds["min"].values.astype(np.float64)
+        max_val = ds["max"].values.astype(np.float64)
+
+        # Prefer exact Welford state if available
+        if "welford_mean" in ds:
+            mean = ds["welford_mean"].values.astype(np.float64)
+            m2 = ds["welford_m2"].values.astype(np.float64)
+            m3 = ds["welford_m3"].values.astype(np.float64)
+        else:
+            # Recover from derived statistics (legacy stores)
+            mean = ds["mean"].values.astype(np.float64)
+            var = ds["variance"].values.astype(np.float64)
+            m2 = var * n
+            skew = ds["skewness"].values.astype(np.float64)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                m2_safe = np.where(m2 > 0, m2, np.nan)
+                m3 = np.where(m2 > 0, skew * np.power(m2_safe, 1.5) / np.sqrt(n), 0.0)
+
+        return n, mean, m2, m3, min_val, max_val
+
+    # Initialize from first dataset
+    n_a, mean_a, m2_a, m3_a, min_a, max_a = _extract_state(datasets[0])
 
     # Merge remaining datasets one at a time.
     for ds_b in datasets[1:]:
-        n_b = int(ds_b.attrs["count"])
-        mean_b = ds_b["mean"].values.astype(np.float64)
-        var_b = ds_b["variance"].values.astype(np.float64)
-        m2_b = var_b * n_b
-        skew_b = ds_b["skewness"].values.astype(np.float64)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            m2_b_safe = np.where(m2_b > 0, m2_b, np.nan)
-            m3_b = np.where(m2_b > 0, skew_b * np.power(m2_b_safe, 1.5) / np.sqrt(n_b), 0.0)
-        min_b = ds_b["min"].values.astype(np.float64)
-        max_b = ds_b["max"].values.astype(np.float64)
+        n_b, mean_b, m2_b, m3_b, min_b, max_b = _extract_state(ds_b)
 
         n_ab = n_a + n_b
         delta = mean_b - mean_a
@@ -518,6 +706,9 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
         "skewness": (dims, skewness),
         "min": (dims, min_a),
         "max": (dims, max_a),
+        "welford_mean": (dims, mean_a.copy()),
+        "welford_m2": (dims, m2_a),
+        "welford_m3": (dims, m3_a),
     }
 
-    return xr.Dataset(data_vars=data_vars, coords=coords, attrs={"count": n_a})
+    return xr.Dataset(data_vars=data_vars, coords=coords, attrs={"count": int(n_a)})

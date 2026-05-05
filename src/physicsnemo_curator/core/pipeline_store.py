@@ -542,7 +542,8 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
     run_id       INTEGER PRIMARY KEY AUTOINCREMENT,
     config_hash  TEXT    UNIQUE NOT NULL,
     config_json  TEXT    NOT NULL,
-    started_at   TEXT    NOT NULL
+    started_at   TEXT    NOT NULL,
+    run_dir      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS index_results (
@@ -799,15 +800,28 @@ class PipelineStore:
                 conn.execute("ALTER TABLE workers ADD COLUMN completed_count INTEGER NOT NULL DEFAULT 0")
             if "invocation_id" not in cols:
                 conn.execute("ALTER TABLE workers ADD COLUMN invocation_id TEXT")
+
+            # Migrate: add run_dir column to pipeline_runs if missing
+            run_cols = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_runs)").fetchall()}
+            if "run_dir" not in run_cols:
+                conn.execute("ALTER TABLE pipeline_runs ADD COLUMN run_dir TEXT")
             conn.commit()
 
             # Atomically insert if not exists, then SELECT to get run_id.
             # This avoids the TOCTOU race where two threads both see no
             # existing row and both try to INSERT.
             now = datetime.now(tz=UTC).isoformat()
+            run_dir = str(pathlib.Path.cwd())
             conn.execute(
-                "INSERT OR IGNORE INTO pipeline_runs (config_hash, config_json, started_at) VALUES (?, ?, ?)",
-                (self._config_hash, json.dumps(self._pipeline_config, sort_keys=True, default=str), now),
+                "INSERT OR IGNORE INTO pipeline_runs (config_hash, config_json, started_at, run_dir) "
+                "VALUES (?, ?, ?, ?)",
+                (self._config_hash, json.dumps(self._pipeline_config, sort_keys=True, default=str), now, run_dir),
+            )
+
+            # Update run_dir for existing rows that may have NULL
+            conn.execute(
+                "UPDATE pipeline_runs SET run_dir = ? WHERE config_hash = ? AND run_dir IS NULL",
+                (run_dir, self._config_hash),
             )
 
             row = conn.execute(
@@ -820,6 +834,50 @@ class PipelineStore:
             logger.info("Pipeline run_id=%d (config hash %s...)", self._run_id, self._config_hash[:12])
         finally:
             conn.close()
+
+    @property
+    def run_dir(self) -> str | None:
+        """Return the working directory recorded when the pipeline was started.
+
+        Returns
+        -------
+        str or None
+            Absolute path of the CWD at pipeline start, or ``None`` for
+            databases created before this column was added.
+        """
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT run_dir FROM pipeline_runs WHERE run_id = ?",
+                (self._run_id,),
+            ).fetchone()
+            return row[0] if row else None
+        finally:
+            conn.close()
+
+    def resolve_artifact(self, path: str) -> pathlib.Path:
+        """Resolve a relative artifact path using the stored run directory.
+
+        Parameters
+        ----------
+        path : str
+            Artifact path (may be relative or absolute).
+
+        Returns
+        -------
+        pathlib.Path
+            Absolute path.  If *path* is already absolute, it is returned
+            as-is.  Otherwise it is resolved relative to :attr:`run_dir`
+            (falling back to the current working directory if ``run_dir``
+            is not available).
+        """
+        p = pathlib.Path(path)
+        if p.is_absolute():
+            return p
+        base = self.run_dir
+        if base:
+            return pathlib.Path(base) / p
+        return p.resolve()
 
     def is_completed(self, index: int) -> list[str] | None:
         """Check if an index has been completed successfully.

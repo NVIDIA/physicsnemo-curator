@@ -78,7 +78,7 @@ pip install physicsnemo-curator[da]
 ```python
 from datetime import datetime, timedelta
 
-from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
@@ -91,10 +91,10 @@ variables = ["t2m", "u10m", "v10m"]
 source = ERA5Source(times=times, variables=variables, backend="arco")
 print(f"Timesteps: {len(source)}")
 
-# 2. Build the pipeline: Source → MomentsFilter → ZarrSink
+# 2. Build the pipeline: Source → DataArrayStatsFilter → ZarrSink
 pipeline = (
     source
-    .filter(MomentsFilter(output="outputs/era5/moments.zarr", dims=("time",)))
+    .filter(DataArrayStatsFilter(output="outputs/era5/moments.zarr", dims=("time",)))
     .write(ZarrSink(output_path="outputs/era5/data.zarr"))
 )
 

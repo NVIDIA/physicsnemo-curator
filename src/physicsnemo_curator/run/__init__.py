@@ -358,7 +358,12 @@ def gather_pipeline(pipeline: Pipeline[Any]) -> list[str]:
         if not (hasattr(f, "flush") and hasattr(f, "_output_path") and hasattr(f, "merge")):
             continue
 
-        output_path = pathlib.Path(str(f._output_path))  # noqa: SLF001
+        # Use the original template path (before worker rewriting) as the
+        # canonical output and glob base.  _flush_filters overwrites
+        # _output_path with the worker-specific path, so reading it here
+        # would give a single worker's path rather than the original.
+        template_attr = getattr(f, "_output_path_template", None)
+        output_path = pathlib.Path(str(template_attr if template_attr is not None else f._output_path))  # noqa: SLF001
         worker_pattern = f"{output_path.stem}_worker_*{output_path.suffix}"
         shard_files = sorted(str(p) for p in output_path.parent.glob(worker_pattern))
 
@@ -373,9 +378,15 @@ def gather_pipeline(pipeline: Pipeline[Any]) -> list[str]:
             filter_name = type(f).name
             store.replace_filter_artifacts(filter_name, i_f, shard_files, merged)
 
-        # Clean up shard files
+        # Clean up shard files/directories
         for shard in shard_files:
-            pathlib.Path(shard).unlink(missing_ok=True)
+            shard_path = pathlib.Path(shard)
+            if shard_path.is_dir():
+                import shutil
+
+                shutil.rmtree(shard_path, ignore_errors=True)
+            else:
+                shard_path.unlink(missing_ok=True)
 
     return merged_paths
 

@@ -1266,7 +1266,7 @@ class TestMomentsFilter:
 
     def test_params(self) -> None:
         """MomentsFilter.params() returns descriptors for output and dims."""
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         params = MomentsFilter.params()
         names = {p.name for p in params}
@@ -1274,16 +1274,16 @@ class TestMomentsFilter:
 
     def test_name_and_description(self) -> None:
         """MomentsFilter has correct name and description."""
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
-        assert MomentsFilter.name == "Statistical Moments"
-        assert "moments" in MomentsFilter.description.lower()
+        assert MomentsFilter.name == "DataArray Statistics"
+        assert "statistics" in MomentsFilter.description.lower()
 
     def test_passthrough(self) -> None:
         """Filter yields the same DataArray unchanged."""
         import xarray as xr
 
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         filt = MomentsFilter(output="/tmp/stats.zarr", dims=("time",))
         da = _make_dataarray()
@@ -1297,7 +1297,7 @@ class TestMomentsFilter:
 
     def test_flush_no_data(self) -> None:
         """Flush with no data returns None."""
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         filt = MomentsFilter(output="/tmp/stats.zarr")
         assert filt.flush() is None
@@ -1306,7 +1306,7 @@ class TestMomentsFilter:
         """Flush writes mean, variance, skewness, min, max to Zarr."""
         import xarray as xr
 
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
 
@@ -1339,7 +1339,7 @@ class TestMomentsFilter:
         """Verify the computed mean is numerically correct."""
         import numpy as np
 
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
 
@@ -1368,7 +1368,7 @@ class TestMomentsFilter:
 
     def test_properties(self) -> None:
         """Properties return the configured values."""
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         filt = MomentsFilter(output="/tmp/stats.zarr", dims=("time", "variable"))
         assert filt.output_path.name == "stats.zarr"
@@ -1383,7 +1383,7 @@ class TestMomentsFilterMerge:
         import numpy as np
         import xarray as xr
 
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         # Worker 1: process samples 0-4
         filt1 = MomentsFilter(output=str(tmp_path / "stats_0.zarr"), dims=("time",))
@@ -1431,7 +1431,7 @@ class TestMomentsFilterMerge:
         import numpy as np
         import xarray as xr
 
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
         for i in range(5):
@@ -1457,14 +1457,14 @@ class TestMomentsFilterMerge:
 
     def test_merge_empty_raises(self) -> None:
         """MomentsFilter.merge should raise ValueError on empty list."""
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         with pytest.raises(ValueError, match="non-empty"):
             MomentsFilter.merge([], output="out.zarr")
 
     def test_merge_missing_store_raises(self, tmp_path: Path) -> None:
         """MomentsFilter.merge should raise FileNotFoundError for missing store."""
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         with pytest.raises(FileNotFoundError, match="not found"):
             MomentsFilter.merge([str(tmp_path / "nonexistent.zarr")], output="out.zarr")
@@ -1473,7 +1473,7 @@ class TestMomentsFilterMerge:
         """Merge should handle stores with multiple variable groups."""
         import xarray as xr
 
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         # Use DataArrays with variable dimension
         filt1 = MomentsFilter(output=str(tmp_path / "stats_0.zarr"), dims=("time",))
@@ -1563,12 +1563,12 @@ class TestRegistration:
         assert "NetCDF4 Writer" in sinks
 
     def test_moments_registered(self) -> None:
-        """MomentsFilter is discoverable via the registry."""
+        """DataArrayStatsFilter is discoverable via the registry."""
         import physicsnemo_curator.domains.da  # noqa: F401
         from physicsnemo_curator.core.registry import registry
 
         filters = registry.filters("da")
-        assert "Statistical Moments" in filters
+        assert "DataArray Statistics" in filters
 
 
 # ===================================================================
@@ -1583,7 +1583,7 @@ class TestDAPipeline:
         """Full pipeline: ERA5Source -> MomentsFilter -> ZarrSink."""
         from unittest.mock import MagicMock, patch
 
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
         from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
         from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 
@@ -1650,7 +1650,7 @@ class TestDAPipeline:
 
         import xarray as xr
 
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
         from physicsnemo_curator.domains.da.sinks.netcdf_writer import NetCDF4Sink
         from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 
@@ -1773,7 +1773,7 @@ class TestERA5EndToEnd:
         """Full pipeline: ERA5 -> MomentsFilter -> ZarrSink."""
         import xarray as xr
 
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
         from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
         from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 

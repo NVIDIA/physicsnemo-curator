@@ -24,10 +24,10 @@ import argparse
 import os
 from datetime import datetime, timedelta
 
-from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
-from physicsnemo_curator.run import run_pipeline
+from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 os.environ["LOGURU_LEVEL"] = "ERROR"
 
@@ -115,10 +115,10 @@ def main() -> None:
     )
 
     # Build the pipeline:
-    # 1. MomentsFilter — compute running statistics (mean, variance, skewness, min, max)
+    # 1. DataArrayStatsFilter — compute running statistics (mean, variance, skewness, min, max)
     # 2. ZarrSink — write each timestep to a Zarr v3 store
     stats_path = f"{args.output}/stats.zarr"
-    stats_filter = MomentsFilter(output=stats_path, dims=("time",))
+    stats_filter = DataArrayStatsFilter(output=stats_path, dims=("time",))
     pipeline = source.filter(stats_filter).write(
         ZarrSink(
             output_path=f"{args.output}/dataset.zarr",
@@ -134,8 +134,11 @@ def main() -> None:
 
     print(f"\nProcessed {len(results)} timesteps")
 
-    # Flush accumulated statistics to disk
-    stats_filter.flush()
+    # Statistics are auto-flushed after each index.
+    # gather_pipeline merges per-worker shards when using process_pool backend.
+    gathered = gather_pipeline(pipeline)
+    if gathered:
+        print(f"Merged {len(gathered)} statistic shards")
     print(f"Statistics written to: {stats_path}")
 
 

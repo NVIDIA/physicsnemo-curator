@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """ASV benchmarks for the DA (Data Assimilation) domain.
 
-Covers end-to-end pipeline performance, MomentsFilter throughput, and sink
+Covers end-to-end pipeline performance, DataArrayStatsFilter throughput, and sink
 write comparisons (ZarrSink vs NetCDF4Sink).
 
 Because ERA5Source requires remote network access, benchmarks use a lightweight
@@ -76,7 +76,7 @@ class _SyntheticDASource(Source["xarray.DataArray"]):
 # E2E: Full DA pipeline
 # ---------------------------------------------------------------------------
 class TimeDAE2E:
-    """End-to-end DA pipeline: SyntheticSource -> MomentsFilter -> ZarrSink."""
+    """End-to-end DA pipeline: SyntheticSource -> DataArrayStatsFilter -> ZarrSink."""
 
     params = [4, 12]
     param_names = ["n_timesteps"]
@@ -84,14 +84,14 @@ class TimeDAE2E:
     def setup(self, n_timesteps):
         """Build the DA pipeline with synthetic source."""
         from physicsnemo_curator.core.base import Pipeline
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
         from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
         self._output_dir = create_temp_dir()
         self._moments_dir = create_temp_dir()
 
         source = _SyntheticDASource(n_timesteps=n_timesteps, n_lat=36, n_lon=72)
-        moments = MomentsFilter(
+        moments = DataArrayStatsFilter(
             output=str(Path(self._moments_dir) / "moments.zarr"),
             dims=("time",),
         )
@@ -126,14 +126,14 @@ class MemDAE2E:
     def setup(self, n_timesteps):
         """Build the DA pipeline with synthetic source."""
         from physicsnemo_curator.core.base import Pipeline
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
         from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
         self._output_dir = create_temp_dir()
         self._moments_dir = create_temp_dir()
 
         source = _SyntheticDASource(n_timesteps=n_timesteps, n_lat=36, n_lon=72)
-        moments = MomentsFilter(
+        moments = DataArrayStatsFilter(
             output=str(Path(self._moments_dir) / "moments.zarr"),
             dims=("time",),
         )
@@ -160,20 +160,20 @@ class MemDAE2E:
 
 
 # ---------------------------------------------------------------------------
-# Component: MomentsFilter throughput
+# Component: DataArrayStatsFilter throughput
 # ---------------------------------------------------------------------------
 class TimeMomentsFilter:
-    """Time MomentsFilter throughput for different grid sizes."""
+    """Time DataArrayStatsFilter throughput for different grid sizes."""
 
     params = [36, 72]
     param_names = ["n_lat"]
 
     def setup(self, n_lat):
         """Create synthetic DataArrays and filter."""
-        from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 
         self._output_dir = create_temp_dir()
-        self.filt = MomentsFilter(
+        self.filt = DataArrayStatsFilter(
             output=str(Path(self._output_dir) / "moments.zarr"),
             dims=("time",),
         )
@@ -182,7 +182,7 @@ class TimeMomentsFilter:
         self.da = make_synthetic_dataarray(n_timesteps=1, n_lat=n_lat, n_lon=n_lat * 2)
 
     def time_filter(self, n_lat):
-        """Apply MomentsFilter to a single DataArray."""
+        """Apply DataArrayStatsFilter to a single DataArray."""
 
         def _gen():
             yield self.da

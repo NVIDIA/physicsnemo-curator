@@ -27,7 +27,7 @@ This module registers its components with the global
 from __future__ import annotations
 
 from physicsnemo_curator.core.registry import registry
-from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
+from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 from physicsnemo_curator.domains.da.sinks.netcdf_writer import NetCDF4Sink
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
@@ -37,14 +37,14 @@ from physicsnemo_curator.domains.da.sources.hrrr import HRRRSource
 registry.register_submodule("da", "DataArray data curation (xarray.DataArray)", "xarray")
 registry.register_source("da", ERA5Source)
 registry.register_source("da", HRRRSource)
-registry.register_filter("da", MomentsFilter)
+registry.register_filter("da", DataArrayStatsFilter)
 registry.register_sink("da", ZarrSink)
 registry.register_sink("da", NetCDF4Sink)
 
 __all__ = [
+    "DataArrayStatsFilter",
     "ERA5Source",
     "HRRRSource",
-    "MomentsFilter",
     "NetCDF4Sink",
     "ZarrSink",
 ]
