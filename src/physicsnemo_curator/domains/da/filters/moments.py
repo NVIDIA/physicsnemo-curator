@@ -26,6 +26,7 @@ to a Zarr store.
 from __future__ import annotations
 
 import pathlib
+import threading
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -96,6 +97,7 @@ class MomentsFilter(Filter["xr.DataArray"]):
         self._output_path = pathlib.Path(output)
         self._dims = dims
         self._last_artifacts: list[str] = []
+        self._lock = threading.Lock()
 
         # Welford accumulators keyed by variable name.
         # Each entry stores: count, mean (M1), M2, M3, min, max
@@ -140,24 +142,25 @@ class MomentsFilter(Filter["xr.DataArray"]):
         if not self._accumulators:
             return None
 
-        self._output_path.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            self._output_path.mkdir(parents=True, exist_ok=True)
 
-        # Build xarray Dataset for each variable and write/merge to Zarr
-        for var_name, acc in self._accumulators.items():
-            new_stats = acc.finalize()
-            group_path = self._output_path / var_name
+            # Build xarray Dataset for each variable and write/merge to Zarr
+            for var_name, acc in self._accumulators.items():
+                new_stats = acc.finalize()
+                group_path = self._output_path / var_name
 
-            # Merge with existing data if it exists (worker-level aggregation)
-            if group_path.exists():
-                existing_stats = xr.open_zarr(str(group_path))
-                merged_stats = _merge_moment_datasets([existing_stats, new_stats])
-                merged_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
-            else:
-                new_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
+                # Merge with existing data if it exists (worker-level aggregation)
+                if group_path.exists():
+                    existing_stats = xr.open_zarr(str(group_path))
+                    merged_stats = _merge_moment_datasets([existing_stats, new_stats])
+                    merged_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
+                else:
+                    new_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
 
-        path = str(self._output_path)
-        self._accumulators.clear()
-        self._last_artifacts = [path]
+            path = str(self._output_path)
+            self._accumulators.clear()
+            self._last_artifacts = [path]
         return path
 
     def artifacts(self) -> list[str]:
@@ -181,13 +184,14 @@ class MomentsFilter(Filter["xr.DataArray"]):
             Input DataArray.  If it has a ``variable`` dimension, each
             variable is accumulated separately.
         """
-        if "variable" in da.dims:
-            for var_name in da.coords["variable"].values:
-                var_da = da.sel(variable=var_name).drop_vars("variable")
-                var_str = str(var_name)
-                self._update_single(var_str, var_da)
-        else:
-            self._update_single("data", da)
+        with self._lock:
+            if "variable" in da.dims:
+                for var_name in da.coords["variable"].values:
+                    var_da = da.sel(variable=var_name).drop_vars("variable")
+                    var_str = str(var_name)
+                    self._update_single(var_str, var_da)
+            else:
+                self._update_single("data", da)
 
     def _update_single(self, var_name: str, da: xr.DataArray) -> None:
         """Update the accumulator for a single variable.

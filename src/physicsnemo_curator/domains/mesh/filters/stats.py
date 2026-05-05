@@ -536,8 +536,7 @@ class MeshStatsFilter(Filter["Mesh"]):
         import panel as pn
         from bokeh.models import HoverTool
 
-        hv.extension("bokeh")
-
+        hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
         stat_columns: list[str] = [
             "index",
             "mean",
@@ -608,7 +607,7 @@ class MeshStatsFilter(Filter["Mesh"]):
             sizing_mode="fixed",
         )
 
-        @pn.depends(
+        @pn.depends(  # ty: ignore[invalid-argument-type]
             x_select.param.value,
             y_select.param.value,
             field_key_filter.param.value,

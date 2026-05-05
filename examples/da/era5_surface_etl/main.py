@@ -21,12 +21,15 @@ computing running statistics along the way.
 """
 
 import argparse
+import os
 from datetime import datetime, timedelta
 
 from physicsnemo_curator.domains.da.filters.moments import MomentsFilter
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 from physicsnemo_curator.run import run_pipeline
+
+os.environ["LOGURU_LEVEL"] = "ERROR"
 
 
 def _generate_hourly_times(year: int, month: int) -> list[datetime]:
@@ -127,10 +130,7 @@ def main() -> None:
     # Use thread_pool backend since ERA5 fetching is I/O-bound (network downloads).
     # Use progress="log" for simple timestamped output that coexists with
     # earth2studio's loguru logging (the default TUI can conflict with it).
-    import os
-
-    os.environ["LOGURU_LEVEL"] = "ERROR"
-    results = run_pipeline(pipeline, n_jobs=args.workers, backend="thread_pool", progress="log")
+    results = run_pipeline(pipeline, n_jobs=args.workers, backend="thread_pool", progress="log", indices=range(16))
 
     print(f"\nProcessed {len(results)} timesteps")
 
