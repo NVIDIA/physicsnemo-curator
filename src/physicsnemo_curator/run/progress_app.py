@@ -16,10 +16,10 @@
 
 """Textual TUI application for pipeline progress display.
 
-Renders a full-screen terminal UI with an overall progress bar, a grid
-of per-worker progress tiles, and a live log panel.  Polls the SQLite
-database every 0.5 seconds for live updates.  Print statements and
-Python logging output are captured and displayed in the log panel.
+Renders a compact full-screen terminal UI with an overall progress bar,
+a 2x4 grid of single-line per-worker status indicators (paginated for
+>8 workers), and a live log panel.  Polls the SQLite database every
+0.5 seconds for live updates.
 """
 
 from __future__ import annotations
@@ -39,6 +39,9 @@ if TYPE_CHECKING:
     from textual.events import Print
 
     from physicsnemo_curator.core.pipeline_store import PipelineStore
+
+_WORKERS_PER_PAGE = 8  # 2 columns x 4 rows
+_BAR_WIDTH = 16  # Character width of the inline progress bar
 
 
 class _TUILogHandler(logging.Handler):
@@ -74,64 +77,43 @@ class _TUILogHandler(logging.Handler):
             self.handleError(record)
 
 
-class WorkerTile(Static):
-    """A single worker's progress tile.
+def _render_worker_line(worker_id: str, completed: int, total: int, current_index: int | None) -> str:
+    """Render a single compact worker status line.
 
-    Displays the worker label, a progress bar, and a status line.
+    Parameters
+    ----------
+    worker_id : str
+        Short worker identifier.
+    completed : int
+        Number of items completed by this worker.
+    total : int
+        Per-worker total items.
+    current_index : int | None
+        Index currently being processed, or None if idle.
+
+    Returns
+    -------
+    str
+        Formatted single-line string like: ``W1 ▓▓▓▓░░░░ 25% idx:7``
     """
+    pct = min(completed / max(total, 1), 1.0)
+    filled = int(pct * _BAR_WIDTH)
+    bar = "▓" * filled + "░" * (_BAR_WIDTH - filled)
 
-    DEFAULT_CSS = """
-    WorkerTile {
-        border: solid $accent;
-        padding: 1;
-        height: auto;
-    }
-    WorkerTile .worker-label {
-        text-style: bold;
-        margin-bottom: 1;
-    }
-    WorkerTile .worker-status {
-        color: $text-muted;
-    }
-    """
+    # Short worker label (last 4 chars of ID or thread/pid suffix)
+    label = worker_id[-6:] if len(worker_id) > 6 else worker_id
 
-    def __init__(self, worker_id: str, pid: int, per_worker_total: int) -> None:
-        """Initialise a worker tile."""
-        super().__init__()
-        self._worker_id = worker_id
-        self._pid = pid
-        self._per_worker_total = max(per_worker_total, 1)
+    status = f"idx:{current_index}" if current_index is not None else "idle"
 
-    def compose(self) -> ComposeResult:
-        """Build the worker tile widgets."""
-        yield Static(f"Worker (PID {self._pid})", classes="worker-label")
-        yield ProgressBar(total=self._per_worker_total, show_eta=False)
-        yield Static("Idle", classes="worker-status")
-
-    def update_progress(self, completed: int, current_index: int | None) -> None:
-        """Update the worker's progress bar and status line.
-
-        Parameters
-        ----------
-        completed : int
-            Number of items this worker has completed.
-        current_index : int | None
-            Index currently being processed, or None if idle.
-        """
-        bar = self.query_one(ProgressBar)
-        bar.update(progress=completed)
-        status = self.query_one(".worker-status", Static)
-        if current_index is not None:
-            status.update(f"Processing index {current_index}")
-        else:
-            status.update("Idle")
+    return f"{label:>6} {bar} {pct:>4.0%} {status}"
 
 
 class PipelineProgressApp(App[None]):
-    """Full-screen Textual app for pipeline progress monitoring.
+    """Compact full-screen Textual app for pipeline progress monitoring.
 
-    Displays an overall progress bar, a grid of per-worker tiles, and
-    a scrolling log panel that captures ``print()`` output and Python
+    Displays an overall progress bar, a 2x4 grid of single-line
+    per-worker status indicators with pagination for >8 workers, and a
+    scrolling log panel that captures ``print()`` output and Python
     ``logging`` messages.
 
     Parameters
@@ -153,25 +135,37 @@ class PipelineProgressApp(App[None]):
     CSS = """
     #overall-container {
         height: auto;
-        padding: 1 2;
+        padding: 0 2;
     }
     #overall-label {
-        margin-bottom: 1;
+        margin-bottom: 0;
+        color: $text-muted;
     }
     #worker-grid {
-        grid-size: 4;
-        grid-gutter: 1 2;
-        padding: 1 2;
-        height: 1fr;
+        grid-size: 2;
+        grid-gutter: 0 2;
+        padding: 0 2;
+        height: auto;
+        max-height: 6;
+    }
+    #page-nav {
+        height: 1;
+        padding: 0 2;
+        color: $text-muted;
     }
     #log-panel {
-        height: 12;
+        height: 1fr;
+        min-height: 6;
         border: solid $accent;
-        margin: 0 2 1 2;
+        margin: 0 2 0 2;
     }
     """
 
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("[", "prev_page", "Prev"),
+        ("]", "next_page", "Next"),
+    ]
 
     def __init__(
         self,
@@ -189,8 +183,10 @@ class PipelineProgressApp(App[None]):
         self._stop_event = stop_event
         self._invocation_id = invocation_id
         self._start_time = time.monotonic()
-        self._worker_tiles: dict[str, WorkerTile] = {}
         self._log_handler: _TUILogHandler | None = None
+        self._loguru_sink_id: int | None = None
+        self._page = 0
+        self._workers_data: list[dict] = []
 
     def compose(self) -> ComposeResult:
         """Build the top-level layout."""
@@ -204,6 +200,7 @@ class PipelineProgressApp(App[None]):
             id="overall-container",
         )
         yield Grid(id="worker-grid")
+        yield Static("", id="page-nav")
         yield RichLog(id="log-panel", max_lines=500, markup=True)
         yield Footer()
 
@@ -225,6 +222,15 @@ class PipelineProgressApp(App[None]):
 
         log_panel = self.query_one("#log-panel", RichLog)
         log_panel.border_title = "Log"
+
+        # Capture loguru output (used by earth2studio and other libs)
+        # into the TUI log panel when loguru is installed.
+        self._setup_loguru_sink()
+
+        # Pre-populate 8 slots in the grid
+        grid = self.query_one("#worker-grid", Grid)
+        for i in range(_WORKERS_PER_PAGE):
+            grid.mount(Static("", id=f"worker-slot-{i}"))
 
     def on_print(self, event: Print) -> None:
         """Handle captured print() output by writing it to the log panel.
@@ -252,10 +258,46 @@ class PipelineProgressApp(App[None]):
         except Exception:  # noqa: BLE001
             pass
 
+    def action_prev_page(self) -> None:
+        """Navigate to the previous page of workers."""
+        if self._page > 0:
+            self._page -= 1
+            self._render_workers()
+
+    def action_next_page(self) -> None:
+        """Navigate to the next page of workers."""
+        max_page = max(0, math.ceil(len(self._workers_data) / _WORKERS_PER_PAGE) - 1)
+        if self._page < max_page:
+            self._page += 1
+            self._render_workers()
+
+    def _render_workers(self) -> None:
+        """Render the current page of workers into the grid slots."""
+        per_worker_total = math.ceil(self._total / max(len(self._workers_data), 1))
+        start = self._page * _WORKERS_PER_PAGE
+        page_workers = self._workers_data[start : start + _WORKERS_PER_PAGE]
+
+        for i in range(_WORKERS_PER_PAGE):
+            slot = self.query_one(f"#worker-slot-{i}", Static)
+            if i < len(page_workers):
+                w = page_workers[i]
+                line = _render_worker_line(w["worker_id"], w["completed_count"], per_worker_total, w["current_index"])
+                slot.update(line)
+            else:
+                slot.update("")
+
+        # Update page navigation
+        total_pages = max(1, math.ceil(len(self._workers_data) / _WORKERS_PER_PAGE))
+        nav = self.query_one("#page-nav", Static)
+        if total_pages > 1:
+            nav.update(f"  ◀ [{self._page + 1}/{total_pages}] ▶   ([/] to navigate)")
+        else:
+            nav.update("")
+
     def _poll(self) -> None:
         """Poll the database and update all widgets."""
         summary = self._store.summary(self._total)
-        workers = self._store.active_workers(invocation_id=self._invocation_id)
+        self._workers_data = self._store.active_workers(invocation_id=self._invocation_id)
 
         # Overall bar
         bar = self.query_one("#overall-bar", ProgressBar)
@@ -270,27 +312,12 @@ class PipelineProgressApp(App[None]):
             f"Elapsed: {elapsed:.1f}s"
         )
 
-        # Worker tiles
-        grid = self.query_one("#worker-grid", Grid)
-        per_worker_total = math.ceil(self._total / max(len(workers), 1))
+        # Clamp page if workers reduced
+        max_page = max(0, math.ceil(len(self._workers_data) / _WORKERS_PER_PAGE) - 1)
+        if self._page > max_page:
+            self._page = max_page
 
-        seen_ids: set[str] = set()
-        for w in workers:
-            wid = w["worker_id"]
-            seen_ids.add(wid)
-            if wid not in self._worker_tiles:
-                tile = WorkerTile(wid, w["pid"], per_worker_total)
-                self._worker_tiles[wid] = tile
-                grid.mount(tile)
-            else:
-                tile = self._worker_tiles[wid]
-            tile.update_progress(w["completed_count"], w["current_index"])
-
-        # Remove tiles for workers no longer present
-        for wid in list(self._worker_tiles):
-            if wid not in seen_ids:
-                self._worker_tiles[wid].remove()
-                del self._worker_tiles[wid]
+        self._render_workers()
 
         # Check if pipeline is done
         if self._stop_event.is_set():
@@ -298,7 +325,42 @@ class PipelineProgressApp(App[None]):
             self.exit()
 
     def _cleanup_logging(self) -> None:
-        """Remove the TUI log handler from the root logger."""
+        """Remove the TUI log handler from the root logger and loguru sink."""
         if self._log_handler is not None:
             logging.getLogger().removeHandler(self._log_handler)
             self._log_handler = None
+        if self._loguru_sink_id is not None:
+            try:
+                from loguru import logger
+
+                logger.remove(self._loguru_sink_id)
+            except Exception:  # noqa: BLE001
+                pass
+            self._loguru_sink_id = None
+
+    def _setup_loguru_sink(self) -> None:
+        """Add a loguru sink that routes messages to the TUI log panel.
+
+        If loguru is not installed, this is a no-op.  The sink is
+        removed on cleanup so it does not outlive the TUI session.
+        """
+        try:
+            from loguru import logger
+
+            def _tui_sink(message: object) -> None:
+                """Route a loguru message record to the TUI."""
+                text = str(message).rstrip("\n")
+                if text:
+                    self.call_from_thread(self.append_log, text)
+
+            # Remove default stderr sink to prevent mangling the TUI,
+            # then add our custom sink.
+            logger.remove()
+            self._loguru_sink_id = logger.add(
+                _tui_sink,
+                format="{time:HH:mm:ss} | {level: <8} | {name}:{function} - {message}",
+                level="DEBUG",
+                colorize=False,
+            )
+        except ImportError:
+            pass
