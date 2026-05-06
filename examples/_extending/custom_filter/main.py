@@ -14,15 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Creating a Custom Filter."""
+"""Creating a Custom Filter.
 
-# Step 1 — Define the Filter
-#
-# A filter inherits from Filter and implements three things:
-#
-# 1. name / description class variables (for CLI discovery)
-# 2. params() class method (parameter descriptors)
-# 3. __call__(items) (the transform logic)
+See README.md for a full walkthrough of this example.
+"""
 
 from __future__ import annotations
 
@@ -36,6 +31,9 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
     import xarray as xr
+
+
+# Step 1 — Define the Filter
 
 
 class LogTransformFilter(Filter["xr.DataArray"]):
@@ -90,7 +88,6 @@ class LogTransformFilter(Filter["xr.DataArray"]):
         """
         for da in items:
             if "variable" in da.dims and self._variable in da.coords["variable"].values:
-                # Select the target variable, transform, and put back
                 transformed = da.copy()
                 var_idx = list(da.coords["variable"].values).index(self._variable)
                 transformed.values[:, var_idx] = np.log1p(da.values[:, var_idx])
@@ -100,27 +97,16 @@ class LogTransformFilter(Filter["xr.DataArray"]):
 
 
 # Step 2 — Register the Filter (Optional)
-#
-# Registration makes the filter discoverable via the global registry
-# and the interactive CLI. This is optional — unregistered filters
-# work fine in pipelines built with Python code.
 
 from physicsnemo_curator.core.registry import registry
 
 registry.register_filter("da", LogTransformFilter)
 
-# Verify registration
 registered = registry.filters("da")
 print(f"Registered DA filters: {list(registered.keys())}")
 assert "Log Transform" in registered
 
 # Step 3 — Use in a Pipeline
-#
-# The custom filter plugs into the standard pipeline API just like
-# any built-in filter.
-#
-# Here we fetch ERA5 data with total precipitation, apply the log
-# transform, and write to a Zarr store.
 
 from datetime import datetime
 
@@ -150,16 +136,155 @@ print(f"\nProcessed {len(results)} items")
 for i, paths in enumerate(results):
     print(f"  Index {i}: {paths}")
 
-# Summary
-#
-# To create a custom filter:
-#
-# 1. Subclass Filter with a type parameter (Filter["xr.DataArray"],
-#    Filter["Mesh"], etc.)
-# 2. Set name and description class variables
-# 3. Implement params() and __call__(items)
-# 4. Optionally register with registry.register_filter()
-#
-# For stateful filters (like statistics accumulators), add a flush()
-# method and an _output_path attribute. See MeshStatsFilter for an
-# example with Welford accumulators and cross-worker merging.
+# Extended API: Stateful Filters with flush() and artifacts()
+
+
+class RunningVarianceFilter(Filter["xr.DataArray"]):
+    """Accumulate running mean/variance across indices using Welford's algorithm.
+
+    Demonstrates the stateful filter pattern: data is accumulated in
+    __call__, written to disk in flush(), and reported via artifacts().
+
+    Parameters
+    ----------
+    output : str
+        Path for the output Parquet statistics file.
+    variable : str
+        Variable name to track.
+    """
+
+    name: ClassVar[str] = "Running Variance"
+    description: ClassVar[str] = "Track running mean/variance via Welford's algorithm"
+
+    @classmethod
+    def params(cls) -> list[Param]:
+        """Return parameter descriptors.
+
+        Returns
+        -------
+        list[Param]
+            Parameters: output path and variable name.
+        """
+        return [
+            Param(name="output", description="Output Parquet file path", type=str),
+            Param(name="variable", description="Variable name to track", type=str),
+        ]
+
+    def __init__(self, output: str, variable: str) -> None:
+        import pathlib
+
+        self._output_path = pathlib.Path(output)
+        self._variable = variable
+        self._count = 0
+        self._mean = 0.0
+        self._m2 = 0.0
+        self._rows: list[dict[str, object]] = []
+        self._last_artifacts: list[str] = []
+
+    def __call__(self, items: Generator[xr.DataArray]) -> Generator[xr.DataArray]:
+        """Accumulate statistics and yield items unchanged (pass-through).
+
+        Parameters
+        ----------
+        items : Generator[xr.DataArray]
+            Incoming stream of DataArrays.
+
+        Yields
+        ------
+        xr.DataArray
+            The same DataArray, unmodified.
+        """
+        for da in items:
+            if "variable" in da.dims and self._variable in da.coords["variable"].values:
+                var_idx = list(da.coords["variable"].values).index(self._variable)
+                values = da.values[:, var_idx].flatten()
+                # Welford's online algorithm
+                for x in values:
+                    self._count += 1
+                    delta = x - self._mean
+                    self._mean += delta / self._count
+                    delta2 = x - self._mean
+                    self._m2 += delta * delta2
+
+            self._rows.append(
+                {
+                    "count": self._count,
+                    "mean": self._mean,
+                    "variance": self._m2 / self._count if self._count > 0 else 0.0,
+                }
+            )
+            yield da
+
+    def flush(self) -> str | None:
+        """Write accumulated statistics to the Parquet file.
+
+        Returns
+        -------
+        str or None
+            Path of the written Parquet file, or None.
+        """
+        if not self._rows:
+            return None
+
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        table = pa.table(
+            {
+                "count": [r["count"] for r in self._rows],
+                "mean": [r["mean"] for r in self._rows],
+                "variance": [r["variance"] for r in self._rows],
+            }
+        )
+
+        self._output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if self._output_path.exists():
+            existing = pq.read_table(str(self._output_path))
+            table = pa.concat_tables([existing, table])
+
+        pq.write_table(table, str(self._output_path))
+        path = str(self._output_path)
+        self._rows.clear()
+        self._last_artifacts = [path]
+        return path
+
+    def artifacts(self) -> list[str]:
+        """Return paths of files written since the last flush.
+
+        Returns
+        -------
+        list[str]
+            Artifact paths, or empty list.
+        """
+        paths = self._last_artifacts
+        self._last_artifacts = []
+        return paths
+
+    @staticmethod
+    def merge(parquet_paths: list[str], output: str) -> str:
+        """Merge per-worker statistics files into one.
+
+        Parameters
+        ----------
+        parquet_paths : list[str]
+            Per-worker Parquet file paths.
+        output : str
+            Destination path for the merged file.
+
+        Returns
+        -------
+        str
+            Path of the merged output file.
+        """
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        tables = [pq.read_table(p) for p in parquet_paths]
+        merged = pa.concat_tables(tables, promote_options="default")
+
+        import pathlib
+
+        pathlib.Path(output).parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(merged, output)
+        return output

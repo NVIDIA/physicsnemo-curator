@@ -14,16 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Creating a Custom Source."""
+"""Creating a Custom Source.
 
-# Step 1 — Define the Source
-#
-# A source inherits from Source and implements four things:
-#
-# 1. name / description class variables
-# 2. params() class method (parameter descriptors)
-# 3. __len__() — number of items
-# 4. __getitem__(index) — yield data for a given index
+See README.md for a full walkthrough of this example.
+"""
 
 from __future__ import annotations
 
@@ -46,6 +40,9 @@ if TYPE_CHECKING:
 
 
 _DEFAULT_URL = "hf://datasets/SISSAmathLab/navier-stokes-cylinder"
+
+
+# Step 1 — Define the Source
 
 
 class CylinderFlowSource(Source["Mesh"]):
@@ -88,7 +85,6 @@ class CylinderFlowSource(Source["Mesh"]):
         fs = fsspec.filesystem("hf")
         self._fs = fs
 
-        # Read parameter table to determine count
         params_path = f"{url}/parameters/part.0.parquet"
         with fsspec.open(params_path, "rb", hf=fs) as f:
             self._params_table: pa.Table = pq.read_table(f)
@@ -155,7 +151,6 @@ class CylinderFlowSource(Source["Mesh"]):
         assert self._points is not None
         assert self._cells is not None
 
-        # Read snapshot for this index
         snap_path = f"{self._url}/snapshots/part.0.parquet"
         with fsspec.open(snap_path, "rb", hf=self._fs) as f:
             snap_table = pq.read_table(f)
@@ -190,9 +185,6 @@ class CylinderFlowSource(Source["Mesh"]):
 
 
 # Step 2 — Register the Source (Optional)
-#
-# Registration makes the source discoverable via the global registry
-# and the interactive CLI.
 
 from physicsnemo_curator.core.registry import registry
 
@@ -203,8 +195,6 @@ print(f"Registered mesh sources: {list(registered.keys())}")
 assert "Cylinder Flow (Custom)" in registered
 
 # Step 3 — Use in a Pipeline
-#
-# The custom source works with any compatible filter and sink.
 
 from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
@@ -230,8 +220,6 @@ for i, paths in enumerate(results):
     print(f"  Simulation {i}: {paths}")
 
 # Step 4 — Verify Output
-#
-# Load a saved mesh and inspect its contents.
 
 mesh = Mesh.load(results[0][0])
 print(f"\nLoaded mesh from {results[0][0]}:")
@@ -240,17 +228,85 @@ print(f"  Cells: {mesh.n_cells}")
 print(f"  Point fields: {list(mesh.point_data.keys())}")
 print(f"  Global fields: {list(mesh.global_data.keys())}")
 
-# Summary
-#
-# To create a custom source:
-#
-# 1. Subclass Source with a type parameter (Source["Mesh"],
-#    Source["xr.DataArray"], etc.)
-# 2. Set name and description class variables
-# 3. Implement params(), __len__(), and __getitem__(index)
-# 4. Use generator semantics — __getitem__ must yield
-# 5. Support negative indexing and raise IndexError for out-of-bounds
-# 6. Eagerly load lightweight metadata in __init__
-# 7. Lazily load heavy data (geometry, fields) in __getitem__
-# 8. Cache shared data (like geometry) across indices
-# 9. Optionally register with registry.register_source()
+
+# Extended API: partition_indices()
+
+
+class MultiFileLMDBSource(Source["Mesh"]):
+    """Example source demonstrating partition_indices for multi-file datasets.
+
+    When indices come from different LMDB files, the framework needs to
+    know which indices share a file so they're scheduled to the same
+    worker (avoiding conflicting concurrent readers).
+    """
+
+    name: ClassVar[str] = "Multi-File LMDB (Example)"
+    description: ClassVar[str] = "Shows partition_indices for multi-file sources"
+
+    @classmethod
+    def params(cls) -> list[Param]:
+        """Return parameter descriptors.
+
+        Returns
+        -------
+        list[Param]
+            Empty list (no user-configurable params in this example).
+        """
+        return []
+
+    def __init__(self) -> None:
+        self._file_boundaries = [0, 25, 50, 75, 100]
+
+    def __len__(self) -> int:
+        """Return number of items."""
+        return 100
+
+    def __getitem__(self, index: int) -> Generator[Mesh]:
+        """Yield a Mesh for the given index.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based item index.
+
+        Yields
+        ------
+        Mesh
+            A placeholder mesh (not implemented in this example).
+        """
+        msg = "This is a demonstration stub"
+        raise NotImplementedError(msg)
+
+    def partition_indices(self, indices: list[int]) -> list[list[int]] | None:
+        """Group indices by which LMDB file they belong to.
+
+        Parameters
+        ----------
+        indices : list[int]
+            The indices to be processed.
+
+        Returns
+        -------
+        list[list[int]] or None
+            Groups of indices (one per file), or None if all indices
+            come from the same file (no constraint needed).
+        """
+        from collections import defaultdict
+
+        file_groups: dict[int, list[int]] = defaultdict(list)
+        for idx in indices:
+            for file_idx in range(len(self._file_boundaries) - 1):
+                if self._file_boundaries[file_idx] <= idx < self._file_boundaries[file_idx + 1]:
+                    file_groups[file_idx].append(idx)
+                    break
+
+        if len(file_groups) <= 1:
+            return None
+
+        return [sorted(group) for group in file_groups.values()]
+
+
+# Test partition_indices
+multi_source = MultiFileLMDBSource()
+groups = multi_source.partition_indices(list(range(10)) + list(range(50, 55)))
+print(f"\nPartition groups: {groups}")
