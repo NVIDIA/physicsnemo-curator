@@ -205,7 +205,14 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
             artifact_paths = f.artifacts()
             if artifact_paths:
                 store = pipeline._get_store()  # noqa: SLF001
-                store.record_filter_artifacts(index, type(f).name, i_f, artifact_paths)
+                store._resilient_write(  # noqa: SLF001
+                    "record_filter_artifacts",
+                    store.record_filter_artifacts,
+                    index,
+                    type(f).name,
+                    i_f,
+                    artifact_paths,
+                )
 
 
 def process_single_index(pipeline: Pipeline[Any], index: int) -> list[str]:

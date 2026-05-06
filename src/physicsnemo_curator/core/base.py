@@ -554,8 +554,10 @@ class Pipeline[T]:
         list[str]
             File paths produced by the sink.
         """
+        import contextlib
         import os
         import socket
+        import sqlite3
         import time
         import tracemalloc
 
@@ -569,14 +571,23 @@ class Pipeline[T]:
 
         # --- Worker registration ---
         worker_id = _get_worker_id()
-        store.register_worker(worker_id, os.getpid(), socket.gethostname(), invocation_id=self.invocation_id)
-        store.worker_start_index(worker_id, index)
+        store._resilient_write(
+            "register_worker",
+            store.register_worker,
+            worker_id,
+            os.getpid(),
+            socket.gethostname(),
+            invocation_id=self.invocation_id,
+        )
+        store._resilient_write("worker_start_index", store.worker_start_index, worker_id, index)
 
         # Checkpoint hit — return cached paths
-        cached = store.is_completed(index)
+        cached: list[str] | None = None
+        with contextlib.suppress(sqlite3.DatabaseError, sqlite3.OperationalError):
+            cached = store.is_completed(index)
         if cached is not None:
             logger.debug("Checkpoint hit for index %d — returning cached paths", index)
-            store.worker_finish_index(worker_id)
+            store._resilient_write("worker_finish_index", store.worker_finish_index, worker_id)
             return cached
 
         # --- GPU baseline ---
@@ -641,18 +652,27 @@ class Pipeline[T]:
             if self.track_gpu and gpu_baseline is not None:
                 gpu_delta = Pipeline._gpu_measure(gpu_baseline)
 
-            # 7. Record success
-            store.record_success(index, result, overall_elapsed, peak_memory, gpu_delta, stage_metrics)
+            # 7. Record success — DB failure must not discard the sink result
+            store._resilient_write(
+                "record_success",
+                store.record_success,
+                index,
+                result,
+                overall_elapsed,
+                peak_memory,
+                gpu_delta,
+                stage_metrics,
+            )
 
             return result
 
         except Exception as exc:
             elapsed = time.perf_counter_ns() - overall_start
-            store.record_error(index, str(exc), elapsed)
+            store._resilient_write("record_error", store.record_error, index, str(exc), elapsed)
             raise
 
         finally:
-            store.worker_finish_index(worker_id)
+            store._resilient_write("worker_finish_index", store.worker_finish_index, worker_id)
             if started_tracemalloc:
                 tracemalloc.stop()
 
@@ -711,8 +731,11 @@ class Pipeline[T]:
         hash_ = _config_hash(config)
 
         if self._db_path is not None:
-            # Reconnect to an existing DB (e.g. child process after pickle)
+            # Reconnect to an existing DB (e.g. child process after pickle).
+            # Use _worker=True to skip schema creation and avoid lock contention.
             db_path = self._db_path
+            self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_, _worker=True)
+            return
         elif self.resume:
             # Stable filename — reuses existing DB for checkpoint resumption
             from physicsnemo_curator.core.cache import default_cache_dir

@@ -638,7 +638,14 @@ class PipelineStore:
     >>> store.record_success(0, ["/out/0.vtk"], 1_000_000, 4096, None, [])
     """
 
-    def __init__(self, db_path: pathlib.Path, pipeline_config: dict, config_hash: str) -> None:
+    def __init__(
+        self,
+        db_path: pathlib.Path,
+        pipeline_config: dict,
+        config_hash: str,
+        *,
+        _worker: bool = False,
+    ) -> None:
         """Initialize the pipeline store.
 
         Parameters
@@ -649,12 +656,19 @@ class PipelineStore:
             Full pipeline configuration dictionary.
         config_hash : str
             SHA-256 hex hash of the pipeline configuration.
+        _worker : bool, optional
+            If ``True``, skip schema creation and just look up the
+            existing ``run_id``.  Used by child processes that reconnect
+            to a database already initialised by the parent.
         """
         self._db_path = db_path
         self._pipeline_config = pipeline_config
         self._config_hash = config_hash
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
+        if _worker:
+            self._attach_to_existing_run()
+        else:
+            self._init_db()
 
     @classmethod
     def from_db(cls, db_path: str | pathlib.Path) -> PipelineStore:
@@ -783,13 +797,93 @@ class PipelineStore:
 
         return conn
 
+    def _resilient_write(
+        self,
+        operation: str,
+        func: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute a write operation with retry and graceful failure.
+
+        Wraps database write methods so that transient SQLite locking
+        errors do not hang or crash the data pipeline.  If the write
+        still fails after retries, a warning is logged and ``None`` is
+        returned — the pipeline continues without this metric record.
+
+        Catches both :class:`sqlite3.OperationalError` (lock timeouts,
+        disk I/O) and :class:`sqlite3.DatabaseError` (malformed DB).
+
+        Parameters
+        ----------
+        operation : str
+            Human-readable name for logging (e.g. ``"record_success"``).
+        func : callable
+            The actual write function to invoke.
+        *args : Any
+            Positional arguments forwarded to *func*.
+        **kwargs : Any
+            Keyword arguments forwarded to *func*.
+
+        Returns
+        -------
+        Any
+            The return value of *func*, or ``None`` on failure.
+        """
+        max_retries = 3
+        delay = 0.1
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
+                if attempt == max_retries - 1:
+                    logger.warning(
+                        "PipelineStore: %s failed after %d retries (%s) — pipeline will continue without this record",
+                        operation,
+                        max_retries,
+                        exc,
+                    )
+                    return None
+                time.sleep(delay)
+                delay = min(delay * 2, 1.0)
+        return None  # pragma: no cover
+
     def _init_db(self) -> None:
         """Create schema and register or resume a pipeline run by config hash.
 
         Uses INSERT OR IGNORE to handle concurrent init from multiple
         threads/processes safely (avoids TOCTOU race on the UNIQUE
         ``config_hash`` column).
+
+        If the existing database is malformed (e.g. from a previous crash
+        during WAL checkpoint), the corrupted file is removed and a fresh
+        database is created.
         """
+        try:
+            self._init_db_inner()
+        except sqlite3.DatabaseError as exc:
+            import warnings
+
+            warnings.warn(
+                f"Pipeline metrics database is malformed ({exc}). "
+                f"Removing corrupted file and creating a fresh database: {self._db_path}",
+                stacklevel=2,
+            )
+            logger.warning(
+                "PipelineStore: existing database is malformed (%s) — "
+                "removing corrupted file and creating fresh database: %s",
+                exc,
+                self._db_path,
+            )
+            # Remove the corrupted DB and associated WAL/SHM files
+            for suffix in ("", "-wal", "-shm"):
+                p = pathlib.Path(str(self._db_path) + suffix)
+                if p.exists():
+                    p.unlink()
+            self._init_db_inner()
+
+    def _init_db_inner(self) -> None:
+        """Create schema and register the pipeline run (may raise on malformed DB)."""
         conn = self._connect()
         try:
             conn.executescript(_SCHEMA_SQL)
@@ -834,6 +928,41 @@ class PipelineStore:
             logger.info("Pipeline run_id=%d (config hash %s...)", self._run_id, self._config_hash[:12])
         finally:
             conn.close()
+
+    def _attach_to_existing_run(self) -> None:
+        """Attach to a database already initialised by the parent process.
+
+        Performs a lightweight read-only lookup of the ``run_id`` without
+        running schema creation or migrations.  This avoids the exclusive
+        lock that ``executescript`` requires and eliminates contention
+        when many worker processes start concurrently.
+
+        Falls back to full :meth:`_init_db` if the lookup fails (e.g.
+        the parent hasn't finished init yet).
+        """
+        max_retries = 5
+        delay = 0.2
+        for _attempt in range(max_retries):
+            try:
+                conn = self._connect()
+                try:
+                    row = conn.execute(
+                        "SELECT run_id FROM pipeline_runs WHERE config_hash = ?",
+                        (self._config_hash,),
+                    ).fetchone()
+                    if row is not None:
+                        self._run_id = row[0]
+                        return
+                finally:
+                    conn.close()
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                pass
+            time.sleep(delay)
+            delay = min(delay * 2, 2.0)
+
+        # Fallback: parent may not have finished yet, do full init
+        logger.debug("Worker could not attach to existing run — falling back to full _init_db")
+        self._init_db()
 
     @property
     def run_dir(self) -> str | None:
@@ -973,10 +1102,6 @@ class PipelineStore:
                 )
 
             conn.commit()
-            # Flush WAL to main DB so out-of-process readers (dashboard)
-            # see this result immediately.
-            with contextlib.suppress(sqlite3.OperationalError):
-                conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
         finally:
             conn.close()
 
@@ -1003,10 +1128,6 @@ class PipelineStore:
                 (index, self._run_id, now, wall_time_ns, error),
             )
             conn.commit()
-            # Flush WAL to main DB so out-of-process readers (dashboard)
-            # see this result immediately.
-            with contextlib.suppress(sqlite3.OperationalError):
-                conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
         finally:
             conn.close()
 
