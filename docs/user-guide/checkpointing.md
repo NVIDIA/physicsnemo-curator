@@ -134,7 +134,7 @@ results = run_pipeline(pipeline, n_jobs=4)
 Checkpointing and profiling are unified — both are controlled by
 `track_metrics`.  When enabled, you get both checkpoint/resume and
 per-index timing and memory metrics automatically.  See
-[Profiling](profiling.md) for details on accessing metrics.
+[Metrics & Dashboard](dashboard.md) for details on accessing metrics.
 
 ## SQLite Database
 

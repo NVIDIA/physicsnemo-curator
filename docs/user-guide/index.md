@@ -35,7 +35,6 @@ datasets
 :maxdepth: 1
 
 parallel
-profiling
 checkpointing
 dashboard
 cli

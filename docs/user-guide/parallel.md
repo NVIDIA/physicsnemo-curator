@@ -112,7 +112,7 @@ Or implement a post-hoc merge step that combines per-worker outputs.
 ## Profiling
 
 To measure wall-clock time, memory, and GPU usage across parallel backends,
-ensure `track_metrics=True` (the default). See [Profiling](profiling.md)
+ensure `track_metrics=True` (the default). See [Metrics & Dashboard](dashboard.md)
 for details.
 
 ## Examples
