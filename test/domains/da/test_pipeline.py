@@ -870,12 +870,12 @@ class TestZarrSink:
     """Unit tests for ZarrSink."""
 
     def test_params(self) -> None:
-        """ZarrSink.params() returns descriptors for output_path and chunks."""
+        """ZarrSink.params() returns descriptors for output_path, chunks, and append_dim."""
         from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
         params = ZarrSink.params()
         names = {p.name for p in params}
-        assert {"output_path", "chunks"} == names
+        assert {"output_path", "chunks", "append_dim"} == names
 
     def test_name_and_description(self) -> None:
         """ZarrSink has correct name and description."""
