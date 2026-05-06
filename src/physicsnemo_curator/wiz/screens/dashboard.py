@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import subprocess
 import sys
 from typing import TYPE_CHECKING
@@ -173,7 +174,9 @@ class DashboardScreen(Screen[None]):
             return
         port = int(port_str)
 
-        # Launch dashboard as a subprocess so the wizard stays responsive
+        # Launch dashboard as a subprocess so the wizard stays responsive.
+        # Capture stderr via PIPE so we can report errors if the process
+        # exits immediately (e.g. missing dependencies).
         try:
             self._process = subprocess.Popen(  # noqa: S603
                 [
@@ -182,8 +185,34 @@ class DashboardScreen(Screen[None]):
                     f"from physicsnemo_curator.dashboard import launch; launch({db_path!r}, port={port})",
                 ],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
             )
+
+            # Give the subprocess a moment to fail on import errors
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                self._process.wait(timeout=2)
+
+            if self._process.poll() is not None:
+                # Process exited early — report the error
+                stderr_output = ""
+                if self._process.stderr:
+                    stderr_output = self._process.stderr.read().decode(errors="replace").strip()
+                    self._process.stderr.close()
+                # Extract the last meaningful line (usually the exception message)
+                error_line = stderr_output.rsplit("\n", 1)[-1] if stderr_output else "unknown error"
+                # Add install hint for missing-dependency errors
+                hint = ""
+                if "ModuleNotFoundError" in stderr_output or "ImportError" in stderr_output:
+                    hint = "\nHint: run [bold]uv sync --extra dashboard[/] to install dependencies"
+                status.update(f"[red]Dashboard failed: {error_line}[/]{hint}")
+                self.notify(f"Dashboard exited: {error_line}", severity="error")
+                self._process = None
+                return
+
+            # Process is running — close the stderr pipe so it doesn't block
+            if self._process.stderr:
+                self._process.stderr.close()
+
             status.update(f"Dashboard running at http://localhost:{port}")
             self.notify(f"Dashboard launched at http://localhost:{port}", severity="information")
 

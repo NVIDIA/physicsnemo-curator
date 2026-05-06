@@ -552,7 +552,7 @@ class D3PlotSource(Source["Mesh"]):
             key = f"displacement_t{t:03d}"
             pd_dict[key] = torch.from_numpy(displacements[t].astype(np.float64))
 
-        point_data = TensorDict(pd_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
+        point_data = TensorDict(pd_dict, batch_size=[n_points])
 
         # Build cell_data (optional stress/strain).
         cell_data = None
@@ -577,7 +577,7 @@ class D3PlotSource(Source["Mesh"]):
                     cd_dict[f"effective_plastic_strain_t{t:03d}"] = torch.from_numpy(epsp[t].astype(np.float64))
 
             if cd_dict:
-                cell_data = TensorDict(cd_dict, batch_size=[n_cells])  # ty: ignore[invalid-argument-type]
+                cell_data = TensorDict(cd_dict, batch_size=[n_cells])
 
         # Build global_data.
         global_data = TensorDict(

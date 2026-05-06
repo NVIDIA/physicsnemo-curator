@@ -481,7 +481,7 @@ class DrivAerMLSource(Source[Mesh]):
                 arr = torch.from_numpy(data)
                 point_data_dict[name] = arr
 
-            point_data = TensorDict(point_data_dict, batch_size=[n_points]) if point_data_dict else None  # ty: ignore[invalid-argument-type]  # type: ignore[arg-type]
+            point_data = TensorDict(point_data_dict, batch_size=[n_points]) if point_data_dict else None  # type: ignore[arg-type]
 
             # Cell data
             cell_data_dict: dict[str, torch.Tensor] = {}
@@ -489,7 +489,7 @@ class DrivAerMLSource(Source[Mesh]):
                 arr = torch.from_numpy(data)
                 cell_data_dict[name] = arr
 
-            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # ty: ignore[invalid-argument-type]  # type: ignore[arg-type]
+            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # type: ignore[arg-type]
 
             return Mesh(
                 points=points,
@@ -1089,7 +1089,7 @@ class DrivAerMLSource(Source[Mesh]):
 
         n_pts = centroids.shape[0]
         point_data = (
-            TensorDict(point_data_dict, batch_size=[n_pts])  # ty: ignore[invalid-argument-type]  # type: ignore[arg-type]
+            TensorDict(point_data_dict, batch_size=[n_pts])  # type: ignore[arg-type]
             if point_data_dict
             else None
         )
@@ -1156,7 +1156,7 @@ class DrivAerMLSource(Source[Mesh]):
                     # Fallback: no connectivity available
                     cells = torch.arange(n_cells, dtype=torch.int64).unsqueeze(1)
 
-            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # ty: ignore[invalid-argument-type]  # type: ignore[arg-type]
+            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # type: ignore[arg-type]
 
             return Mesh(points=points, cells=cells, point_data=None, cell_data=cell_data)
 
