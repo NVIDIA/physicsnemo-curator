@@ -119,7 +119,7 @@ results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 Backend selection:
 
 - `n_jobs=1` → always sequential
-- `backend="auto"` → picks best available (dask > loky > process_pool)
+- No backend specified → defaults to `"sequential"`
 
 Each worker gets an independent copy of the pipeline (pickled), processes its
 assigned indices, and records metrics to the shared SQLite database.

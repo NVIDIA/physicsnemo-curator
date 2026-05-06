@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 import pytest
 
 from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
-from physicsnemo_curator.run import _pick_auto_backend, run_pipeline
+from physicsnemo_curator.run import run_pipeline
 
 pytestmark = pytest.mark.integration
 
@@ -278,20 +278,6 @@ class TestDaskBackend:
 # ---------------------------------------------------------------------------
 # Auto backend tests
 # ---------------------------------------------------------------------------
-
-
-class TestAutoBackend:
-    """Integration tests for auto backend selection."""
-
-    def test_auto_selects_something(self, simple_pipeline):
-        """Auto backend should select a working backend."""
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="auto", progress=False)
-        assert len(results) == 5
-
-    def test_pick_auto_backend_returns_valid(self):
-        """_pick_auto_backend should return a valid backend name."""
-        result = _pick_auto_backend()
-        assert result in ("dask", "loky", "process_pool")
 
 
 # ---------------------------------------------------------------------------

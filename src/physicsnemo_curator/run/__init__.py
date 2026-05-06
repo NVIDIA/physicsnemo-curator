@@ -22,15 +22,13 @@ parallel — and returns the collected sink outputs.
 
 Available Backends
 ------------------
-* ``"sequential"`` — simple ``for``-loop (default when *n_jobs=1*).
+* ``"sequential"`` — simple ``for``-loop (default).
 * ``"process_pool"`` — :class:`concurrent.futures.ProcessPoolExecutor`
   (true parallelism for CPU-bound tasks).
 * ``"loky"`` — ``joblib.Parallel`` with the ``loky`` backend
   (requires ``joblib``).
 * ``"dask"`` — ``dask.bag`` for parallel/distributed execution
   (requires ``dask``).
-* ``"auto"`` — picks the best available backend automatically.
-
 Custom Backends
 ---------------
 You can register custom backends using :func:`register_backend`::
@@ -153,22 +151,6 @@ def list_backends() -> dict[str, dict[str, Any]]:
     }
 
 
-def _pick_auto_backend() -> str:
-    """Select the best available parallel backend.
-
-    Returns
-    -------
-    str
-        Name of the best available backend.
-    """
-    # Priority order for parallel execution
-    priority = ["dask", "loky", "process_pool"]
-    for name in priority:
-        if name in _BACKENDS and _BACKENDS[name].is_available():
-            return name
-    return "process_pool"
-
-
 # Register built-in backends
 register_backend(SequentialBackend)
 register_backend(ProcessPoolBackend)
@@ -185,7 +167,7 @@ def run_pipeline(
     pipeline: Pipeline[Any],
     *,
     n_jobs: int = 1,
-    backend: str = "auto",
+    backend: str = "sequential",
     indices: Iterable[int] | None = None,
     progress: bool | Literal["log"] = True,
     **backend_kwargs: Any,
@@ -203,7 +185,7 @@ def run_pipeline(
         Number of parallel workers. ``1`` forces sequential execution.
         ``-1`` uses all available CPUs.
     backend : str
-        Execution backend. One of ``"auto"``, ``"sequential"``,
+        Execution backend. One of ``"sequential"``,
         ``"process_pool"``, ``"loky"``, ``"dask"``,
         or any custom registered backend.
     indices : Iterable[int] | None
@@ -254,9 +236,9 @@ def run_pipeline(
     >>> results = run_pipeline(pipeline, indices=[0, 5, 10])
     """
     # Validate backend
-    if backend != "auto" and backend not in _BACKENDS:
+    if backend not in _BACKENDS:
         available = ", ".join(sorted(_BACKENDS.keys()))
-        msg = f"Unknown backend {backend!r}. Available: {available}, auto"
+        msg = f"Unknown backend {backend!r}. Available: {available}"
         raise ValueError(msg)
 
     # Validate pipeline
@@ -279,12 +261,7 @@ def run_pipeline(
 
     # Resolve backend
     resolved_n_jobs = config.resolved_n_jobs
-    if resolved_n_jobs == 1 or backend == "sequential":
-        effective_backend = "sequential"
-    elif backend == "auto":
-        effective_backend = _pick_auto_backend()
-    else:
-        effective_backend = backend
+    effective_backend = "sequential" if resolved_n_jobs == 1 or backend == "sequential" else backend
 
     # Check backend availability
     backend_cls = _BACKENDS[effective_backend]

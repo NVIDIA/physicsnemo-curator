@@ -42,7 +42,7 @@ pipeline = (
 `run_pipeline` dispatches indices to parallel workers. Key parameters:
 
 - `n_jobs` — number of workers (`-1` = all CPUs)
-- `backend` — `"process_pool"`, `"loky"`, `"dask"`, or `"auto"`
+- `backend` — `"sequential"`, `"process_pool"`, `"loky"`, or `"dask"`
 - `indices` — which source indices to process (default: all)
 - `progress` — show a progress bar
 
@@ -89,9 +89,7 @@ for path in merged:
 
 | Backend | Install extra | Best for |
 |---------|--------------|----------|
-| `sequential` | (built-in) | Debugging, small datasets |
-| `process_pool` | (built-in) | CPU-bound tasks (default) |
+| `sequential` | (built-in) | Debugging, small datasets (default) |
+| `process_pool` | (built-in) | CPU-bound tasks |
 | `loky` | `uv sync --extra loky` | Robust multi-process |
 | `dask` | `uv sync --extra dask` | Distributed clusters |
-
-Use `backend="auto"` to let the framework pick the best available backend for your system.
