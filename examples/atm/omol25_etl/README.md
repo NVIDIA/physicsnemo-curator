@@ -15,11 +15,10 @@ The pipeline:
 ## Prerequisites
 
 ```bash
-uv sync --group mesh
+uv sync --group atm
 
 # or with pip
 pip install physicsnemo-curator[atm]
-pip install huggingface_hub[cli]
 ```
 
 ## Download the Dataset
@@ -34,13 +33,8 @@ HuggingFace page before downloading.
 > before downloading.
 
 ```bash
-# Authenticate with HuggingFace (required for gated repos)
-huggingface-cli login
-
 # Download the validation split tar.gz archive
-huggingface-cli download facebook/OMol25 \
-    --include "val.tar.gz" \
-    --local-dir input/omol25
+wget -P input/omol25 <val.tar.gz URL>
 
 # Extract the .aselmdb files
 tar -xzf input/omol25/val.tar.gz -C input/omol25
@@ -67,7 +61,7 @@ python main.py
 python main.py --input /path/to/omol25/val --output /path/to/output
 
 # Process more files with more workers
-python main.py --n-indices 10 --workers 4
+python main.py --n-indices 64 --workers 4
 ```
 
 ## Output Structure
@@ -75,11 +69,13 @@ python main.py --n-indices 10 --workers 4
 ```text
 output/omol25/
 ├── stats.parquet              # Per-field statistics (merged)
-└── dataset.zarr/              # AtomicData Zarr store
-    ├── meta/                  # Pointer arrays (atoms_ptr, edges_ptr)
-    ├── core/                  # Core fields (positions, forces, ...)
-    ├── custom/                # User-defined fields
-    └── .zattrs                # Root metadata (num_samples, fields)
+├── 0000.zarr/                 # Per-LMDB-file Zarr store
+│   ├── meta/                  # Pointer arrays (atoms_ptr, edges_ptr)
+│   ├── core/                  # Core fields (positions, forces, ...)
+│   ├── custom/                # User-defined fields
+│   └── .zattrs                # Root metadata (num_samples, fields)
+├── 0001.zarr/
+└── ...
 ```
 
 [omol25]: https://huggingface.co/facebook/OMol25

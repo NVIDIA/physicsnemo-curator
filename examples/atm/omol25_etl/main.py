@@ -43,14 +43,14 @@ def main() -> None:
     parser.add_argument(
         "--workers",
         type=int,
-        default=2,
-        help="Number of parallel workers (default: 2)",
+        default=4,
+        help="Number of parallel workers (default: 4)",
     )
     parser.add_argument(
         "--n-indices",
         type=int,
-        default=2,
-        help="Number of LMDB files to process (default: 2)",
+        default=64,
+        help="Number of LMDB files to process (default: 64)",
     )
     parser.add_argument(
         "--batch-size",
@@ -79,9 +79,13 @@ def main() -> None:
 
     # Build the pipeline:
     # 1. AtomicStatsFilter — per-field statistics with Welford accumulators
-    # 2. AtomicDataZarrSink — write atomic structures to a Zarr store
+    # 2. AtomicDataZarrSink — write per-LMDB-file Zarr stores
     pipeline = source.filter(AtomicStatsFilter(output=str(output_dir / "stats.parquet"))).write(
-        AtomicDataZarrSink(output_path=str(output_dir / "dataset.zarr"), batch_size=args.batch_size)
+        AtomicDataZarrSink(
+            output_path=str(output_dir),
+            naming_template="{stem}.zarr",
+            batch_size=args.batch_size,
+        )
     )
 
     # Run the pipeline
