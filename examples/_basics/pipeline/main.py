@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Creating a Pipeline."""
+"""Creating a Pipeline.
 
-# Every pipeline has three ingredients: a Source (data reader), zero
-# or more Filters (transforms or analytics), and a Sink (writer).
+See README.md for a full walkthrough.
+"""
 
 from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
@@ -25,24 +25,12 @@ from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
 # Step 1: Create a Source
-#
-# A Source is an indexed collection of data items. Here we use
-# NavierStokesCylinderSource which provides 500 Navier-Stokes flow
-# simulations as Mesh objects.
-
 source = NavierStokesCylinderSource()
 
 print(f"Source: {source.name}")
 print(f"Items available: {len(source)}")
 
 # Step 2: Add Filters
-#
-# Filters transform or inspect items as they flow through the pipeline.
-# The fluent .filter() method chains multiple filters together:
-#
-# - MeanFilter computes spatial means and writes a Parquet summary.
-# - PrecisionFilter converts floating-point fields to float32.
-
 pipeline = source.filter(MeanFilter(output="output/getting_started/stats.parquet")).filter(
     PrecisionFilter(target_dtype="float32")
 )
@@ -51,10 +39,6 @@ print(f"Filters: {[f.name for f in pipeline.filters]}")
 print(f"Sink: {pipeline.sink}")  # None — no sink yet
 
 # Step 3: Attach a Sink
-#
-# A Sink persists items to storage. The .write() method attaches a sink
-# and returns a complete pipeline.
-
 pipeline = pipeline.write(MeshSink(output_dir="output/getting_started/meshes/"))
 
 assert pipeline.sink is not None
@@ -62,22 +46,5 @@ print(f"Sink: {pipeline.sink.name}")
 print(f"Pipeline length: {len(pipeline)}")
 
 # Step 4: Execute One Index
-#
-# Indexing into a pipeline runs the full Source -> Filters -> Sink
-# chain for a single source item and returns the file paths written
-# by the sink.
-
 paths = pipeline[0]
 print(f"Index 0 wrote: {paths}")
-
-# The fluent API also supports building in one expression:
-#
-#     pipeline = (
-#         NavierStokesCylinderSource()
-#         .filter(MeanFilter(output="stats.parquet"))
-#         .filter(PrecisionFilter(target_dtype="float32"))
-#         .write(MeshSink(output_dir="meshes/"))
-#     )
-#
-# Each call returns a new immutable Pipeline — the original
-# source, filters, and sink are never modified.
