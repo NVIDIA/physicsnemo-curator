@@ -1,7 +1,7 @@
 # OMol25 Atomic Data ETL
 
-Process [OMol25](https://huggingface.co/facebook/OMol25) atomic/molecular
-DFT data through a complete Source → Filter → Sink pipeline.
+Process [OMol25][omol25] atomic/molecular DFT data through a complete
+Source → Filter → Sink pipeline.
 
 The pipeline:
 
@@ -15,21 +15,18 @@ The pipeline:
 ## Prerequisites
 
 ```bash
+uv sync --group mesh
+
+# or with pip
 pip install physicsnemo-curator[atm]
 pip install huggingface_hub[cli]
 ```
 
 ## Download the Dataset
 
-OMol25 is hosted on HuggingFace at
-[facebook/OMol25](https://huggingface.co/facebook/OMol25). The repository
-is **gated** — you must accept the license terms on the HuggingFace page
-before downloading. Log in and complete the access request form, then
-authenticate the CLI:
-
-```bash
-huggingface-cli login
-```
+OMol25 is hosted on HuggingFace at [facebook/OMol25][omol25-data].
+The repository is **gated** — you must accept the license terms on the
+HuggingFace page before downloading.
 
 > **Warning:** The full OMol25 dataset is very large (100M+ DFT
 > calculations across ~80 `.aselmdb` files). For this example only the
@@ -37,13 +34,16 @@ huggingface-cli login
 > before downloading.
 
 ```bash
+# Authenticate with HuggingFace (required for gated repos)
+huggingface-cli login
+
 # Download the validation split tar.gz archive
 huggingface-cli download facebook/OMol25 \
-    --include "val*.tar.gz" \
+    --include "val.tar.gz" \
     --local-dir input/omol25
 
 # Extract the .aselmdb files
-tar -xzf input/omol25/val*.tar.gz -C input/omol25
+tar -xzf input/omol25/val.tar.gz -C input/omol25
 ```
 
 This creates an `input/omol25/val/` directory with LMDB database shards
@@ -60,8 +60,14 @@ input/omol25/val/
 ## Usage
 
 ```bash
-# Basic usage (reads from ./input/omol25/val/, writes to ./output/omol25/)
+# Basic usage (reads from ./input/omol25/val, writes to ./output/omol25)
 python main.py
+
+# Custom input/output directories
+python main.py --input /path/to/omol25/val --output /path/to/output
+
+# Process more files with more workers
+python main.py --n-indices 10 --workers 4
 ```
 
 ## Output Structure
@@ -75,3 +81,6 @@ output/omol25/
     ├── custom/                # User-defined fields
     └── .zattrs                # Root metadata (num_samples, fields)
 ```
+
+[omol25]: https://huggingface.co/facebook/OMol25
+[omol25-data]: https://huggingface.co/facebook/OMol25/blob/main/DATASET.md
