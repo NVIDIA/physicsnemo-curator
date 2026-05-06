@@ -92,6 +92,12 @@ def main() -> None:
         choices=["arco", "wb2", "ncar", "cds"],
         help="ERA5 data backend (default: arco)",
     )
+    parser.add_argument(
+        "--n-indices",
+        type=int,
+        default=32,
+        help="Number of source indices to process (default: 32)",
+    )
     args = parser.parse_args()
 
     # Surface variables: 2m temperature, 10m wind (u/v), surface pressure, mean sea level pressure
@@ -104,6 +110,7 @@ def main() -> None:
     print(f"  Variables: {variables}")
     print(f"  Backend: {args.backend}")
     print(f"  Workers: {args.workers}")
+    print(f"  Indices: {args.n_indices}")
     print(f"  Output: {args.output}")
 
     # Configure the ERA5 source
@@ -130,7 +137,9 @@ def main() -> None:
     # Use thread_pool backend since ERA5 fetching is I/O-bound (network downloads).
     # Use progress="log" for simple timestamped output that coexists with
     # earth2studio's loguru logging (the default TUI can conflict with it).
-    results = run_pipeline(pipeline, n_jobs=args.workers, backend="thread_pool", progress="log", indices=range(16))
+    results = run_pipeline(
+        pipeline, n_jobs=args.workers, backend="thread_pool", progress="log", indices=range(args.n_indices)
+    )
 
     print(f"\nProcessed {len(results)} timesteps")
 
