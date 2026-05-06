@@ -196,38 +196,6 @@ class TestSequentialBackend:
 
 
 # ---------------------------------------------------------------------------
-# Thread pool backend tests
-# ---------------------------------------------------------------------------
-
-
-class TestThreadPoolBackend:
-    """Integration tests for the thread_pool backend."""
-
-    def test_basic_execution(self, simple_pipeline):
-        """Basic execution with thread pool."""
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="thread_pool", progress=False)
-        assert len(results) == 5
-        assert results[0] == ["item_0_0"]
-        assert results[4] == ["item_4_12"]
-
-    def test_subset_indices(self, simple_pipeline):
-        """Thread pool with subset of indices."""
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="thread_pool", indices=[1, 3], progress=False)
-        assert len(results) == 2
-        assert results[0] == ["item_1_3"]
-        assert results[1] == ["item_3_9"]
-
-    def test_stateful_sink_shared(self):
-        """Thread pool shares state (same process)."""
-        sink = StatefulSink()
-        pipeline = NumberSource(4).write(sink)
-        pipeline.track_metrics = False
-        run_pipeline(pipeline, n_jobs=2, backend="thread_pool", progress=False)
-        # Thread pool: sink is shared within process
-        assert sink.call_count == 4
-
-
-# ---------------------------------------------------------------------------
 # Process pool backend tests
 # ---------------------------------------------------------------------------
 

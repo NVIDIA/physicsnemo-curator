@@ -97,7 +97,6 @@ class TestBackendRegistry:
         """Built-in backends should be registered."""
         backends = list_backends()
         assert "sequential" in backends
-        assert "thread_pool" in backends
         assert "process_pool" in backends
         assert "loky" in backends
         assert "dask" in backends
@@ -111,10 +110,9 @@ class TestBackendRegistry:
             assert "requires" in info, f"Backend {name} missing requires"
 
     def test_builtin_backends_always_available(self):
-        """Sequential, thread_pool, process_pool should always be available."""
+        """Sequential and process_pool should always be available."""
         backends = list_backends()
         assert backends["sequential"]["available"] is True
-        assert backends["thread_pool"]["available"] is True
         assert backends["process_pool"]["available"] is True
 
     def test_register_custom_backend(self):
@@ -183,11 +181,9 @@ class TestImports:
             LokyBackend,
             ProcessPoolBackend,
             SequentialBackend,
-            ThreadPoolBackend,
         )
 
         assert SequentialBackend.name == "sequential"
-        assert ThreadPoolBackend.name == "thread_pool"
         assert ProcessPoolBackend.name == "process_pool"
         assert LokyBackend.name == "loky"
         assert DaskBackend.name == "dask"

@@ -131,9 +131,8 @@ def _decode_ndarray_markers(obj: object) -> object:
 def _count_aselmdb_rows(db_path: pathlib.Path) -> int:
     """Count data rows in a ``.aselmdb`` file without parsing values.
 
-    Opens the LMDB environment and counts keys that are numeric row IDs,
-    skipping reserved keys (``nextid``, ``deleted_ids``, ``metadata``).
-    This is much faster than reading all rows since it only iterates keys.
+    Opens the LMDB environment, counts keys that are numeric row IDs
+    (skipping reserved keys), and closes the environment.
 
     Parameters
     ----------
@@ -148,8 +147,8 @@ def _count_aselmdb_rows(db_path: pathlib.Path) -> int:
     import lmdb as lmdb_lib
 
     env = lmdb_lib.open(str(db_path), readonly=True, subdir=False, lock=False)
-    count = 0
     try:
+        count = 0
         with env.begin(write=False) as txn:
             cursor = txn.cursor()
             for key_bytes, _ in cursor:
@@ -161,9 +160,9 @@ def _count_aselmdb_rows(db_path: pathlib.Path) -> int:
                     count += 1
                 except ValueError:
                     continue
+        return count
     finally:
         env.close()
-    return count
 
 
 def _read_aselmdb_row_at(db_path: pathlib.Path, row_index: int) -> dict[str, object]:
@@ -235,10 +234,10 @@ def _read_aselmdb_row_at(db_path: pathlib.Path, row_index: int) -> dict[str, obj
 def _read_aselmdb_rows(db_path: pathlib.Path) -> list[dict[str, object]]:
     """Read all data rows from a ``.aselmdb`` file using pure Python.
 
-    Opens the LMDB environment directly, iterates over all entries,
-    skips reserved keys (``nextid``, ``deleted_ids``, ``metadata``),
-    decompresses each zlib-compressed JSON value, parses it, and
-    converts ``__ndarray__`` markers to NumPy arrays.
+    Opens the LMDB environment, iterates over all entries, skips reserved
+    keys (``nextid``, ``deleted_ids``, ``metadata``), decompresses each
+    zlib-compressed JSON value, parses it, and converts ``__ndarray__``
+    markers to NumPy arrays.
 
     Parameters
     ----------
@@ -258,8 +257,8 @@ def _read_aselmdb_rows(db_path: pathlib.Path) -> list[dict[str, object]]:
     import lmdb as lmdb_lib
 
     env = lmdb_lib.open(str(db_path), readonly=True, subdir=False, lock=False)
-    rows: list[tuple[int, dict[str, object]]] = []
     try:
+        rows: list[tuple[int, dict[str, object]]] = []
         with env.begin(write=False) as txn:
             cursor = txn.cursor()
             for key_bytes, val_bytes in cursor:
@@ -278,11 +277,11 @@ def _read_aselmdb_rows(db_path: pathlib.Path) -> list[dict[str, object]]:
                 row_dict: dict[str, object] = {str(k): v for k, v in decoded.items()}
                 row_dict["id"] = row_id
                 rows.append((row_id, row_dict))
+
+        rows.sort(key=lambda pair: pair[0])
+        return [row for _, row in rows]
     finally:
         env.close()
-
-    rows.sort(key=lambda pair: pair[0])
-    return [row for _, row in rows]
 
 
 def _encode_ndarray(arr: np.ndarray) -> dict[str, list[object]]:
@@ -869,6 +868,41 @@ class ASELMDBSource(Source["AtomicData"]):
 
         # bisect_right returns insertion point; subtract 1 to get file index
         return bisect.bisect_right(self._cumulative_counts, index) - 1
+
+    def partition_indices(self, indices: list[int]) -> list[list[int]] | None:
+        """Group indices by source ``.aselmdb`` file.
+
+        Groups indices so that all structures from the same file are
+        processed by the same worker.  This improves data locality
+        (one env open per worker) and avoids redundant full-file scans
+        when using the Python backend (which iterates all keys to find
+        a row by index).
+
+        Parameters
+        ----------
+        indices : list[int]
+            The structure indices to partition.
+
+        Returns
+        -------
+        list[list[int]] | None
+            Groups of indices, one per file that is accessed.
+            Returns ``None`` if all indices come from the same file
+            (no partitioning needed).
+        """
+        from collections import defaultdict
+
+        file_groups: dict[int, list[int]] = defaultdict(list)
+        for idx in indices:
+            file_idx = self._find_file_for_index(idx)
+            file_groups[file_idx].append(idx)
+
+        if len(file_groups) <= 1:
+            return None
+
+        # Return groups sorted by file order, indices sorted within.
+        groups = [sorted(file_groups[k]) for k in sorted(file_groups)]
+        return groups
 
     # -- Backend implementations ----------------------------------------------
 

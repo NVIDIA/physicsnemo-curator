@@ -14,7 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""OMol25 Atomic Data ETL Pipeline."""
+"""OMol25 Atomic Data ETL Pipeline.
+
+Demonstrates the pre-allocated parallel Zarr write mode for large-scale
+atomic datasets.  The sink pre-allocates all arrays upfront using the
+per-structure atom counts from ``metadata.npz``, then workers fill in
+non-overlapping regions concurrently without synchronization.
+"""
 
 import argparse
 from pathlib import Path
@@ -50,13 +56,13 @@ def main() -> None:
         "--n-indices",
         type=int,
         default=64,
-        help="Number of LMDB files to process (default: 64)",
+        help="Number of structures to process (default: 64, -1 for all)",
     )
     parser.add_argument(
-        "--batch-size",
+        "--chunk-size",
         type=int,
-        default=500,
-        help="Zarr write batch size (default: 500)",
+        default=2048,
+        help="Atoms per Zarr chunk — controls parallel partitioning (default: 2048)",
     )
     args = parser.parse_args()
 
@@ -64,42 +70,45 @@ def main() -> None:
     output_dir: Path = args.output.resolve()
 
     # Configure the source to read ASE LMDB files.
-    # Each .aselmdb file is one source index containing many atomic structures.
     source = ASELMDBSource(
         data_dir=str(input_dir),
         metadata_path=str(input_dir / "metadata.npz"),
     )
 
-    n_files = len(source)
+    n_total = len(source)
+    n_indices = n_total if args.n_indices == -1 else min(args.n_indices, n_total)
+
     print(f"OMol25 ETL: {input_dir}")
-    print(f"  LMDB files discovered: {n_files}")
-    print(f"  Indices to process: {args.n_indices}")
+    print(f"  Total structures: {n_total}")
+    print(f"  Indices to process: {n_indices}")
     print(f"  Workers: {args.workers}")
+    print(f"  Chunk size: {args.chunk_size} atoms")
     print(f"  Output: {output_dir}")
 
-    # Build the pipeline:
-    # 1. AtomicStatsFilter — per-field statistics with Welford accumulators
-    # 2. AtomicDataZarrSink — write per-LMDB-file Zarr stores
+    # Get schema from first sample and per-structure atom counts.
+    natoms = source.metadata["natoms"][:n_indices]
+    sample = next(source[0])
+
+    # Build the pipeline with pre-allocated parallel sink.
     pipeline = source.filter(AtomicStatsFilter(output=str(output_dir / "stats.parquet"))).write(
         AtomicDataZarrSink(
-            output_path=str(output_dir),
-            naming_template="{stem}.zarr",
-            batch_size=args.batch_size,
+            output_path=str(output_dir / "dataset.zarr"),
+            natoms=natoms,
+            schema=sample,
+            chunk_size=args.chunk_size,
         )
     )
 
-    # Run the pipeline
+    # Run the pipeline — workers write to non-overlapping regions.
     results = run_pipeline(
         pipeline,
         n_jobs=args.workers,
         backend="process_pool",
-        indices=range(args.n_indices),
+        indices=range(n_indices),
         progress=True,
     )
 
-    print(f"\nProcessed {len(results)} LMDB files")
-    for i, paths in enumerate(results):
-        print(f"  File {i}: {paths}")
+    print(f"\nProcessed {len(results)} structures")
 
     # Merge per-worker statistics shards into a single Parquet file
     merged = gather_pipeline(pipeline)

@@ -23,8 +23,6 @@ parallel — and returns the collected sink outputs.
 Available Backends
 ------------------
 * ``"sequential"`` — simple ``for``-loop (default when *n_jobs=1*).
-* ``"thread_pool"`` — :class:`concurrent.futures.ThreadPoolExecutor`
-  (good for I/O-bound tasks).
 * ``"process_pool"`` — :class:`concurrent.futures.ProcessPoolExecutor`
   (true parallelism for CPU-bound tasks).
 * ``"loky"`` — ``joblib.Parallel`` with the ``loky`` backend
@@ -66,7 +64,6 @@ from physicsnemo_curator.run.dask import DaskBackend
 from physicsnemo_curator.run.loky import LokyBackend
 from physicsnemo_curator.run.process_pool import ProcessPoolBackend
 from physicsnemo_curator.run.sequential import SequentialBackend
-from physicsnemo_curator.run.thread_pool import ThreadPoolBackend
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -174,7 +171,6 @@ def _pick_auto_backend() -> str:
 
 # Register built-in backends
 register_backend(SequentialBackend)
-register_backend(ThreadPoolBackend)
 register_backend(ProcessPoolBackend)
 register_backend(LokyBackend)
 register_backend(DaskBackend)
@@ -208,7 +204,7 @@ def run_pipeline(
         ``-1`` uses all available CPUs.
     backend : str
         Execution backend. One of ``"auto"``, ``"sequential"``,
-        ``"thread_pool"``, ``"process_pool"``, ``"loky"``, ``"dask"``,
+        ``"process_pool"``, ``"loky"``, ``"dask"``,
         or any custom registered backend.
     indices : Iterable[int] | None
         Specific source indices to process. ``None`` (default) processes
@@ -398,7 +394,6 @@ __all__ = [
     "RunBackend",
     "RunConfig",
     "SequentialBackend",
-    "ThreadPoolBackend",
     "gather_pipeline",
     "get_backend",
     "list_backends",

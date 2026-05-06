@@ -40,7 +40,7 @@ print(f"Total runs available: {len(pipeline)}")
 # run_pipeline dispatches indices to parallel workers. Key parameters:
 #
 # - n_jobs — number of workers (-1 = all CPUs)
-# - backend — "process_pool", "thread_pool", "loky", "dask", "prefect", or "auto"
+# - backend — "process_pool", "loky", "dask", or "auto"
 # - indices — which source indices to process (default: all)
 # - progress — show a progress bar
 #
@@ -80,11 +80,9 @@ for path in merged:
 # | Backend        | Install extra           | Best for                    |
 # |----------------|-------------------------|-----------------------------|
 # | sequential     | (built-in)              | Debugging, small datasets   |
-# | thread_pool    | (built-in)              | I/O-bound tasks             |
 # | process_pool   | (built-in)              | CPU-bound tasks (default)   |
 # | loky           | pip install .[loky]     | Robust multi-process        |
 # | dask           | pip install .[dask]     | Distributed clusters        |
-# | prefect        | pip install .[prefect]  | Orchestrated workflows      |
 #
 # Use backend="auto" to let the framework pick the best available
 # backend for your system.

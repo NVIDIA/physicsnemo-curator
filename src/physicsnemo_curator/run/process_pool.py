@@ -28,6 +28,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from physicsnemo_curator.run.base import (
     RunBackend,
     RunConfig,
+    batch_groups,
+    intersect_partitions,
+    process_index_group,
     process_single_index_packed,
 )
 from physicsnemo_curator.run.progress_monitor import start_progress_monitor
@@ -98,31 +101,86 @@ class ProcessPoolBackend(RunBackend):
 
         result_map: dict[int, list[str]] = {}
         with start_progress_monitor(pipeline, config), ProcessPoolExecutor(**executor_kwargs) as executor:
-            pending: set[Future[list[str]]] = set()
-            future_to_idx: dict[Future[list[str]], int] = {}
+            # Compute partition groups from source and sink constraints.
+            source_groups = pipeline.source.partition_indices(indices)
+            sink_groups = pipeline.sink.partition_indices(indices) if pipeline.sink else None
+            groups = intersect_partitions(source_groups, sink_groups)
 
-            # Submit initial batch (one per worker)
-            next_submit = 0
-            for _ in range(min(n_jobs, len(indices))):
-                idx = indices[next_submit]
-                fut: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, idx))
-                future_to_idx[fut] = idx
-                pending.add(fut)
-                next_submit += 1
+            if groups is not None:
+                # Batch groups to at most n_workers batches for efficiency.
+                batches = batch_groups(groups, n_jobs)
+                # Dispatch batches with work-stealing.
+                pending: set[Future[dict[int, list[str]]]] = set()
+                future_to_group: dict[Future[dict[int, list[str]]], list[int]] = {}
 
-            # Process completions and submit new tasks
-            while pending:
-                done, pending = wait(pending, return_when=FIRST_COMPLETED)
-                for future in done:
-                    idx = future_to_idx[future]
-                    result_map[idx] = future.result()
+                next_submit = 0
+                for _ in range(min(n_jobs, len(batches))):
+                    batch = batches[next_submit]
+                    fut: Future[dict[int, list[str]]] = executor.submit(_process_group_packed, (pipeline, batch))
+                    future_to_group[fut] = batch
+                    pending.add(fut)
+                    next_submit += 1
 
-                    # Submit next task if available
-                    if next_submit < len(indices):
-                        next_idx = indices[next_submit]
-                        fut_next: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, next_idx))
-                        future_to_idx[fut_next] = next_idx
-                        pending.add(fut_next)
-                        next_submit += 1
+                while pending:
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        group_results = future.result()
+                        result_map.update(group_results)
+
+                        if next_submit < len(batches):
+                            batch = batches[next_submit]
+                            fut_next: Future[dict[int, list[str]]] = executor.submit(
+                                _process_group_packed, (pipeline, batch)
+                            )
+                            future_to_group[fut_next] = batch
+                            pending.add(fut_next)
+                            next_submit += 1
+            else:
+                # Default: one index per future with work-stealing.
+                pending_idx: set[Future[list[str]]] = set()
+                future_to_idx: dict[Future[list[str]], int] = {}
+
+                # Submit initial batch (one per worker)
+                next_submit = 0
+                for _ in range(min(n_jobs, len(indices))):
+                    idx = indices[next_submit]
+                    fut_idx: Future[list[str]] = executor.submit(process_single_index_packed, (pipeline, idx))
+                    future_to_idx[fut_idx] = idx
+                    pending_idx.add(fut_idx)
+                    next_submit += 1
+
+                # Process completions and submit new tasks
+                while pending_idx:
+                    done_idx, pending_idx = wait(pending_idx, return_when=FIRST_COMPLETED)
+                    for future in done_idx:
+                        idx = future_to_idx[future]
+                        result_map[idx] = future.result()
+
+                        # Submit next task if available
+                        if next_submit < len(indices):
+                            next_idx = indices[next_submit]
+                            fut_next_idx: Future[list[str]] = executor.submit(
+                                process_single_index_packed, (pipeline, next_idx)
+                            )
+                            future_to_idx[fut_next_idx] = next_idx
+                            pending_idx.add(fut_next_idx)
+                            next_submit += 1
 
         return [result_map[idx] for idx in indices]
+
+
+def _process_group_packed(args: tuple[Pipeline[Any], list[int]]) -> dict[int, list[str]]:
+    """Process an index group (packed arguments for ProcessPoolExecutor).
+
+    Parameters
+    ----------
+    args : tuple[Pipeline, list[int]]
+        A ``(pipeline, indices)`` pair.
+
+    Returns
+    -------
+    dict[int, list[str]]
+        Mapping of index to sink output paths.
+    """
+    pipeline, group_indices = args
+    return process_index_group(pipeline, group_indices)

@@ -687,14 +687,6 @@ class TestRunPipelineIntegration:
         assert len(results) == 5
         assert pipeline2.completed_indices == {0, 1, 2, 3, 4}
 
-    def test_thread_pool_with_checkpoint(self, tmp_path: pathlib.Path) -> None:
-        """Pipeline with track_metrics works with thread_pool backend."""
-        pipeline = _make_pipeline(tmp_path, count=5)
-
-        results = run_pipeline(pipeline, n_jobs=2, backend="thread_pool", progress=False)
-        assert len(results) == 5
-        assert pipeline.completed_indices == {0, 1, 2, 3, 4}
-
 
 class TestWorkerTracking:
     """Tests for worker progress tracking via Pipeline.__getitem__."""

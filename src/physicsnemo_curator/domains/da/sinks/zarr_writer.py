@@ -20,11 +20,18 @@ Writes incoming :class:`xarray.DataArray` objects to a Zarr store,
 creating one Zarr group per variable with dimensions
 ``(time, lat, lon)``.  Supports user-specified chunking and Zarr v3
 sharding.
+
+When executed with a parallel backend (``process_pool``), the sink
+partitions pipeline indices into
+chunk-aligned groups so that no two workers write to the same Zarr
+chunk concurrently.  The partitioning dimension defaults to the
+``append_dim`` (``"time"``).
 """
 
 from __future__ import annotations
 
 import pathlib
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import zarr
@@ -32,7 +39,7 @@ import zarr
 from physicsnemo_curator.core.base import Param, Sink
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
     import xarray as xr
 
@@ -49,8 +56,12 @@ class ZarrSink(Sink["xr.DataArray"]):
     that each variable gets its own Zarr group:
     ``<output_path>/<variable_name>/``, with dimensions
     ``(time, lat, lon)``.  Subsequent calls **append** along the
-    ``time`` dimension, so the sink accumulates data across pipeline
-    indices based on the time coordinate in the incoming data.
+    append dimension, so the sink accumulates data across pipeline
+    indices based on the coordinate in the incoming data.
+
+    For parallel execution, the sink partitions pipeline indices into
+    chunk-aligned groups via :meth:`partition_indices` so that no two
+    workers write to the same Zarr chunk concurrently.
 
     Parameters
     ----------
@@ -64,6 +75,10 @@ class ZarrSink(Sink["xr.DataArray"]):
         Shard sizes per dimension (Zarr v3 only).  When provided, each
         shard is a container for multiple chunks.  Requires ``zarr>=3.0``.
         If *None*, sharding is not used.
+    append_dim : str
+        The dimension along which new data is appended on subsequent
+        writes.  This is also the dimension used for chunk-aligned
+        partitioning.  Defaults to ``"time"``.
 
     Examples
     --------
@@ -85,7 +100,7 @@ class ZarrSink(Sink["xr.DataArray"]):
         Returns
         -------
         list[Param]
-            Descriptors for *output_path* and *chunks*.
+            Descriptors for *output_path*, *chunks*, and *append_dim*.
         """
         return [
             Param(name="output_path", description="Path to output Zarr store", type=str),
@@ -95,6 +110,12 @@ class ZarrSink(Sink["xr.DataArray"]):
                 type=str,
                 default="time:1,lat:721,lon:1440",
             ),
+            Param(
+                name="append_dim",
+                description="Dimension along which data is appended (used for partitioning)",
+                type=str,
+                default="time",
+            ),
         ]
 
     def __init__(
@@ -102,10 +123,12 @@ class ZarrSink(Sink["xr.DataArray"]):
         output_path: str,
         chunks: dict[str, int] | None = None,
         shards: dict[str, int] | None = None,
+        append_dim: str = "time",
     ) -> None:
         self._output_path = pathlib.Path(output_path)
         self._chunks = chunks if chunks is not None else dict(self._DEFAULT_CHUNKS)
         self._shards = shards
+        self._append_dim = append_dim
 
     def __call__(self, items: Iterator[xr.DataArray], index: int) -> list[str]:
         """Consume DataArrays and write each variable to the Zarr store.
@@ -133,6 +156,43 @@ class ZarrSink(Sink["xr.DataArray"]):
             paths.extend(written)
 
         return paths
+
+    def partition_indices(self, indices: Iterable[int]) -> list[list[int]] | None:
+        """Group pipeline indices by chunk along the append dimension.
+
+        Each returned group contains indices whose data lands within the
+        same Zarr chunk along :attr:`append_dim`.  The runner dispatches
+        each group to a single worker, preventing concurrent writes to
+        the same chunk.
+
+        If the chunk size along the append dimension is 1, every index
+        is its own chunk and no partitioning is needed — returns *None*
+        to signal that one-index-per-worker dispatch is fine.
+
+        Parameters
+        ----------
+        indices : Iterable[int]
+            Pipeline indices to partition.
+
+        Returns
+        -------
+        list[list[int]] | None
+            Chunk-aligned groups, or *None* if each index already maps
+            to a unique chunk (chunk size == 1).
+        """
+        chunk_size = self._chunks.get(self._append_dim, 1)
+        if chunk_size <= 1:
+            return None
+
+        # Group indices by which chunk they fall into.
+        # Pipeline index i appends at position i along the append dim.
+        groups: dict[int, list[int]] = defaultdict(list)
+        for idx in indices:
+            chunk_id = idx // chunk_size
+            groups[chunk_id].append(idx)
+
+        # Return groups sorted by chunk id, each internally sorted.
+        return [sorted(group) for _, group in sorted(groups.items())]
 
     def _write_dataarray(self, da: xr.DataArray) -> list[str]:
         """Split a DataArray by variable and write each to its Zarr group.
@@ -170,13 +230,13 @@ class ZarrSink(Sink["xr.DataArray"]):
     def _append_to_zarr(self, da: xr.DataArray, group_path: pathlib.Path) -> None:
         """Append a DataArray to a Zarr group, creating it if needed.
 
-        The time coordinate from the DataArray determines where in the
-        output store the data lands.
+        The coordinate from the DataArray along the append dimension
+        determines where in the output store the data lands.
 
         Parameters
         ----------
         da : xr.DataArray
-            Data to write (should have ``time`` as the first dim).
+            Data to write (should have the append dim as the first dim).
         group_path : pathlib.Path
             Path to the Zarr group directory.
         """
@@ -202,11 +262,11 @@ class ZarrSink(Sink["xr.DataArray"]):
             encoding["data"]["shards"] = shard_tuple
 
         if group_path.exists():
-            # Append along the time dimension
+            # Append along the configured dimension
             ds.to_zarr(
                 store=str(group_path),
                 mode="a",
-                append_dim="time",
+                append_dim=self._append_dim,
                 zarr_format=3,
             )
         else:
@@ -222,6 +282,11 @@ class ZarrSink(Sink["xr.DataArray"]):
     def output_path(self) -> pathlib.Path:
         """Return the output Zarr store path."""
         return self._output_path
+
+    @property
+    def append_dim(self) -> str:
+        """Return the dimension along which data is appended."""
+        return self._append_dim
 
     @property
     def zarr_version(self) -> int:

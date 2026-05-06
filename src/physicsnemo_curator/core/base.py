@@ -130,6 +130,30 @@ class Source[T](ABC):
         """
         ...
 
+    def partition_indices(self, indices: list[int]) -> list[list[int]] | None:
+        """Group indices into partitions that MUST be processed by the same worker.
+
+        Each returned group is a list of indices that must be handled
+        sequentially by a single worker.  The runner will never split a
+        group across workers.
+
+        Override this method when the source has constraints on concurrent
+        access (e.g., LMDB allows only one environment open per file per
+        process).
+
+        Parameters
+        ----------
+        indices : list[int]
+            The indices to partition.
+
+        Returns
+        -------
+        list[list[int]] | None
+            Partitioned groups, or ``None`` if no partitioning is required
+            (the default).
+        """
+        return None
+
     # -- Convenience builder methods -----------------------------------------
 
     def filter(self, f: Filter[T]) -> Pipeline[T]:
@@ -328,6 +352,30 @@ class Sink[T](ABC):
             Paths of the files written.
         """
         ...
+
+    def partition_indices(self, indices: list[int]) -> list[list[int]] | None:
+        """Group indices into partitions that MUST be processed by the same worker.
+
+        Each returned group is a list of indices that must be handled
+        sequentially by a single worker.  The runner will never split a
+        group across workers.
+
+        Override this method when the sink has constraints on concurrent
+        writes (e.g., multiple indices writing to the same Zarr chunk must
+        go through the same worker).
+
+        Parameters
+        ----------
+        indices : list[int]
+            The indices to partition.
+
+        Returns
+        -------
+        list[list[int]] | None
+            Partitioned groups, or ``None`` if no partitioning is required
+            (the default).
+        """
+        return None
 
 
 # ---------------------------------------------------------------------------

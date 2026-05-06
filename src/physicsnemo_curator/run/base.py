@@ -83,7 +83,7 @@ class RunBackend(ABC):
     Class Attributes
     ----------------
     name : str
-        Unique identifier for this backend (e.g., "sequential", "thread_pool").
+        Unique identifier for this backend (e.g., "sequential", "process_pool").
     description : str
         Human-readable description of the backend.
     requires : tuple[str, ...]
@@ -135,23 +135,19 @@ class RunBackend(ABC):
 
 
 def _get_worker_id() -> str:
-    """Return a unique worker identifier using PID and thread ID.
+    """Return a unique worker identifier using PID.
 
-    For process-based backends each process has a distinct PID.  For
-    thread-based backends all threads share the same PID, so we append
-    the thread identifier to disambiguate.
+    For process-based backends each forked process has a distinct PID,
+    which is sufficient to produce unique per-worker shard files.
 
     Returns
     -------
     str
-        A string like ``"12345_1234567890"`` (pid_threadid).
+        A string like ``"12345"`` (pid).
     """
     import os
-    import threading
 
-    pid = os.getpid()
-    tid = threading.current_thread().ident or 0
-    return f"{pid}_{tid}"
+    return str(os.getpid())
 
 
 def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
@@ -166,13 +162,8 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
     identifier.  Otherwise the path is rewritten as
     ``{stem}_worker_{worker_id}{suffix}``.
 
-    The worker ID is derived from a combination of PID and thread ID so
-    that both process-based and thread-based backends produce unique
-    per-worker output files.
-
-    The worker-specific path is stored in a thread-local attribute on the
-    filter (``_worker_output_path``) so that concurrent threads do not
-    race on a shared ``_output_path`` attribute.
+    The worker ID is derived from the PID so that process-based backends
+    produce unique per-worker output files.
 
     After flushing, any filter artifacts (reported via
     :meth:`~Filter.artifacts`) are recorded in the pipeline store when
@@ -187,7 +178,6 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
         tracking).
     """
     import pathlib
-    import threading
 
     worker_id = _get_worker_id()
 
@@ -195,7 +185,7 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
         if not (hasattr(f, "flush") and hasattr(f, "_output_path")):
             continue
 
-        # Store the original template path once (first thread to arrive).
+        # Store the original template path once (first call in this process).
         if not hasattr(f, "_output_path_template"):
             f._output_path_template = f._output_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
 
@@ -207,14 +197,6 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
             p = pathlib.Path(template_str)
             worker_path = p.parent / f"{p.stem}_worker_{worker_id}{p.suffix}"
 
-        # Store the resolved path in a thread-local so that flush() can
-        # pick it up without racing with other threads.
-        if not hasattr(f, "_local"):
-            f._local = threading.local()  # noqa: SLF001  # ty: ignore[invalid-assignment]
-        f._local.output_path = worker_path  # noqa: SLF001  # ty: ignore[unresolved-attribute]
-
-        # Also set _output_path for backward compat with filters that
-        # read self._output_path in flush() (single-threaded/process case).
         f._output_path = worker_path  # noqa: SLF001  # ty: ignore[invalid-assignment]
         f.flush()  # ty: ignore[call-non-callable]
 
@@ -267,6 +249,185 @@ def process_single_index_packed(args: tuple[Pipeline[Any], int]) -> list[str]:
     result = pipeline[index]
     _flush_filters(pipeline, index)
     return result
+
+
+def intersect_partitions(
+    source_groups: list[list[int]] | None,
+    sink_groups: list[list[int]] | None,
+) -> list[list[int]] | None:
+    """Intersect source and sink partition constraints.
+
+    Both the source and sink may independently declare that certain
+    indices MUST be processed by the same worker.  This function
+    computes the finest partition that satisfies both constraints,
+    or raises :class:`ValueError` if the constraints are incompatible.
+
+    Parameters
+    ----------
+    source_groups : list[list[int]] | None
+        Groups from :meth:`Source.partition_indices`, or ``None``.
+    sink_groups : list[list[int]] | None
+        Groups from :meth:`Sink.partition_indices`, or ``None``.
+
+    Returns
+    -------
+    list[list[int]] | None
+        Merged groups satisfying both constraints, or ``None`` if
+        neither source nor sink requires partitioning.
+
+    Raises
+    ------
+    ValueError
+        If the source and sink constraints are incompatible (one
+        requires indices together that the other requires apart).
+    """
+    if source_groups is None and sink_groups is None:
+        return None
+    if source_groups is None:
+        return sink_groups
+    if sink_groups is None:
+        return source_groups
+
+    # Build index → group_id mappings.
+    source_map: dict[int, int] = {}
+    for gid, group in enumerate(source_groups):
+        for idx in group:
+            source_map[idx] = gid
+
+    sink_map: dict[int, int] = {}
+    for gid, group in enumerate(sink_groups):
+        for idx in group:
+            sink_map[idx] = gid
+
+    # Group by (source_group_id, sink_group_id) pair.
+    from collections import defaultdict
+
+    pair_groups: dict[tuple[int, int], list[int]] = defaultdict(list)
+    all_indices = set(source_map.keys()) | set(sink_map.keys())
+    for idx in all_indices:
+        s_gid = source_map.get(idx, -1)
+        k_gid = sink_map.get(idx, -1)
+        pair_groups[(s_gid, k_gid)].append(idx)
+
+    # Validate: no original group was split.
+    # For each source group, all its indices must map to the same
+    # intersection group.  If they don't, the constraints conflict.
+    intersection_groups = list(pair_groups.values())
+
+    # Build reverse: idx → intersection group id
+    idx_to_intersection: dict[int, int] = {}
+    for ig_id, ig in enumerate(intersection_groups):
+        for idx in ig:
+            idx_to_intersection[idx] = ig_id
+
+    # Check source groups are not split.
+    for s_gid, s_group in enumerate(source_groups):
+        ig_ids = {idx_to_intersection[idx] for idx in s_group}
+        if len(ig_ids) > 1:
+            # Find conflicting sink groups
+            conflicting_sinks = {sink_map.get(idx, -1) for idx in s_group}
+            msg = (
+                f"Incompatible partition constraints: source requires indices "
+                f"{s_group} to be processed together (source group {s_gid}), "
+                f"but they span {len(conflicting_sinks)} different sink groups. "
+                f"Adjust sink chunk_size so chunk boundaries align with source "
+                f"file boundaries."
+            )
+            raise ValueError(msg)
+
+    # Check sink groups are not split.
+    for k_gid, k_group in enumerate(sink_groups):
+        ig_ids = {idx_to_intersection[idx] for idx in k_group}
+        if len(ig_ids) > 1:
+            # Find conflicting source groups
+            conflicting_sources = {source_map.get(idx, -1) for idx in k_group}
+            msg = (
+                f"Incompatible partition constraints: sink requires indices "
+                f"{k_group} to be processed together (sink group {k_gid}), "
+                f"but they span {len(conflicting_sources)} different source groups. "
+                f"Adjust sink chunk_size so chunk boundaries align with source "
+                f"file boundaries."
+            )
+            raise ValueError(msg)
+
+    # Sort groups by their minimum index for deterministic ordering.
+    intersection_groups.sort(key=lambda g: min(g))
+    # Sort indices within each group.
+    for g in intersection_groups:
+        g.sort()
+
+    return intersection_groups
+
+
+def batch_groups(groups: list[list[int]], n_workers: int) -> list[list[int]]:
+    """Merge partition groups into at most *n_workers* batches.
+
+    When there are more groups than workers, groups are distributed
+    across workers using a greedy bin-packing strategy (assign each
+    group to the lightest batch) to balance load.
+
+    Each batch is a flat list of indices preserving the constraint
+    that indices from the same original group are always together.
+
+    Parameters
+    ----------
+    groups : list[list[int]]
+        Partition groups (from :func:`intersect_partitions`).
+    n_workers : int
+        Maximum number of worker batches.
+
+    Returns
+    -------
+    list[list[int]]
+        At most *n_workers* batches, each a list of indices.
+    """
+    if len(groups) <= n_workers:
+        return groups
+
+    import heapq
+
+    # Greedy: assign largest groups first to lightest batch.
+    # Sort groups descending by size for best packing.
+    sorted_groups = sorted(groups, key=len, reverse=True)
+
+    # Min-heap of (batch_size, batch_index)
+    batches: list[list[int]] = [[] for _ in range(n_workers)]
+    heap: list[tuple[int, int]] = [(0, i) for i in range(n_workers)]
+    heapq.heapify(heap)
+
+    for group in sorted_groups:
+        size, batch_idx = heapq.heappop(heap)
+        batches[batch_idx].extend(group)  # ty: ignore[invalid-argument-type]
+        heapq.heappush(heap, (size + len(group), batch_idx))
+
+    # Remove empty batches (if n_workers > n_groups, already handled above).
+    return [b for b in batches if b]
+
+
+def process_index_group(pipeline: Pipeline[Any], indices: list[int]) -> dict[int, list[str]]:
+    """Process a group of pipeline indices sequentially.
+
+    Used when the sink provides :meth:`partition_indices` to batch
+    related indices onto the same worker (e.g. for chunk-aligned
+    parallel writes).
+
+    Parameters
+    ----------
+    pipeline : Pipeline
+        The pipeline to execute.
+    indices : list[int]
+        The indices to process (in order).
+
+    Returns
+    -------
+    dict[int, list[str]]
+        Mapping of index to sink output paths.
+    """
+    results: dict[int, list[str]] = {}
+    for idx in indices:
+        results[idx] = pipeline[idx]
+        _flush_filters(pipeline, idx)
+    return results
 
 
 def make_progress_bar(total: int, *, enabled: bool, desc: str = "run_pipeline") -> Any:

@@ -104,7 +104,7 @@ class TimeBackendScaling:
     """
 
     params = [
-        ["sequential", "thread_pool", "process_pool", "loky"],
+        ["sequential", "process_pool", "loky"],
         [1, 2, 4],
         [100, 1000],
     ]
@@ -148,7 +148,7 @@ class TimeBackendWithIO:
     """
 
     params = [
-        ["sequential", "thread_pool", "process_pool", "loky"],
+        ["sequential", "process_pool", "loky"],
         [1, 2, 4],
         [10, 50],
     ]
@@ -209,7 +209,7 @@ class MemBackendOverhead:
     """Peak memory comparison across backends."""
 
     params = [
-        ["sequential", "thread_pool", "process_pool", "loky"],
+        ["sequential", "process_pool", "loky"],
         [1, 2, 4],
     ]
     param_names = ["backend", "n_workers"]
@@ -252,7 +252,7 @@ class TrackBackendSpeedup:
     """
 
     params = [
-        ["thread_pool", "process_pool", "loky"],
+        ["process_pool", "loky"],
         [2, 4],
     ]
     param_names = ["backend", "n_workers"]

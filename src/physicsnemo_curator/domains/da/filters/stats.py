@@ -29,7 +29,6 @@ as ``MeshStatsFilter`` in the CAE domain.
 from __future__ import annotations
 
 import pathlib
-import threading
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
@@ -100,25 +99,8 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
     def __init__(self, output: str, dims: tuple[str, ...] = ("time",)) -> None:
         self._output_path = pathlib.Path(output)
         self._dims = dims
-
-        # Thread-local storage for accumulators and artifacts.  Each
-        # worker thread gets its own independent dict of Welford
-        # accumulators so there is no shared mutable state during
-        # parallel processing.
-        self._local = threading.local()
-
-    @property
-    def _accumulators(self) -> dict[str, _MomentAccumulator]:
-        """Return the thread-local accumulator dict, creating if needed."""
-        accs: dict[str, _MomentAccumulator] | None = getattr(self._local, "accumulators", None)
-        if accs is None:
-            accs = {}
-            self._local.accumulators = accs
-        return accs
-
-    @_accumulators.setter
-    def _accumulators(self, value: dict[str, _MomentAccumulator]) -> None:
-        self._local.accumulators = value
+        self._accumulators: dict[str, _MomentAccumulator] = {}
+        self._last_artifacts: list[str] = []
 
     def __call__(self, items: Generator[xr.DataArray]) -> Generator[xr.DataArray]:
         """Update running statistics for each DataArray and yield it unchanged.
@@ -162,11 +144,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         if not self._accumulators:
             return None
 
-        # Use thread-local output path set by _flush_filters when running
-        # in parallel, falling back to self._output_path for sequential or
-        # manual use.
-        output_path = getattr(self._local, "output_path", None) or self._output_path
-        output_path = pathlib.Path(output_path) if not isinstance(output_path, pathlib.Path) else output_path
+        output_path = self._output_path
         output_path.mkdir(parents=True, exist_ok=True)
 
         # Build xarray Dataset for each variable and write/merge to Zarr
@@ -184,7 +162,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
 
         path = str(output_path)
         self._accumulators.clear()
-        self._local.last_artifacts = [path]
+        self._last_artifacts = [path]
         return path
 
     def artifacts(self) -> list[str]:
@@ -195,8 +173,8 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         list[str]
             Paths of files written since the last call, or ``[]``.
         """
-        paths: list[str] = getattr(self._local, "last_artifacts", [])
-        self._local.last_artifacts = []
+        paths = self._last_artifacts
+        self._last_artifacts = []
         return paths
 
     def _update(self, da: xr.DataArray) -> None:

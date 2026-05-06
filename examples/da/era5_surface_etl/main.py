@@ -131,10 +131,9 @@ def main() -> None:
     )
 
     # Run the pipeline with parallel workers.
-    # Use thread_pool backend since ERA5 fetching is I/O-bound (network downloads).
-    # Use progress="log" for simple timestamped output that coexists with
-    # earth2studio's loguru logging (the default TUI can conflict with it).
-    results = run_pipeline(pipeline, n_jobs=args.workers, backend="thread_pool", indices=range(args.n_indices))
+    # Each forked process gets its own copy of the pipeline, so earth2studio
+    # backends are isolated (no async event-loop conflicts).
+    results = run_pipeline(pipeline, n_jobs=args.workers, backend="process_pool", indices=range(args.n_indices))
 
     print(f"\nProcessed {len(results)} timesteps")
 

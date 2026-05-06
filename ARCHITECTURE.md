@@ -20,7 +20,6 @@ src/physicsnemo_curator/
 ├── run/                  # Execution backends
 │   ├── base.py           # RunBackend ABC + RunConfig
 │   ├── sequential.py     # Single-threaded for-loop
-│   ├── thread_pool.py    # ThreadPoolExecutor (I/O-bound)
 │   ├── process_pool.py   # ProcessPoolExecutor (CPU-bound)
 │   ├── loky.py           # joblib/loky (robust multiprocessing)
 │   ├── dask.py           # Distributed execution via dask.bag
@@ -112,7 +111,6 @@ results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 | Backend | When to use |
 |---------|-------------|
 | `sequential` | Debugging, stateful filters |
-| `thread_pool` | I/O-bound (network, disk) |
 | `process_pool` | CPU-bound (GIL-free parallelism) |
 | `loky` | Like process_pool but handles complex pickling |
 | `dask` | Distributed clusters |

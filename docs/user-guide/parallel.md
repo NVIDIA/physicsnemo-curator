@@ -30,7 +30,6 @@ results = run_pipeline(pipeline, indices=[0, 5, 10])
 | Backend | Dependency | Description |
 |---------|-----------|-------------|
 | `"sequential"` | None | Simple for-loop.  Always used when `n_jobs=1`. |
-| `"thread_pool"` | None | `ThreadPoolExecutor`.  Good for I/O-bound tasks. |
 | `"process_pool"` | None | `ProcessPoolExecutor`.  True parallelism for CPU-bound tasks. |
 | `"loky"` | `joblib` | joblib's robust process pool.  Better memory handling for large arrays. |
 | `"dask"` | `dask` | `dask.bag` for distributed execution.  Scales to clusters. |
@@ -79,7 +78,7 @@ run_pipeline(
     pipeline,          # Pipeline with source + filters + sink
     *,
     n_jobs=1,          # Workers.  -1 = all CPUs.
-    backend="auto",    # "auto", "sequential", "thread_pool", "process_pool", "loky", "dask"
+    backend="auto",    # "auto", "sequential", "process_pool", "loky", "dask"
     indices=None,      # Subset of source indices, or None for all
     progress=True,     # Show progress (Textual TUI for sequential, tqdm for parallel)
     **backend_kwargs,  # Extra args forwarded to the backend executor

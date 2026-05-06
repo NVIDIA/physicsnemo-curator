@@ -34,7 +34,7 @@ you need.  Each submodule has its own group:
 ### Execution Backend Extras
 
 The `run_pipeline()` function supports multiple execution backends. The basic
-backends (sequential, thread_pool, process_pool) work out of the box. For
+backends (sequential, process_pool) work out of the box. For
 advanced backends, install the corresponding extra:
 
 | Extra | Backend | Install |

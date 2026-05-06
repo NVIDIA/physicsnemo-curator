@@ -30,7 +30,6 @@ with a single time step.
 from __future__ import annotations
 
 import importlib
-import threading
 import warnings
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -220,9 +219,7 @@ class ERA5Source(Source["xr.DataArray"]):
         # Import lexicons and resolve routing.
         self._routing = self._resolve_routing(variables, backend_names)
 
-        # Instantiate backends eagerly on the current (main) thread.
-        # Store kwargs so worker threads can create their own instances.
-        self._backend_kwargs: dict[str, dict[str, Any]] = {}
+        # Instantiate backends eagerly.  Each forked process gets its own copy.
         self._backend_instances: dict[str, Any] = {}
         needed = set(self._routing.values())
         failed_backends: set[str] = set()
@@ -234,7 +231,6 @@ class ERA5Source(Source["xr.DataArray"]):
             kwargs = {"cache": cache, "verbose": False, **extra}
             try:
                 self._backend_instances[bname] = _import_backend(bname, **kwargs)
-                self._backend_kwargs[bname] = kwargs
             except Exception as exc:  # noqa: BLE001
                 warnings.warn(
                     f"Backend {bname!r} failed to initialize: {exc}. Re-routing its variables to remaining backends.",
@@ -257,40 +253,6 @@ class ERA5Source(Source["xr.DataArray"]):
                 extra = (backend_options or {}).get(bname, {})
                 kwargs = {"cache": cache, "verbose": False, **extra}
                 self._backend_instances[bname] = _import_backend(bname, **kwargs)
-                self._backend_kwargs[bname] = kwargs
-
-        # Thread-local storage for backend instances.  Each thread gets its
-        # own ARCO/WB2/etc. instance to avoid asyncio event-loop conflicts
-        # (aiohttp futures bound to a different thread's loop).
-        self._local = threading.local()
-        # Pre-populate main thread's local storage with the instances created above.
-        self._local.backends = dict(self._backend_instances)
-
-    def _get_backend(self, name: str) -> Any:
-        """Return a thread-local backend instance, creating one if needed.
-
-        Earth2studio backends (especially ARCO) use asyncio internally and
-        bind aiohttp connections/futures to the creating thread's event loop.
-        Sharing an instance across threads causes "Future attached to a
-        different loop" errors.  This method returns the original instance
-        for the main thread (created during ``__init__``) and creates fresh
-        instances for worker threads.
-
-        Parameters
-        ----------
-        name : str
-            Backend name (key in ``_BACKEND_REGISTRY``).
-
-        Returns
-        -------
-        Any
-            Thread-local backend instance.
-        """
-        instances: dict[str, Any] = getattr(self._local, "backends", {})
-        if name not in instances:
-            instances[name] = _import_backend(name, **self._backend_kwargs[name])
-            self._local.backends = instances
-        return instances[name]
 
     def _resolve_routing(
         self,
@@ -374,7 +336,7 @@ class ERA5Source(Source["xr.DataArray"]):
         # Fetch from each backend.
         parts: list[xr.DataArray] = []
         for bname, var_list in groups.items():
-            backend_instance = self._get_backend(bname)
+            backend_instance = self._backend_instances[bname]
             da = backend_instance(time=[time], variable=var_list)
             parts.append(da)
 

@@ -119,8 +119,8 @@ info["indices"][0]["stages"]  # list of stage dicts
 
 ## Using with Parallel Backends
 
-Profiling works with **all** backends — sequential, thread_pool,
-process_pool, loky, and dask — without any backend modifications.
+Profiling works with **all** backends — sequential, process_pool,
+loky, and dask — without any backend modifications.
 
 Metrics are stored in a SQLite database using WAL mode, which supports
 safe concurrent writes from multiple threads and processes.  Each worker

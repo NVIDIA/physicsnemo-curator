@@ -154,10 +154,10 @@ class TestSequentialProfiling:
 
 
 class TestThreadPoolProfiling:
-    """Pipeline with metrics and thread_pool backend."""
+    """Pipeline with metrics and process_pool backend."""
 
     def test_results_match(self, tmp_path):
-        """Thread pool profiled results match raw results."""
+        """Process pool profiled results match raw results."""
         raw_pipeline = Pipeline(
             source=_ProfNumberSource(5),
             filters=[_ProfDoubleFilter()],  # ty: ignore[invalid-argument-type]
@@ -166,14 +166,14 @@ class TestThreadPoolProfiling:
         )
         profiled = _make_profiled_pipeline(tmp_path)
 
-        raw_results = run_pipeline(raw_pipeline, n_jobs=2, backend="thread_pool", progress=False)
-        profiled_results = run_pipeline(profiled, n_jobs=2, backend="thread_pool", progress=False)
+        raw_results = run_pipeline(raw_pipeline, n_jobs=2, backend="process_pool", progress=False)
+        profiled_results = run_pipeline(profiled, n_jobs=2, backend="process_pool", progress=False)
         assert profiled_results == raw_results
 
     def test_metrics_collected(self, tmp_path):
-        """Thread pool collects metrics for all indices."""
+        """Process pool collects metrics for all indices."""
         profiled = _make_profiled_pipeline(tmp_path, count=8)
-        run_pipeline(profiled, n_jobs=3, backend="thread_pool", progress=False)
+        run_pipeline(profiled, n_jobs=3, backend="process_pool", progress=False)
         metrics = profiled.metrics
         assert len(metrics.indices) == 8
 
