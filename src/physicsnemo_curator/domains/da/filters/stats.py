@@ -29,12 +29,14 @@ as ``MeshStatsFilter`` in the CAE domain.
 from __future__ import annotations
 
 import pathlib
+import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 import xarray as xr
 
 from physicsnemo_curator.core.base import Filter, Param
+from physicsnemo_curator.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -97,6 +99,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         ]
 
     def __init__(self, output: str, dims: tuple[str, ...] = ("time",)) -> None:
+        self._log = get_logger(self)
         self._output_path = pathlib.Path(output)
         self._dims = dims
         self._accumulators: dict[str, _MomentAccumulator] = {}
@@ -115,8 +118,10 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         xr.DataArray
             The same DataArray, unmodified.
         """
-        for da in items:
+        for counter, da in enumerate(items):
+            t0 = time.perf_counter()
             self._update(da)
+            self._log.info("Updated stats for item %d: %s (%.2fs)", counter, da.dims, time.perf_counter() - t0)
             yield da
 
     def flush(self) -> str | None:
@@ -144,6 +149,9 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         if not self._accumulators:
             return None
 
+        t0 = time.perf_counter()
+        self._log.info("Flushing stats for %d variables", len(self._accumulators))
+
         output_path = self._output_path
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -157,12 +165,15 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
                 existing_stats = xr.open_zarr(str(group_path))
                 merged_stats = _merge_moment_datasets([existing_stats, new_stats])
                 merged_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
+                self._log.debug("Merged stats for %s", var_name)
             else:
                 new_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
+                self._log.debug("Wrote stats for %s", var_name)
 
         path = str(output_path)
         self._accumulators.clear()
         self._last_artifacts = [path]
+        self._log.info("Flush complete: %s (%.2fs)", path, time.perf_counter() - t0)
         return path
 
     def artifacts(self) -> list[str]:

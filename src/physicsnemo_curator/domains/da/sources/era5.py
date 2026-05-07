@@ -30,10 +30,12 @@ with a single time step.
 from __future__ import annotations
 
 import importlib
+import time as time_module
 import warnings
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from physicsnemo_curator.core.base import Param, Source
+from physicsnemo_curator.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -204,6 +206,7 @@ class ERA5Source(Source["xr.DataArray"]):
             msg = "variables must be a non-empty list of variable IDs."
             raise ValueError(msg)
 
+        self._log = get_logger(self)
         self._times = list(times)
         self._variables = list(variables)
 
@@ -318,6 +321,7 @@ class ERA5Source(Source["xr.DataArray"]):
         import numpy as np
         import xarray as xr
 
+        t0 = time_module.perf_counter()
         n = len(self._times)
         if index < 0:
             index += n
@@ -326,6 +330,7 @@ class ERA5Source(Source["xr.DataArray"]):
             raise IndexError(msg)
 
         time = self._times[index]
+        self._log.info("Fetching index %d: %s", index, time.isoformat())
 
         # Group variables by backend, preserving input order.
         groups: dict[str, list[str]] = {}
@@ -336,9 +341,13 @@ class ERA5Source(Source["xr.DataArray"]):
         # Fetch from each backend.
         parts: list[xr.DataArray] = []
         for bname, var_list in groups.items():
+            t_fetch = time_module.perf_counter()
             backend_instance = self._backend_instances[bname]
             da = backend_instance(time=[time], variable=var_list)
             parts.append(da)
+            self._log.debug(
+                "Backend %s: fetched %d vars (%.2fs)", bname, len(var_list), time_module.perf_counter() - t_fetch
+            )
 
         # Merge.
         if len(parts) == 1:
@@ -356,6 +365,7 @@ class ERA5Source(Source["xr.DataArray"]):
                     raise ValueError(msg)
             result = xr.concat(parts, dim="variable")
 
+        self._log.info("Fetch complete: %s (%.2fs)", result.dims, time_module.perf_counter() - t0)
         yield result
 
     @property

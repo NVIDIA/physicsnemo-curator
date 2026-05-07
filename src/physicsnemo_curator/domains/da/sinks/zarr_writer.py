@@ -31,12 +31,14 @@ chunk concurrently.  The partitioning dimension defaults to the
 from __future__ import annotations
 
 import pathlib
+import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import zarr
 
 from physicsnemo_curator.core.base import Param, Sink
+from physicsnemo_curator.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -125,6 +127,7 @@ class ZarrSink(Sink["xr.DataArray"]):
         shards: dict[str, int] | None = None,
         append_dim: str = "time",
     ) -> None:
+        self._log = get_logger(self)
         self._output_path = pathlib.Path(output_path)
         self._chunks = chunks if chunks is not None else dict(self._DEFAULT_CHUNKS)
         self._shards = shards
@@ -149,12 +152,16 @@ class ZarrSink(Sink["xr.DataArray"]):
         list[str]
             Paths of the Zarr groups written (one per variable).
         """
+        t0 = time.perf_counter()
+        self._log.info("Writing index %d to Zarr", index)
         paths: list[str] = []
 
         for da in items:
             written = self._write_dataarray(da)
             paths.extend(written)
+            self._log.debug("Wrote %d groups for DataArray", len(written))
 
+        self._log.info("Write complete: %d paths (%.2fs)", len(paths), time.perf_counter() - t0)
         return paths
 
     def partition_indices(self, indices: Iterable[int]) -> list[list[int]] | None:
