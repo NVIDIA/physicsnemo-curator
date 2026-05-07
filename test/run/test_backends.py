@@ -150,7 +150,7 @@ class TestSequentialBackend:
 
     def test_processes_all_indices(self, simple_pipeline):
         """Should process all indices in order."""
-        results = run_pipeline(simple_pipeline, n_jobs=1, progress=False)
+        results = run_pipeline(simple_pipeline, n_jobs=1, use_tui=False)
         assert len(results) == 5
         # Index 0 → 0*3=0, Index 4 → 4*3=12
         assert results[0] == ["item_0_0"]
@@ -158,24 +158,24 @@ class TestSequentialBackend:
 
     def test_explicit_sequential_backend(self, simple_pipeline):
         """Explicit backend="sequential" should work."""
-        results = run_pipeline(simple_pipeline, backend="sequential", progress=False)
+        results = run_pipeline(simple_pipeline, backend="sequential", use_tui=False)
         assert len(results) == 5
 
     def test_subset_indices(self, simple_pipeline):
         """Should process only specified indices."""
-        results = run_pipeline(simple_pipeline, indices=[1, 3], progress=False)
+        results = run_pipeline(simple_pipeline, indices=[1, 3], use_tui=False)
         assert len(results) == 2
         assert results[0] == ["item_1_3"]  # index 1 → 1*3=3
         assert results[1] == ["item_3_9"]  # index 3 → 3*3=9
 
     def test_empty_indices(self, simple_pipeline):
         """Empty indices should return empty results."""
-        results = run_pipeline(simple_pipeline, indices=[], progress=False)
+        results = run_pipeline(simple_pipeline, indices=[], use_tui=False)
         assert results == []
 
     def test_no_filter_pipeline(self, no_filter_pipeline):
         """Pipeline without filters should work."""
-        results = run_pipeline(no_filter_pipeline, progress=False)
+        results = run_pipeline(no_filter_pipeline, use_tui=False)
         assert len(results) == 3
         assert results[0] == ["item_0_0"]
         assert results[2] == ["item_2_2"]
@@ -185,13 +185,13 @@ class TestSequentialBackend:
         sink = StatefulSink()
         pipeline = NumberSource(3).write(sink)
         pipeline.track_metrics = False
-        run_pipeline(pipeline, n_jobs=1, progress=False)
+        run_pipeline(pipeline, n_jobs=1, use_tui=False)
         # Sequential: sink is shared, call_count should increment
         assert sink.call_count == 3
 
     def test_with_progress(self, simple_pipeline):
         """Should not raise even if tqdm is not available."""
-        results = run_pipeline(simple_pipeline, n_jobs=1, progress=True)
+        results = run_pipeline(simple_pipeline, n_jobs=1, use_tui=True)
         assert len(results) == 5
 
 
@@ -205,7 +205,7 @@ class TestProcessPoolBackend:
 
     def test_basic_parallel(self, simple_pipeline):
         """Basic parallel execution with process pool."""
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="process_pool", progress=False)
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="process_pool", use_tui=False)
         assert len(results) == 5
         # Order should be preserved
         assert results[0] == ["item_0_0"]
@@ -213,7 +213,7 @@ class TestProcessPoolBackend:
 
     def test_subset_parallel(self, simple_pipeline):
         """Process pool with subset of indices."""
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="process_pool", indices=[0, 2, 4], progress=False)
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="process_pool", indices=[0, 2, 4], use_tui=False)
         assert len(results) == 3
         assert results[0] == ["item_0_0"]
         assert results[1] == ["item_2_6"]
@@ -224,7 +224,7 @@ class TestProcessPoolBackend:
         sink = StatefulSink()
         pipeline = NumberSource(4).write(sink)
         pipeline.track_metrics = False
-        results = run_pipeline(pipeline, n_jobs=2, backend="process_pool", progress=False)
+        results = run_pipeline(pipeline, n_jobs=2, backend="process_pool", use_tui=False)
         # Results should still be correct
         assert len(results) == 4
         # But parent sink should NOT have been called (children have copies)
@@ -242,7 +242,7 @@ class TestLokyBackend:
     def test_loky_runs(self, simple_pipeline):
         """Loky backend should produce correct results."""
         pytest.importorskip("joblib")
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="loky", progress=False)
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="loky", use_tui=False)
         assert len(results) == 5
         assert results[0] == ["item_0_0"]
         assert results[4] == ["item_4_12"]
@@ -250,7 +250,7 @@ class TestLokyBackend:
     def test_loky_missing_raises(self, simple_pipeline):
         """Missing joblib should raise ImportError with helpful message."""
         with patch.dict("sys.modules", {"joblib": None}), pytest.raises(ImportError, match="joblib"):
-            run_pipeline(simple_pipeline, n_jobs=2, backend="loky", progress=False)
+            run_pipeline(simple_pipeline, n_jobs=2, backend="loky", use_tui=False)
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ class TestDaskBackend:
     def test_dask_runs(self, simple_pipeline):
         """Dask backend should produce correct results."""
         pytest.importorskip("dask")
-        results = run_pipeline(simple_pipeline, n_jobs=2, backend="dask", progress=False)
+        results = run_pipeline(simple_pipeline, n_jobs=2, backend="dask", use_tui=False)
         assert len(results) == 5
         assert results[0] == ["item_0_0"]
         assert results[4] == ["item_4_12"]
@@ -272,7 +272,7 @@ class TestDaskBackend:
     def test_dask_missing_raises(self, simple_pipeline):
         """Missing dask should raise ImportError with helpful message."""
         with patch.dict("sys.modules", {"dask": None, "dask.bag": None}), pytest.raises(ImportError, match="dask"):
-            run_pipeline(simple_pipeline, n_jobs=2, backend="dask", progress=False)
+            run_pipeline(simple_pipeline, n_jobs=2, backend="dask", use_tui=False)
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +306,6 @@ class TestErrorHandling:
         pipeline = NumberSource(3).write(sink)
         pipeline.track_metrics = False
         # Even with backend="process_pool", n_jobs=1 should use sequential
-        run_pipeline(pipeline, n_jobs=1, backend="process_pool", progress=False)
+        run_pipeline(pipeline, n_jobs=1, backend="process_pool", use_tui=False)
         # Sequential preserves state
         assert sink.call_count == 3

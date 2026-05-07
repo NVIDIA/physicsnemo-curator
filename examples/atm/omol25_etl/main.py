@@ -105,7 +105,7 @@ def main() -> None:
         n_jobs=args.workers,
         backend="process_pool",
         indices=range(n_indices),
-        progress=True,
+        use_tui=True,
     )
 
     print(f"\nProcessed {len(results)} structures")

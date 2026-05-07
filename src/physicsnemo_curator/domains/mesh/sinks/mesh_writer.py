@@ -166,9 +166,12 @@ class MeshSink(Sink["Mesh"]):
         ValueError
             If *naming_template* contains invalid placeholders.
         """
+        from physicsnemo_curator.core.logging import get_logger
+
         self._output_dir = pathlib.Path(output_dir)
         self._naming_template = naming_template
         self._source: Source[Mesh] | None = None
+        self._log = get_logger(self)
 
         # Validate the template eagerly so users get a clear error at
         # construction time rather than deep inside a pipeline run.
@@ -217,7 +220,12 @@ class MeshSink(Sink["Mesh"]):
         list[str]
             Paths of the saved mesh directories.
         """
+        import time
+
         from physicsnemo.mesh.domain_mesh import DomainMesh as _DomainMesh
+
+        self._log.info("idx_%d: Starting write", index)
+        t_total = time.perf_counter()
 
         self._output_dir.mkdir(parents=True, exist_ok=True)
         paths: list[str] = []
@@ -276,8 +284,22 @@ class MeshSink(Sink["Mesh"]):
 
             subdir = self._output_dir / name
             subdir.parent.mkdir(parents=True, exist_ok=True)
+
+            t0 = time.perf_counter()
             mesh.save(str(subdir))  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-            logger.debug("Saved %s to %s", type(mesh).__name__, subdir)
+            self._log.debug(
+                "idx_%d: Saved %s to %s (%.2fs)",
+                index,
+                type(mesh).__name__,
+                subdir,
+                time.perf_counter() - t0,
+            )
             paths.append(str(subdir))
 
+        self._log.info(
+            "idx_%d: Write complete: %d files (%.2fs)",
+            index,
+            len(paths),
+            time.perf_counter() - t_total,
+        )
         return paths

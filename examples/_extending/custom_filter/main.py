@@ -129,7 +129,7 @@ results = run_pipeline(
     n_jobs=1,
     backend="sequential",
     indices=range(len(pipeline)),
-    progress=True,
+    use_tui=True,
 )
 
 print(f"\nProcessed {len(results)} items")

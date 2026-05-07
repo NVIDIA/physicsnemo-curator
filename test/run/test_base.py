@@ -74,7 +74,7 @@ class TestRunConfig:
         """Default values should be sensible."""
         config = RunConfig()
         assert config.n_jobs == 1
-        assert config.progress is True
+        assert config.use_tui is True
         assert config.indices is None
         assert config.backend_options == {}
 

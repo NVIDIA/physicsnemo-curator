@@ -37,20 +37,6 @@ if TYPE_CHECKING:
     from physicsnemo_curator.run.base import RunConfig
 
 
-class _NoOpMonitor:
-    """No-op progress monitor used when progress display is disabled."""
-
-    def stop(self) -> None:
-        """No-op stop."""
-
-    def __enter__(self) -> _NoOpMonitor:
-        """Enter context."""
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        """Exit context."""
-
-
 class LogProgressMonitor:
     """Simple timestamped log-line progress monitor.
 
@@ -252,12 +238,12 @@ class ProgressMonitor:
 def start_progress_monitor(
     pipeline: Pipeline[Any],
     config: RunConfig,
-) -> ProgressMonitor | LogProgressMonitor | _NoOpMonitor:
+) -> ProgressMonitor | LogProgressMonitor:
     """Create and return a progress monitor for pipeline execution.
 
     Returns a :class:`ProgressMonitor` that runs a Textual TUI in a
-    daemon thread, a :class:`LogProgressMonitor` that prints timestamped
-    progress lines, or a no-op monitor when progress display is disabled.
+    daemon thread, or a :class:`LogProgressMonitor` that prints timestamped
+    progress lines to the console.
 
     Parameters
     ----------
@@ -268,12 +254,9 @@ def start_progress_monitor(
 
     Returns
     -------
-    ProgressMonitor | LogProgressMonitor | _NoOpMonitor
-        An active progress monitor, or a no-op if disabled.
+    ProgressMonitor | LogProgressMonitor
+        An active progress monitor (TUI or log-based).
     """
-    if not config.progress:
-        return _NoOpMonitor()
-
     # Generate a unique invocation ID and set it on the pipeline so
     # workers created by Pipeline.__getitem__ will carry this ID.
     invocation_id = uuid.uuid4().hex
@@ -284,12 +267,8 @@ def start_progress_monitor(
     total = len(indices)
     n_workers = config.resolved_n_jobs
 
-    # Log mode: simple timestamped lines (works in notebooks/scripts)
-    if config.progress == "log":
-        return LogProgressMonitor(store=store, total=total)
-
-    # TUI mode: requires interactive terminal
-    if not sys.stdout.isatty():
+    # Log mode when TUI is disabled or terminal is non-interactive
+    if not config.use_tui or not sys.stdout.isatty():
         return LogProgressMonitor(store=store, total=total)
 
     return ProgressMonitor(store=store, total=total, n_workers=n_workers, invocation_id=invocation_id)

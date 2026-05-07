@@ -57,7 +57,7 @@ results = run_pipeline(
     n_jobs=4,
     backend="process_pool",
     indices=range(3),
-    progress=True,
+    use_tui=True,
 )
 ```
 

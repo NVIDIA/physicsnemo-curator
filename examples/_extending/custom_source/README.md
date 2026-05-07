@@ -88,7 +88,7 @@ pipeline = source.filter(
     MeshSink(output_dir="output/extending/cylinder_meshes/")
 )
 
-results = run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(3), progress=True)
+results = run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(3), use_tui=True)
 ```
 
 ### Step 4 — Verify Output

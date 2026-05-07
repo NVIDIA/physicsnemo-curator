@@ -128,7 +128,7 @@ def main() -> None:
         n_jobs=args.workers,
         backend="loky",
         indices=indices,
-        progress="log",
+        use_tui=False,
     )
 
     print(f"\nProcessed {len(results)} runs")

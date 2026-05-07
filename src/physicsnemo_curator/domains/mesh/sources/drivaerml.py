@@ -226,6 +226,10 @@ class DrivAerMLSource(Source[Mesh]):
     ) -> None:
         import fsspec
 
+        from physicsnemo_curator.core.logging import get_logger
+
+        self._log = get_logger(self)
+
         self._mesh_type: MeshType = mesh_type
         self._url = url
         self._storage_options = storage_options or {}
@@ -409,6 +413,8 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh | DomainMesh
             Converted physicsnemo Mesh or DomainMesh object(s).
         """
+        import time
+
         if self._mesh_type == "volume":
             yield from self._read_volume(index)
         elif self._mesh_type == "slices":
@@ -421,12 +427,25 @@ class DrivAerMLSource(Source[Mesh]):
                 raise IndexError(msg)
 
             run_id = self._run_indices[index]
+            self._log.info("run_%d: Reading boundary mesh", run_id)
+            t0 = time.perf_counter()
+
             filename = self._file_template.format(i=run_id)
             remote_path = f"{self._root_path}/run_{run_id}/{filename}"
             path = self._ensure_local(remote_path)
+            self._log.debug("run_%d: File ready (%.2fs)", run_id, time.perf_counter() - t0)
+
+            t1 = time.perf_counter()
             mesh = self._read_vtk(path)
             self._cleanup_local(path)
-            yield self._downcast_fp32(mesh)
+            mesh = self._downcast_fp32(mesh)
+            self._log.info(
+                "run_%d: Boundary read complete: %d pts (%.2fs)",
+                run_id,
+                mesh.n_points,
+                time.perf_counter() - t1,
+            )
+            yield mesh
 
     # -- VTK reading ----------------------------------------------------------
 
@@ -726,26 +745,50 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh
             The reconstructed volume mesh.
         """
+        import time
+
         run_id = self._run_indices[index]
+        self._log.info("run_%d: Reading volume mesh", run_id)
+        t0 = time.perf_counter()
 
         # Try direct VTU first; fall back to concatenating parts.
         direct_remote = f"{self._root_path}/run_{run_id}/volume_{run_id}.vtu"
         try:
             local_path = self._ensure_local(direct_remote)
+            self._log.debug("run_%d: Volume file ready (%.2fs)", run_id, time.perf_counter() - t0)
+
+            t1 = time.perf_counter()
             mesh = self._read_vtk(local_path)
             self._cleanup_local(local_path)
-            yield self._downcast_fp32(mesh)
+            mesh = self._downcast_fp32(mesh)
+            self._log.info(
+                "run_%d: Volume read complete: %d pts (%.2fs)",
+                run_id,
+                mesh.n_points,
+                time.perf_counter() - t1,
+            )
+            yield mesh
             return
         except FileNotFoundError:
             pass
 
         # Concatenate split parts into a temp file and read.
+        self._log.debug("run_%d: Concatenating volume parts", run_id)
         volume_path = self._concat_volume_parts_tempfile(run_id)
+        self._log.debug("run_%d: Volume parts concatenated (%.2fs)", run_id, time.perf_counter() - t0)
         try:
+            t1 = time.perf_counter()
             mesh = self._read_vtk(volume_path)
         finally:
             pathlib.Path(volume_path).unlink(missing_ok=True)
-        yield self._downcast_fp32(mesh)
+        mesh = self._downcast_fp32(mesh)
+        self._log.info(
+            "run_%d: Volume read complete: %d pts (%.2fs)",
+            run_id,
+            mesh.n_points,
+            time.perf_counter() - t1,
+        )
+        yield mesh
 
     def _concat_volume_parts_tempfile(self, run_id: int) -> str:
         """Concatenate split volume VTU parts into a temporary file.
@@ -859,12 +902,28 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh
             One mesh per slice plane file.
         """
+        import time
+
+        run_id = self._run_indices[index]
         fs, protocol, files = self._slices_run_data[index]
-        for remote_path in files:
+        self._log.info("run_%d: Reading %d slice files", run_id, len(files))
+        t0 = time.perf_counter()
+
+        for i, remote_path in enumerate(files):
             local_path = self._ensure_local(remote_path, fs=fs, protocol=protocol)
             mesh = self._read_vtk(local_path)
             self._cleanup_local(local_path)
-            yield self._downcast_fp32(mesh)
+            mesh = self._downcast_fp32(mesh)
+            self._log.debug(
+                "run_%d: Slice %d/%d read: %d pts",
+                run_id,
+                i + 1,
+                len(files),
+                mesh.n_points,
+            )
+            yield mesh
+
+        self._log.info("run_%d: Slices read complete (%.2fs)", run_id, time.perf_counter() - t0)
 
     # -- Multi-mode methods ---------------------------------------------------
 
@@ -914,18 +973,38 @@ class DrivAerMLSource(Source[Mesh]):
         DomainMesh
             Combined domain mesh.
         """
+        import time
+
         run_id = self._run_indices[index]
+        self._log.info("run_%d: Starting domain read", run_id)
+        t_total = time.perf_counter()
 
         # --- Interior (volume VTU → point-cloud) ---
+        self._log.info("run_%d: Reading interior", run_id)
+        t0 = time.perf_counter()
         interior = self._read_interior(run_id)
         interior = self._downcast_fp32(interior)
+        self._log.info(
+            "run_%d: Interior read complete: %d pts (%.2fs)",
+            run_id,
+            interior.n_points,
+            time.perf_counter() - t0,
+        )
 
         # --- Boundary surface (VTP → surface mesh with cell data only) ---
+        self._log.info("run_%d: Reading boundary surface", run_id)
+        t0 = time.perf_counter()
         boundary_remote = f"{self._root_path}/run_{run_id}/boundary_{run_id}.vtp"
         boundary_path = self._ensure_local(boundary_remote)
         surface = self._read_surface(boundary_path)
         self._cleanup_local(boundary_path)
         surface = self._downcast_fp32(surface)
+        self._log.info(
+            "run_%d: Boundary read complete: %d pts (%.2fs)",
+            run_id,
+            surface.n_points,
+            time.perf_counter() - t0,
+        )
 
         # --- Global data ---
         global_data = {
@@ -934,11 +1013,13 @@ class DrivAerMLSource(Source[Mesh]):
         }
 
         # --- Assemble DomainMesh ---
+        self._log.debug("run_%d: Assembling DomainMesh", run_id)
         domain_mesh = DomainMesh(
             interior=interior,
             boundaries={"surface": surface},
             global_data=global_data,
         )
+        self._log.info("run_%d: Domain read complete (%.2fs total)", run_id, time.perf_counter() - t_total)
         yield domain_mesh
 
     def _read_interior(self, run_id: int) -> Mesh:
@@ -1214,14 +1295,26 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh
             STL geometry mesh with triangle connectivity, downcast to fp32.
         """
+        import time
+
         run_id = self._run_indices[index]
+        self._log.info("run_%d: Reading STL mesh", run_id)
+        t0 = time.perf_counter()
+
         filename = f"drivaer_{run_id}.stl"
         remote_path = f"{self._root_path}/run_{run_id}/{filename}"
         local_path = self._ensure_local(remote_path)
 
         mesh = self._read_vtk(local_path)
         self._cleanup_local(local_path)
-        yield self._downcast_fp32(mesh)
+        mesh = self._downcast_fp32(mesh)
+        self._log.info(
+            "run_%d: STL read complete: %d pts (%.2fs)",
+            run_id,
+            mesh.n_points,
+            time.perf_counter() - t0,
+        )
+        yield mesh
 
     def _read_single_solid(self, index: int) -> Generator[Mesh]:
         """Read STL geometry merged into a single solid, downcast to fp32.
@@ -1236,7 +1329,12 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh
             Merged STL geometry mesh, downcast to fp32.
         """
+        import time
+
         run_id = self._run_indices[index]
+        self._log.info("run_%d: Reading single-solid STL mesh", run_id)
+        t0 = time.perf_counter()
+
         filename = f"drivaer_{run_id}.stl"
         remote_path = f"{self._root_path}/run_{run_id}/{filename}"
         local_path = self._ensure_local(remote_path)
@@ -1258,7 +1356,14 @@ class DrivAerMLSource(Source[Mesh]):
             )
 
         self._cleanup_local(local_path)
-        yield self._downcast_fp32(mesh)
+        mesh = self._downcast_fp32(mesh)
+        self._log.info(
+            "run_%d: Single-solid read complete: %d pts (%.2fs)",
+            run_id,
+            mesh.n_points,
+            time.perf_counter() - t0,
+        )
+        yield mesh
 
     # -- Utilities ------------------------------------------------------------
 

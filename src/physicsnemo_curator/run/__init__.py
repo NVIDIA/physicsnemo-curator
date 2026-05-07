@@ -55,7 +55,7 @@ You can register custom backends using :func:`register_backend`::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from physicsnemo_curator.run.base import RunBackend, RunConfig
 from physicsnemo_curator.run.dask import DaskBackend
@@ -169,7 +169,7 @@ def run_pipeline(
     n_jobs: int = 1,
     backend: str = "sequential",
     indices: Iterable[int] | None = None,
-    progress: bool | Literal["log"] = True,
+    use_tui: bool = True,
     **backend_kwargs: Any,
 ) -> list[list[str]]:
     """Execute a pipeline over all (or selected) source indices.
@@ -191,11 +191,10 @@ def run_pipeline(
     indices : Iterable[int] | None
         Specific source indices to process. ``None`` (default) processes
         all indices ``range(len(pipeline))``.
-    progress : bool | Literal["log"]
-        Progress display mode. ``True`` shows the full-screen Textual
-        TUI (requires an interactive terminal). ``"log"`` prints simple
-        timestamped percentage lines suitable for notebooks and
-        non-interactive scripts. ``False`` disables progress output.
+    use_tui : bool
+        Whether to show the full-screen Textual TUI for progress
+        (requires an interactive terminal). When ``False``, prints
+        simple timestamped log lines to the console instead.
     **backend_kwargs : Any
         Extra keyword arguments forwarded to the backend.
 
@@ -250,7 +249,7 @@ def run_pipeline(
     idx_list: list[int] | None = list(indices) if indices is not None else None
     config = RunConfig(
         n_jobs=n_jobs,
-        progress=progress,
+        use_tui=use_tui,
         indices=idx_list,
         backend_options=backend_kwargs,
     )

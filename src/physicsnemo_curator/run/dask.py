@@ -93,8 +93,8 @@ class DaskBackend(RunBackend):
         indices = config.indices if config.indices is not None else list(range(len(pipeline)))
         n_jobs = config.resolved_n_jobs
 
-        # Set up progress bar if requested
-        if config.progress:
+        # Set up progress bar if TUI requested (dask uses its own progress bar)
+        if config.use_tui:
             try:
                 from dask.diagnostics import ProgressBar
 

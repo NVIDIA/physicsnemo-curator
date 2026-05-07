@@ -197,7 +197,10 @@ class RandomPermutationFilter(Filter["Mesh"]):
         seed : int
             Base random seed.
         """
+        from physicsnemo_curator.core.logging import get_logger
+
         self._seed = seed
+        self._log = get_logger(self)
 
     def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:
         """Permute point and cell ordering for each mesh in the stream.
@@ -212,18 +215,26 @@ class RandomPermutationFilter(Filter["Mesh"]):
         Mesh
             The same mesh with points and cells shuffled in place.
         """
+        import time
+
         from physicsnemo.mesh.domain_mesh import DomainMesh as _DomainMesh
 
         for counter, mesh in enumerate(items):
             effective_seed = self._seed + counter
+            t0 = time.perf_counter()
 
             if isinstance(mesh, _DomainMesh):
+                n_pts = mesh.interior.n_points if mesh.interior else 0
+                self._log.info("Shuffling DomainMesh %d (seed=%d)", counter, effective_seed)
                 self._shuffle_domain_mesh(mesh, effective_seed)
             else:
+                n_pts = mesh.n_points
+                self._log.info("Shuffling Mesh %d: %d pts (seed=%d)", counter, n_pts, effective_seed)
                 rng = torch.Generator()
                 rng.manual_seed(effective_seed)
                 _shuffle_mesh(mesh, rng)
 
+            self._log.debug("Shuffle complete (%.2fs)", time.perf_counter() - t0)
             yield mesh
 
     # ------------------------------------------------------------------

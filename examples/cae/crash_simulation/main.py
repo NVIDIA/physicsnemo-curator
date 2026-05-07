@@ -83,7 +83,7 @@ results = run_pipeline(
     n_jobs=2,
     backend="process_pool",
     indices=range(min(3, len(source))),
-    progress=True,
+    use_tui=True,
 )
 
 # Inspect Results

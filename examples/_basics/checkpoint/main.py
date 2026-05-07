@@ -45,7 +45,7 @@ results = run_pipeline(
     n_jobs=1,
     backend="sequential",
     indices=range(5),
-    progress=True,
+    use_tui=True,
 )
 
 print(f"\nFirst run processed {len(results)} indices")
@@ -59,7 +59,7 @@ results_resumed = run_pipeline(
     n_jobs=1,
     backend="sequential",
     indices=range(8),  # 0-4 cached, 5-7 new
-    progress=True,
+    use_tui=True,
 )
 
 print(f"\nSecond run returned {len(results_resumed)} results")

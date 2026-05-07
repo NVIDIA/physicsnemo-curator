@@ -79,7 +79,7 @@ run_pipeline(
     n_jobs=1,          # Workers.  -1 = all CPUs.
     backend="sequential",  # "sequential", "process_pool", "loky", "dask"
     indices=None,      # Subset of source indices, or None for all
-    progress=True,     # Show progress (Textual TUI for sequential, tqdm for parallel)
+    use_tui=True,      # True = Textual TUI, False = log lines to console
     **backend_kwargs,  # Extra args forwarded to the backend executor
 )
 ```

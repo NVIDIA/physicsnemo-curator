@@ -125,21 +125,21 @@ class TestSequentialProfiling:
             track_metrics=False,
         )
         profiled = _make_profiled_pipeline(tmp_path)
-        raw_results = run_pipeline(raw_pipeline, backend="sequential", progress=False)
-        profiled_results = run_pipeline(profiled, backend="sequential", progress=False)
+        raw_results = run_pipeline(raw_pipeline, backend="sequential", use_tui=False)
+        profiled_results = run_pipeline(profiled, backend="sequential", use_tui=False)
         assert profiled_results == raw_results
 
     def test_metrics_collected(self, tmp_path):
         """Metrics should be collected for all indices."""
         profiled = _make_profiled_pipeline(tmp_path)
-        run_pipeline(profiled, backend="sequential", progress=False)
+        run_pipeline(profiled, backend="sequential", use_tui=False)
         metrics = profiled.metrics
         assert len(metrics.indices) == 5
 
     def test_per_stage_present(self, tmp_path):
         """Each index should have source, filter, sink stages."""
         profiled = _make_profiled_pipeline(tmp_path)
-        run_pipeline(profiled, backend="sequential", progress=False)
+        run_pipeline(profiled, backend="sequential", use_tui=False)
         metrics = profiled.metrics
         for idx_m in metrics.indices:
             names = [s.name for s in idx_m.stages]
@@ -166,14 +166,14 @@ class TestThreadPoolProfiling:
         )
         profiled = _make_profiled_pipeline(tmp_path)
 
-        raw_results = run_pipeline(raw_pipeline, n_jobs=2, backend="process_pool", progress=False)
-        profiled_results = run_pipeline(profiled, n_jobs=2, backend="process_pool", progress=False)
+        raw_results = run_pipeline(raw_pipeline, n_jobs=2, backend="process_pool", use_tui=False)
+        profiled_results = run_pipeline(profiled, n_jobs=2, backend="process_pool", use_tui=False)
         assert profiled_results == raw_results
 
     def test_metrics_collected(self, tmp_path):
         """Process pool collects metrics for all indices."""
         profiled = _make_profiled_pipeline(tmp_path, count=8)
-        run_pipeline(profiled, n_jobs=3, backend="process_pool", progress=False)
+        run_pipeline(profiled, n_jobs=3, backend="process_pool", use_tui=False)
         metrics = profiled.metrics
         assert len(metrics.indices) == 8
 
@@ -196,14 +196,14 @@ class TestProcessPoolProfiling:
         )
         profiled = _make_profiled_pipeline(tmp_path)
 
-        raw_results = run_pipeline(raw_pipeline, n_jobs=2, backend="process_pool", progress=False)
-        profiled_results = run_pipeline(profiled, n_jobs=2, backend="process_pool", progress=False)
+        raw_results = run_pipeline(raw_pipeline, n_jobs=2, backend="process_pool", use_tui=False)
+        profiled_results = run_pipeline(profiled, n_jobs=2, backend="process_pool", use_tui=False)
         assert profiled_results == raw_results
 
     def test_metrics_collected_across_processes(self, tmp_path):
         """Metrics survive process boundaries via shared SQLite DB."""
         profiled = _make_profiled_pipeline(tmp_path, count=6)
-        run_pipeline(profiled, n_jobs=2, backend="process_pool", progress=False)
+        run_pipeline(profiled, n_jobs=2, backend="process_pool", use_tui=False)
         metrics = profiled.metrics
         # All 6 indices should have metrics via SQLite WAL
         assert len(metrics.indices) == 6
@@ -213,7 +213,7 @@ class TestProcessPoolProfiling:
     def test_subset_indices(self, tmp_path):
         """Process pool with subset indices collects correct metrics."""
         profiled = _make_profiled_pipeline(tmp_path, count=10)
-        run_pipeline(profiled, n_jobs=2, backend="process_pool", indices=[1, 3, 7], progress=False)
+        run_pipeline(profiled, n_jobs=2, backend="process_pool", indices=[1, 3, 7], use_tui=False)
         metrics = profiled.metrics
         assert len(metrics.indices) == 3
         collected_indices = {m.index for m in metrics.indices}

@@ -25,7 +25,7 @@ from __future__ import annotations
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -42,12 +42,10 @@ class RunConfig:
         Number of parallel workers. ``1`` forces sequential execution.
         ``-1`` uses all available CPUs. Values ``<= 0`` follow the
         convention ``cpu_count + 1 + n_jobs``.
-    progress : bool | Literal["log"]
-        Whether to show a progress indicator. ``True`` shows the
-        full-screen Textual TUI (requires an interactive terminal).
-        ``"log"`` prints simple timestamped percentage lines suitable
-        for notebooks and non-interactive scripts. ``False`` disables
-        all progress output.
+    use_tui : bool
+        Whether to show the full-screen Textual TUI for progress
+        (requires an interactive terminal). When ``False``, prints
+        simple timestamped log lines to the console instead.
     indices : list[int] | None
         Specific source indices to process. ``None`` processes all indices.
     backend_options : dict[str, Any]
@@ -55,7 +53,7 @@ class RunConfig:
     """
 
     n_jobs: int = 1
-    progress: bool | Literal["log"] = True
+    use_tui: bool = True
     indices: list[int] | None = None
     backend_options: dict[str, Any] = field(default_factory=dict)
 

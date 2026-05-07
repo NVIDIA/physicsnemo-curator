@@ -625,7 +625,7 @@ class TestRunPipelineIntegration:
         """Pipeline with track_metrics works with sequential backend."""
         pipeline = _make_pipeline(tmp_path, count=3)
 
-        results = run_pipeline(pipeline, n_jobs=1, backend="sequential", progress=False)
+        results = run_pipeline(pipeline, n_jobs=1, backend="sequential", use_tui=False)
         assert len(results) == 3
         assert pipeline.completed_indices == {0, 1, 2}
 
@@ -642,7 +642,7 @@ class TestRunPipelineIntegration:
         )
 
         # First run: process first 3
-        run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(3), progress=False)
+        run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(3), use_tui=False)
         assert pipeline.completed_indices == {0, 1, 2}
 
         # Second pipeline gets a fresh DB — processes all 5 from scratch
@@ -653,7 +653,7 @@ class TestRunPipelineIntegration:
             track_metrics=True,
             db_dir=db_dir,
         )
-        results = run_pipeline(pipeline2, n_jobs=1, backend="sequential", progress=False)
+        results = run_pipeline(pipeline2, n_jobs=1, backend="sequential", use_tui=False)
         assert len(results) == 5
         assert pipeline2.completed_indices == {0, 1, 2, 3, 4}
 
@@ -671,7 +671,7 @@ class TestRunPipelineIntegration:
         )
 
         # First run: process first 3
-        run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(3), progress=False)
+        run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(3), use_tui=False)
         assert pipeline.completed_indices == {0, 1, 2}
 
         # Second pipeline with resume=True reuses the same DB
@@ -683,7 +683,7 @@ class TestRunPipelineIntegration:
             db_dir=db_dir,
             resume=True,
         )
-        results = run_pipeline(pipeline2, n_jobs=1, backend="sequential", progress=False)
+        results = run_pipeline(pipeline2, n_jobs=1, backend="sequential", use_tui=False)
         assert len(results) == 5
         assert pipeline2.completed_indices == {0, 1, 2, 3, 4}
 

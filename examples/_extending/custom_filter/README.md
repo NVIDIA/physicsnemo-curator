@@ -80,7 +80,7 @@ pipeline = source.filter(LogTransformFilter(variable="tp")).write(
     ZarrSink(output_path="output/extending/log_tp.zarr")
 )
 
-results = run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(len(pipeline)), progress=True)
+results = run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(len(pipeline)), use_tui=True)
 ```
 
 ## Extended API: Stateful Filters

@@ -79,7 +79,7 @@ source = ERA5Source(
 
 pipeline = source.write(HDF5Sink(output_dir="output/extending/hdf5/"))
 
-results = run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(len(pipeline)), progress=True)
+results = run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(len(pipeline)), use_tui=True)
 ```
 
 ### Step 4 — Verify Output
