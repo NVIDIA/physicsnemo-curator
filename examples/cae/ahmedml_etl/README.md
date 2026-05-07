@@ -74,6 +74,12 @@ python main.py --workers 4
 python main.py --mesh-type multi --mesh-parts domain stl
 ```
 
+**Note:** This example uses `use_tui=False` by default, which prints
+timestamped progress lines to the console instead of the interactive
+Textual UI. This is suitable for non-interactive environments like
+notebooks, CI pipelines, or when redirecting output to a file. To enable
+the TUI, change `use_tui=False` to `use_tui=True` in `main.py`.
+
 ## Output Structure
 
 ```text
