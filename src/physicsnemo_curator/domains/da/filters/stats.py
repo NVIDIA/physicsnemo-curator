@@ -324,7 +324,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         import holoviews as hv
         import panel as pn
 
-        hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
+        hv.extension("bokeh")
 
         if not artifact_paths:
             return pn.pane.Markdown("*No DataArray Statistics artifacts found.*")
@@ -358,7 +358,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         @pn.depends(
             var_select.param.value,
             stat_select.param.value,
-        )  # ty: ignore[invalid-argument-type]
+        )
         def update_plot(var_name: str, stat_name: str) -> object:
             """Update plot based on variable and statistic selection."""
             group_path = store_path / var_name  # type: ignore[operator]

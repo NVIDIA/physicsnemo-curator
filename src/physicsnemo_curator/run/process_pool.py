@@ -22,6 +22,8 @@ Suitable for CPU-bound workloads that benefit from true parallelism.
 
 from __future__ import annotations
 
+import multiprocessing
+import sys
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -37,6 +39,27 @@ from physicsnemo_curator.run.progress_monitor import start_progress_monitor
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
+
+
+def _default_mp_context() -> multiprocessing.context.BaseContext:
+    """Return a safe multiprocessing context for the current platform.
+
+    On Linux the default start method is ``fork``, which is unsafe when the
+    parent process has active threads (e.g. the progress-monitor polling
+    thread).  Forking while a thread holds a lock (such as SQLite's internal
+    mutex) causes child processes to deadlock.
+
+    This function returns a ``forkserver`` context on POSIX systems to avoid
+    the fork+thread deadlock, falling back to ``spawn`` on Windows/macOS.
+
+    Returns
+    -------
+    multiprocessing.context.BaseContext
+        A multiprocessing context suitable for concurrent use with threads.
+    """
+    if sys.platform == "linux":
+        return multiprocessing.get_context("forkserver")
+    return multiprocessing.get_context("spawn")
 
 
 class ProcessPoolBackend(RunBackend):
@@ -98,6 +121,8 @@ class ProcessPoolBackend(RunBackend):
         }
         if "max_workers" not in executor_kwargs:
             executor_kwargs["max_workers"] = n_jobs
+        if "mp_context" not in executor_kwargs:
+            executor_kwargs["mp_context"] = _default_mp_context()
 
         result_map: dict[int, list[str]] = {}
         with start_progress_monitor(pipeline, config), ProcessPoolExecutor(**executor_kwargs) as executor:

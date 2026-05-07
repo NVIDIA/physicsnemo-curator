@@ -491,7 +491,7 @@ class AtomicStatsFilter(Filter["AtomicData"]):
         import panel_material_ui as pmui
         from bokeh.models import HoverTool
 
-        hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
+        hv.extension("bokeh")
         stat_columns: list[str] = [
             "index",
             "mean",
@@ -560,7 +560,7 @@ class AtomicStatsFilter(Filter["AtomicData"]):
             y_select.param.value,
             level_filter.param.value,
             field_filter.param.value,
-        )  # ty: ignore[invalid-argument-type]
+        )
         def update_plot(
             x_col: str,
             y_col: str,

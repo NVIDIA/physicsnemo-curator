@@ -42,8 +42,6 @@ from physicsnemo_curator.domains.mesh.sources.d3plot import D3PlotSource
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
-from physicsnemo_curator.domains.mesh.sources.windsorml import WindsorMLSource
-from physicsnemo_curator.domains.mesh.sources.windtunnel import WindTunnelSource
 
 # Register submodule and components with the global registry.
 registry.register_submodule("mesh", "Mesh data curation (physicsnemo.mesh.Mesh)", "physicsnemo.mesh")
@@ -52,8 +50,6 @@ registry.register_source("mesh", D3PlotSource)
 registry.register_source("mesh", VTKSource)
 registry.register_source("mesh", DrivAerMLSource)
 registry.register_source("mesh", AhmedMLSource)
-registry.register_source("mesh", WindsorMLSource)
-registry.register_source("mesh", WindTunnelSource)
 registry.register_source("mesh", NavierStokesCylinderSource)
 registry.register_filter("mesh", FieldSelectFilter)
 registry.register_filter("mesh", MeanFilter)
@@ -81,7 +77,5 @@ __all__ = [
     "RandomPermutationFilter",
     "VTKSource",
     "WallNodeFilter",
-    "WindsorMLSource",
-    "WindTunnelSource",
     "merge_welford_stats",
 ]

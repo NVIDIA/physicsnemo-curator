@@ -25,12 +25,18 @@ The dataset provides three mesh types per run:
 * **boundary** — surface mesh with flow fields (VTP, ~83 MB each)
 * **volume** — volumetric field data (VTU, ~5.6 GB each)
 * **slices** — x/y/z-normal slice planes with flow fields (VTP)
+* **multi** — domain mesh combining interior + boundary + STL with global data
+
+Each run also includes CSV metadata (force/moment coefficients and
+geometric parameters) which is attached as ``global_data`` on every
+yielded mesh, regardless of mesh type.
 
 File discovery and caching are handled internally using ``fsspec``.
 """
 
 from __future__ import annotations
 
+import csv
 import pathlib
 import re
 import tempfile
@@ -52,8 +58,21 @@ _MESH_TEMPLATES: dict[str, str] = {
     "volume": "volume_{i}.vtu",
 }
 
+#: STL file template.
+_STL_TEMPLATE = "ahmed_{i}.stl"
+
+#: CSV file templates for global data.
+_CSV_TEMPLATES: dict[str, str] = {
+    "force_mom": "force_mom_{i}.csv",
+    "force_mom_varref": "force_mom_varref_{i}.csv",
+    "geo_parameters": "geo_parameters_{i}.csv",
+}
+
 #: Valid mesh types for this dataset.
-MeshType = Literal["boundary", "volume", "slices"]
+MeshType = Literal["boundary", "volume", "slices", "multi"]
+
+#: Valid mesh parts for multi mode.
+MeshPart = Literal["domain", "stl"]
 
 #: Valid backend options for VTK reading.
 Backend = Literal["pyvista", "rust"]
@@ -69,11 +88,19 @@ class AhmedMLSource(Source[Mesh]):
     * ``"volume"`` — volumetric mesh (VTU, single file per run)
     * ``"slices"`` — x/y/z-normal slice planes (VTP); yields multiple
       meshes per index
+    * ``"multi"`` — yields domain mesh (DomainMesh) and/or STL mesh
+
+    All modes attach CSV metadata (force/moment coefficients and geometric
+    parameters) as ``global_data`` on each yielded mesh.
 
     Parameters
     ----------
-    mesh_type : {"boundary", "volume", "slices"}
+    mesh_type : {"boundary", "volume", "slices", "multi"}
         Which mesh to read from each run directory.
+    mesh_parts : list[str] | None
+        Mesh parts to yield in ``"multi"`` mode.  Valid parts are
+        ``"domain"`` and ``"stl"``.  Defaults to ``["domain"]``.
+        Ignored for non-multi modes.
     url : str
         Base HuggingFace Hub URL.  Override only for testing.
     storage_options : dict[str, object] | None
@@ -103,10 +130,14 @@ class AhmedMLSource(Source[Mesh]):
     >>> len(source)
     500
     >>> mesh = next(source[0])
+    >>> mesh.global_data["cd"]  # force coefficient from CSV
+    tensor([0.2405])
 
-    >>> source = AhmedMLSource(mesh_type="slices")
+    >>> source = AhmedMLSource(mesh_type="multi", mesh_parts=["domain", "stl"])
     >>> for mesh in source[0]:
-    ...     print(mesh.n_points)
+    ...     print(type(mesh).__name__)
+    DomainMesh
+    Mesh
 
     Using the fast Rust backend:
 
@@ -134,10 +165,17 @@ class AhmedMLSource(Source[Mesh]):
         return [
             Param(
                 name="mesh_type",
-                description="Mesh type: boundary (surface), volume (3D field), or slices (planes)",
+                description="Mesh type: boundary (surface), volume (3D field), slices (planes), or multi (all)",
                 type=str,
                 default="boundary",
-                choices=["boundary", "volume", "slices"],
+                choices=["boundary", "volume", "slices", "multi"],
+            ),
+            Param(
+                name="mesh_parts",
+                description="Mesh parts to yield in multi mode (domain, stl)",
+                type=str,
+                default="domain",
+                choices=["domain", "stl"],
             ),
             Param(name="url", description="Base HuggingFace Hub URL", type=str, default=_AHMEDML_HF_URL),
             Param(
@@ -177,7 +215,8 @@ class AhmedMLSource(Source[Mesh]):
 
     def __init__(
         self,
-        mesh_type: MeshType = "boundary",
+        mesh_type: MeshType = "multi",
+        mesh_parts: list[MeshPart] | None = None,
         url: str = _AHMEDML_HF_URL,
         storage_options: dict[str, object] | None = None,
         cache_storage: str | None = None,
@@ -189,6 +228,7 @@ class AhmedMLSource(Source[Mesh]):
         import fsspec
 
         self._mesh_type: MeshType = mesh_type
+        self._mesh_parts: list[MeshPart] = mesh_parts or ["domain"]  # ty: ignore[invalid-assignment]
         self._url = url
         self._storage_options = storage_options or {}
         self._cache_storage = cache_storage or tempfile.mkdtemp(prefix="curator_ahmedml_")
@@ -201,7 +241,9 @@ class AhmedMLSource(Source[Mesh]):
         self._protocol = self._fs.protocol if isinstance(self._fs.protocol, str) else self._fs.protocol[0]
         self._run_indices = self._discover_runs()
 
-        if mesh_type == "slices":
+        if mesh_type == "multi":
+            self._file_template = ""  # not used for multi mode
+        elif mesh_type == "slices":
             self._build_slices_data()
         else:
             self._file_template = _MESH_TEMPLATES[mesh_type]
@@ -271,12 +313,54 @@ class AhmedMLSource(Source[Mesh]):
         """Return the number of available runs."""
         return len(self._run_indices)
 
-    def __getitem__(self, index: int) -> Generator[Mesh]:
+    def run_id(self, index: int) -> int:
+        """Return the dataset run ID for the given source index.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Returns
+        -------
+        int
+            The dataset run ID (e.g. 1, 5, 12).
+        """
+        return self._run_indices[index]
+
+    def mesh_name(self, index: int, seq: int) -> str:
+        """Return the canonical output name for mesh at (index, seq).
+
+        Parameters
+        ----------
+        index : int
+            Source index (which run).
+        seq : int
+            Sequence number within this index (ignored for boundary/volume).
+
+        Returns
+        -------
+        str
+            Resolved name like ``"boundary_1"`` or ``"volume_5"``.
+        """
+        run_id = self._run_indices[index]
+        if self._mesh_type == "slices":
+            _, _, files = self._slices_run_data[index]
+            filename = pathlib.PurePosixPath(files[seq]).stem
+            return f"{filename}"
+        return self._file_template.format(i=run_id).rsplit(".", 1)[0]
+
+    def __getitem__(self, index: int) -> Generator[Mesh]:  # type: ignore[override]
         """Read the mesh(es) for the *index*-th run.
 
         For ``"boundary"`` and ``"volume"`` mesh types, yields a single
         :class:`~physicsnemo.mesh.Mesh`.  For ``"slices"``, yields one
         mesh per slice plane file in the run's ``slices/`` directory.
+        For ``"multi"``, yields a :class:`~physicsnemo.mesh.DomainMesh`
+        and/or STL mesh depending on *mesh_parts*.
+
+        All yielded meshes include ``global_data`` populated from the
+        run's CSV files (force coefficients and geometric parameters).
 
         Parameters
         ----------
@@ -286,9 +370,11 @@ class AhmedMLSource(Source[Mesh]):
         Yields
         ------
         Mesh
-            Converted physicsnemo Mesh object(s).
+            Converted physicsnemo Mesh or DomainMesh object(s).
         """
-        if self._mesh_type == "slices":
+        if self._mesh_type == "multi":
+            yield from self._read_multi(index)
+        elif self._mesh_type == "slices":
             yield from self._read_slices(index)
         else:
             if index < -len(self._run_indices) or index >= len(self._run_indices):
@@ -299,7 +385,9 @@ class AhmedMLSource(Source[Mesh]):
             filename = self._file_template.format(i=run_id)
             remote_path = f"{self._root_path}/run_{run_id}/{filename}"
             path = self._ensure_local(remote_path)
-            yield self._read_vtk(path)
+            mesh = self._read_vtk(path)
+            mesh = self._attach_global_data(mesh, run_id)
+            yield mesh
 
     # -- Internal helpers ----------------------------------------------------
 
@@ -420,9 +508,428 @@ class AhmedMLSource(Source[Mesh]):
         Yields
         ------
         Mesh
-            One mesh per slice plane file.
+            One mesh per slice plane file, with global_data attached.
         """
+        run_id = self._run_indices[index]
         fs, protocol, files = self._slices_run_data[index]
         for remote_path in files:
             local_path = self._ensure_local(remote_path, fs=fs, protocol=protocol)
-            yield self._read_vtk(local_path)
+            mesh = self._read_vtk(local_path)
+            mesh = self._attach_global_data(mesh, run_id)
+            yield mesh
+
+    # -- CSV global data -------------------------------------------------------
+
+    def _read_csv_global_data(self, run_id: int) -> dict[str, Any]:
+        """Read CSV metadata files for a run and return as a flat dict of floats.
+
+        Reads ``force_mom_{i}.csv``, ``force_mom_varref_{i}.csv``, and
+        ``geo_parameters_{i}.csv`` from the run directory.  Missing files
+        are silently skipped.
+
+        Parameters
+        ----------
+        run_id : int
+            Dataset run ID.
+
+        Returns
+        -------
+        dict[str, float]
+            Flat dictionary of all CSV values with column names as keys.
+            For ``force_mom_varref``, keys are prefixed with ``varref_``
+            to avoid collisions with ``force_mom``.
+        """
+        import torch
+
+        data: dict[str, Any] = {}
+
+        for csv_key, template in _CSV_TEMPLATES.items():
+            filename = template.format(i=run_id)
+            remote_path = f"{self._root_path}/run_{run_id}/{filename}"
+            try:
+                local_path = self._ensure_local(remote_path)
+            except (FileNotFoundError, OSError):
+                continue
+
+            with pathlib.Path(local_path).open(newline="") as f:
+                reader = csv.reader(f)
+                headers = [h.strip().replace("-", "_") for h in next(reader)]
+                values = [float(v.strip()) for v in next(reader)]
+
+            # Prefix varref columns to avoid collision with force_mom
+            prefix = "varref_" if csv_key == "force_mom_varref" else ""
+            for col, val in zip(headers, values, strict=True):
+                data[f"{prefix}{col}"] = torch.tensor([val], dtype=torch.float32)
+
+        return data
+
+    def _attach_global_data(self, mesh: Mesh, run_id: int) -> Mesh:
+        """Attach CSV global data to a mesh as its global_data field.
+
+        Parameters
+        ----------
+        mesh : Mesh
+            Mesh to augment.
+        run_id : int
+            Dataset run ID for CSV lookup.
+
+        Returns
+        -------
+        Mesh
+            Mesh with ``global_data`` populated from CSV metadata.
+        """
+        from tensordict import TensorDict
+
+        csv_data = self._read_csv_global_data(run_id)
+        if csv_data:
+            mesh = Mesh(
+                points=mesh.points,
+                cells=mesh.cells,
+                point_data=mesh.point_data,
+                cell_data=mesh.cell_data,
+                global_data=TensorDict(csv_data, batch_size=[]),  # ty: ignore[invalid-argument-type]
+            )
+        return mesh
+
+    # -- Multi mode ------------------------------------------------------------
+
+    def _read_multi(self, index: int) -> Generator[Mesh]:
+        """Read multiple mesh representations for a given run.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Yields
+        ------
+        Mesh or DomainMesh
+            One mesh per active mesh_part, in order.  The ``"domain"`` part
+            yields a :class:`DomainMesh`; ``"stl"`` yields a plain :class:`Mesh`.
+        """
+        for part in self._mesh_parts:
+            if part == "domain":
+                yield from self._read_domain(index)
+            elif part == "stl":
+                yield from self._read_stl(index)
+
+    def _read_domain(self, index: int) -> Generator[Mesh]:
+        """Read domain mesh combining volume interior, boundary surface, and global data.
+
+        Produces a :class:`~physicsnemo.mesh.domain_mesh.DomainMesh` with:
+
+        * **interior** — volume VTU converted to a point-cloud via
+          ``cell_centroids`` (no connectivity, cells shape ``[0, 1]``).
+        * **boundaries["surface"]** — boundary VTP with cell connectivity
+          and flow fields.
+        * **global_data** — CSV metadata (force coefficients + geometry params).
+
+        All floating-point data is downcast to float32.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Yields
+        ------
+        DomainMesh
+            Combined domain mesh.
+        """
+        import time
+
+        from physicsnemo.mesh.domain_mesh import DomainMesh
+        from tensordict import TensorDict
+
+        run_id = self._run_indices[index]
+        print(f"[AhmedML run_{run_id}] Starting domain read...")
+
+        # --- Interior (volume VTU → point-cloud) ---
+        volume_filename = _MESH_TEMPLATES["volume"].format(i=run_id)
+        volume_remote = f"{self._root_path}/run_{run_id}/{volume_filename}"
+        print(f"[AhmedML run_{run_id}] Ensuring local volume file...")
+        t0 = time.perf_counter()
+        volume_path = self._ensure_local(volume_remote)
+        print(f"[AhmedML run_{run_id}] Volume file ready ({time.perf_counter() - t0:.2f}s)")
+
+        print(f"[AhmedML run_{run_id}] Reading interior VTU...")
+        t0 = time.perf_counter()
+        interior = self._read_vtk_as_interior(volume_path)
+        elapsed = time.perf_counter() - t0
+        print(f"[AhmedML run_{run_id}] Interior read complete: {interior.n_points} pts ({elapsed:.2f}s)")
+
+        print(f"[AhmedML run_{run_id}] Downcasting interior to fp32...")
+        t0 = time.perf_counter()
+        interior = self._downcast_fp32(interior)
+        print(f"[AhmedML run_{run_id}] Interior downcast complete ({time.perf_counter() - t0:.2f}s)")
+
+        # --- Boundary surface (VTP) ---
+        boundary_filename = _MESH_TEMPLATES["boundary"].format(i=run_id)
+        boundary_remote = f"{self._root_path}/run_{run_id}/{boundary_filename}"
+        print(f"[AhmedML run_{run_id}] Ensuring local boundary file...")
+        t0 = time.perf_counter()
+        boundary_path = self._ensure_local(boundary_remote)
+        print(f"[AhmedML run_{run_id}] Boundary file ready ({time.perf_counter() - t0:.2f}s)")
+
+        print(f"[AhmedML run_{run_id}] Reading boundary VTP...")
+        t0 = time.perf_counter()
+        surface = self._read_vtk(boundary_path)
+        elapsed = time.perf_counter() - t0
+        print(f"[AhmedML run_{run_id}] Boundary read complete: {surface.n_points} pts ({elapsed:.2f}s)")
+
+        print(f"[AhmedML run_{run_id}] Downcasting boundary to fp32...")
+        t0 = time.perf_counter()
+        surface = self._downcast_fp32(surface)
+        print(f"[AhmedML run_{run_id}] Boundary downcast complete ({time.perf_counter() - t0:.2f}s)")
+
+        # --- Global data from CSVs ---
+        print(f"[AhmedML run_{run_id}] Reading CSV global data...")
+        t0 = time.perf_counter()
+        csv_data = self._read_csv_global_data(run_id)
+        global_data = (
+            TensorDict(csv_data, batch_size=[])  # ty: ignore[invalid-argument-type]
+            if csv_data
+            else None
+        )
+        print(f"[AhmedML run_{run_id}] CSV read complete ({time.perf_counter() - t0:.2f}s)")
+
+        # --- Assemble DomainMesh ---
+        print(f"[AhmedML run_{run_id}] Assembling DomainMesh...")
+        t0 = time.perf_counter()
+        domain_mesh = DomainMesh(
+            interior=interior,
+            boundaries={"surface": surface},
+            global_data=global_data,
+        )
+        print(f"[AhmedML run_{run_id}] DomainMesh assembled ({time.perf_counter() - t0:.2f}s)")
+        print(f"[AhmedML run_{run_id}] Domain read complete!")
+        yield domain_mesh  # type: ignore[misc]  # ty: ignore[invalid-yield]
+
+    def _read_stl(self, index: int) -> Generator[Mesh]:
+        """Read the STL geometry file for a given run.
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index into the sorted run list.
+
+        Yields
+        ------
+        Mesh
+            STL mesh with global_data from CSVs attached.
+        """
+        run_id = self._run_indices[index]
+        stl_filename = _STL_TEMPLATE.format(i=run_id)
+        stl_remote = f"{self._root_path}/run_{run_id}/{stl_filename}"
+        stl_path = self._ensure_local(stl_remote)
+        mesh = self._read_vtk(stl_path)
+        mesh = self._attach_global_data(mesh, run_id)
+        yield mesh
+
+    def _read_vtk_as_interior(self, path: str) -> Mesh:
+        """Read a volume VTK file as an interior point-cloud.
+
+        Converts the volume mesh to a point-cloud using cell centroids
+        (no connectivity).
+
+        Parameters
+        ----------
+        path : str
+            Local path to VTU file.
+
+        Returns
+        -------
+        Mesh
+            Point-cloud mesh (manifold_dim=0) with no cell connectivity.
+        """
+        if self._backend == "rust":
+            return self._read_interior_with_rust(path)
+        return self._read_interior_with_pyvista(path)
+
+    def _read_interior_with_pyvista(self, path: str) -> Mesh:
+        """Read interior mesh using PyVista backend.
+
+        Parameters
+        ----------
+        path : str
+            Local path to VTU file.
+
+        Returns
+        -------
+        Mesh
+            Point-cloud mesh with cell centroids as points.
+        """
+        import pyvista as pv
+        from physicsnemo.mesh.io import from_pyvista
+
+        pv_mesh = pv.read(path)
+        return from_pyvista(
+            pv_mesh,
+            manifold_dim=0,
+            point_source="cell_centroids",
+            warn_on_lost_data=self._warn_on_lost_data,
+        )
+
+    def _read_interior_with_rust(self, path: str) -> Mesh:
+        """Read interior mesh using Rust backend.
+
+        Computes cell centroids from the cell connectivity and uses
+        cell_data as point_data on the resulting point-cloud.
+
+        Parameters
+        ----------
+        path : str
+            Local path to VTU file.
+
+        Returns
+        -------
+        Mesh
+            Point-cloud mesh with cell centroids as points and cell_data
+            converted to point_data.
+        """
+        import time
+
+        import numpy as np
+        import torch
+        from tensordict import TensorDict
+
+        from physicsnemo_curator._lib import vtk
+
+        # Skip point_data since we only need cell_data for the interior point cloud
+        print(f"  [Rust VTK] Reading {path}...")
+        t0 = time.perf_counter()
+        rust_mesh = vtk.read_vtk(path, skip_point_data=True)
+        elapsed = time.perf_counter() - t0
+        print(f"  [Rust VTK] File parsed: {rust_mesh.n_points} pts, {rust_mesh.n_cells} cells ({elapsed:.2f}s)")
+
+        # Extract arrays we need and free the rust_mesh reference early
+        points = rust_mesh.points  # (n_points, 3)
+        cells = rust_mesh.cells  # flat connectivity array
+        offsets = rust_mesh.cell_offsets  # cell boundary offsets
+        n_cells = rust_mesh.n_cells
+        cell_data = rust_mesh.cell_data
+        print(f"  [Rust VTK] Cell data fields: {list(cell_data.keys())}")
+
+        if cells is None or offsets is None:
+            msg = f"VTK file {path} has no cell connectivity; cannot compute centroids."
+            raise ValueError(msg)
+
+        # Compute centroids for each cell using vectorized operations
+        # VTK offsets are cumulative end indices:
+        # - Cell 0: connectivity[0:offsets[0]]
+        # - Cell i: connectivity[offsets[i-1]:offsets[i]]
+
+        print("  [Rust VTK] Computing cell centroids...")
+        t0 = time.perf_counter()
+
+        # Build start indices: [0, offsets[0], offsets[1], ..., offsets[n-2]]
+        starts = np.zeros(n_cells, dtype=offsets.dtype)
+        starts[1:] = offsets[:-1]
+
+        # Compute points per cell
+        points_per_cell = offsets - starts
+        del offsets  # Free memory
+
+        # Check if all cells have the same number of points (common case)
+        if np.all(points_per_cell == points_per_cell[0]):
+            # Fast path: uniform cell size - fully vectorized
+            pts_per_cell = int(points_per_cell[0])
+            print(f"  [Rust VTK] Using fast path (uniform {pts_per_cell} pts/cell)")
+            del points_per_cell, starts  # Free memory
+
+            cell_point_ids = cells.reshape(n_cells, pts_per_cell)
+            del cells  # Free memory
+
+            # Compute centroids in float32 directly to save memory
+            cell_points = points[cell_point_ids].astype(np.float32, copy=False)
+            del cell_point_ids, points  # Free memory
+
+            centroids = cell_points.mean(axis=1)
+            del cell_points  # Free memory
+        else:
+            # Slow path: variable cell sizes - use np.add.reduceat
+            print("  [Rust VTK] Using slow path (variable cell sizes)")
+            # Gather all cell points and sum them per cell
+            all_cell_points = points[cells].astype(np.float32, copy=False)
+            del cells, points  # Free memory
+
+            # Sum points within each cell using reduceat
+            cell_sums = np.add.reduceat(all_cell_points, starts, axis=0)
+            del all_cell_points, starts  # Free memory
+
+            # Divide by points per cell to get centroids
+            centroids = cell_sums / points_per_cell[:, np.newaxis].astype(np.float32)
+            del cell_sums, points_per_cell  # Free memory
+
+        print(f"  [Rust VTK] Centroids computed ({time.perf_counter() - t0:.2f}s)")
+
+        # Convert to torch tensors
+        print("  [Rust VTK] Converting to torch tensors...")
+        t0 = time.perf_counter()
+        points_tensor = torch.from_numpy(centroids)
+        del centroids  # Free numpy array
+
+        # Use cell_data as point_data (one value per centroid)
+        point_data_dict = {}
+        for name, data in cell_data.items():
+            # Convert to float32 if floating point to save memory
+            if data.dtype in (np.float64,):
+                point_data_dict[name] = torch.from_numpy(data.astype(np.float32, copy=False))
+            else:
+                point_data_dict[name] = torch.from_numpy(data)
+        del cell_data  # Free memory
+
+        point_data = TensorDict(point_data_dict, batch_size=[n_cells]) if point_data_dict else None
+        print(f"  [Rust VTK] Tensor conversion complete ({time.perf_counter() - t0:.2f}s)")
+
+        return Mesh(
+            points=points_tensor,
+            point_data=point_data,
+        )
+
+    @staticmethod
+    def _downcast_fp32(mesh: Mesh) -> Mesh:
+        """Downcast all floating-point tensors in a mesh to float32.
+
+        Parameters
+        ----------
+        mesh : Mesh
+            Input mesh.
+
+        Returns
+        -------
+        Mesh
+            Mesh with all float64 data converted to float32.
+        """
+        import torch
+
+        points = mesh.points.float() if mesh.points.dtype == torch.float64 else mesh.points
+        cells = mesh.cells
+
+        point_data = None
+        if mesh.point_data is not None:
+            pd_dict = {}
+            for key in mesh.point_data.keys():  # noqa: SIM118
+                t = mesh.point_data.get(key)
+                pd_dict[key] = t.float() if t.is_floating_point() and t.dtype == torch.float64 else t
+            from tensordict import TensorDict
+
+            point_data = TensorDict(pd_dict, batch_size=mesh.point_data.batch_size)
+
+        cell_data = None
+        if mesh.cell_data is not None:
+            cd_dict = {}
+            for key in mesh.cell_data.keys():  # noqa: SIM118
+                t = mesh.cell_data.get(key)
+                cd_dict[key] = t.float() if t.is_floating_point() and t.dtype == torch.float64 else t
+            from tensordict import TensorDict
+
+            cell_data = TensorDict(cd_dict, batch_size=mesh.cell_data.batch_size)
+
+        return Mesh(
+            points=points,
+            cells=cells,
+            point_data=point_data,
+            cell_data=cell_data,
+            global_data=mesh.global_data,
+        )

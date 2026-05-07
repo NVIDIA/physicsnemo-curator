@@ -343,7 +343,9 @@ class TestD3PlotSourceLocal:
         mock_d3plot_cls.return_value = _make_mock_d3plot()
         source = D3PlotSource(input_dir=str(no_k_root))
         mesh = next(source[0])
-        assert torch.all(mesh.point_data["thickness"] == 0.0)
+        thickness = mesh.point_data.get("thickness")
+        assert thickness is not None
+        assert torch.all(thickness == 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -580,9 +582,12 @@ Part_3
         mesh_rust = next(source_rust[0])
 
         # Both should produce the same thickness values.
+        thickness_rust = mesh_rust.point_data.get("thickness")
+        thickness_py = mesh_py.point_data.get("thickness")
+        assert thickness_rust is not None and thickness_py is not None
         np.testing.assert_allclose(
-            mesh_rust.point_data["thickness"].numpy(),
-            mesh_py.point_data["thickness"].numpy(),
+            thickness_rust.numpy(),
+            thickness_py.numpy(),
             atol=1e-10,
             err_msg="Rust and Python backends produce different thickness",
         )

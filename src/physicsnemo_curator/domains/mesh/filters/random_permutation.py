@@ -70,12 +70,14 @@ def _permute_tensordict(
 
     permuted: dict[str, torch.Tensor | TensorDict] = {}
     for key in td.keys():  # noqa: SIM118
-        child = td[key]
+        child = td.get(key)
         if isinstance(child, TensorDictBase):
-            permuted[key] = _permute_tensordict(child, perm, new_size)
-        else:
-            permuted[key] = child[perm]
-    return TensorDict(permuted, batch_size=[new_size])
+            result = _permute_tensordict(child, perm, new_size)
+            if result is not None:
+                permuted[str(key)] = result
+        elif child is not None:
+            permuted[str(key)] = child[perm]
+    return TensorDict(permuted, batch_size=[new_size])  # ty: ignore[invalid-argument-type]
 
 
 def _shuffle_mesh(mesh: object, rng: torch.Generator) -> None:

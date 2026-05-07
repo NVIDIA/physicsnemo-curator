@@ -18,7 +18,7 @@ The pipeline:
 ## Prerequisites
 
 ```bash
-uv sync --group mesh
+uv sync --extra mesh
 
 # or with pip
 pip install physicsnemo-curator[mesh]
@@ -40,7 +40,7 @@ relying on streaming.
 
 ```bash
 # Download specific runs (adjust --include for your needs)
-huggingface-cli download neashton/drivaerml \
+hf download neashton/drivaerml \
     --repo-type dataset \
     --include "run_1/*" "run_2/*" \
     --local-dir input/drivaerml

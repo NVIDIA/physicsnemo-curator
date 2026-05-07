@@ -17,7 +17,8 @@
 """Loky (joblib) execution backend.
 
 Uses ``joblib.Parallel`` with the loky backend for robust parallel execution.
-Loky provides better process management than the standard multiprocessing module.
+Loky provides better process management than the standard multiprocessing module,
+including automatic worker restart on crashes and better memory cleanup.
 """
 
 from __future__ import annotations
@@ -27,8 +28,12 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from physicsnemo_curator.run.base import (
     RunBackend,
     RunConfig,
+    batch_groups,
+    intersect_partitions,
+    process_index_group,
     process_single_index,
 )
+from physicsnemo_curator.run.progress_monitor import start_progress_monitor
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
@@ -39,6 +44,15 @@ class LokyBackend(RunBackend):
 
     Loky is a robust process executor that handles worker crashes gracefully
     and provides better memory management than standard multiprocessing.
+    Key advantages over ProcessPoolExecutor:
+
+    - **Automatic worker restart**: If a worker crashes or is killed, loky
+      automatically restarts it without failing the entire job.
+    - **Memory cleanup**: Workers are recycled after processing a configurable
+      number of tasks to prevent memory leaks.
+    - **Robust serialization**: Uses cloudpickle for better serialization of
+      complex objects including lambdas and closures.
+    - **Timeout handling**: Built-in timeout support per task.
 
     .. warning::
 
@@ -52,7 +66,7 @@ class LokyBackend(RunBackend):
     require : str
         Hard constraint for parallelization.
     verbose : int
-        Verbosity level (0-50). If not set, uses 10 when progress=True.
+        Verbosity level (0-50). If not set, uses 0 (quiet).
     batch_size : int | str
         Number of tasks per batch ("auto" or int).
     pre_dispatch : str | int
@@ -61,6 +75,8 @@ class LokyBackend(RunBackend):
         Folder for memmapping large arrays.
     timeout : float | None
         Timeout in seconds for retrieving results.
+    max_nbytes : str | int | None
+        Threshold for automatic memmapping (e.g., "1M").
     """
 
     name: ClassVar[str] = "loky"
@@ -102,13 +118,40 @@ class LokyBackend(RunBackend):
 
         # Extract joblib-specific options
         parallel_kwargs = dict(config.backend_options)
+        # Default to quiet since we have our own progress monitor
         if "verbose" not in parallel_kwargs:
-            parallel_kwargs["verbose"] = 10 if config.progress else 0
+            parallel_kwargs["verbose"] = 0
 
-        results: list[list[str]] = Parallel(
-            n_jobs=n_jobs,
-            backend="loky",
-            **parallel_kwargs,
-        )(delayed(process_single_index)(pipeline, i) for i in indices)
+        # Compute partition groups from source and sink constraints
+        source_groups = pipeline.source.partition_indices(indices)
+        sink_groups = pipeline.sink.partition_indices(indices) if pipeline.sink else None
+        groups = intersect_partitions(source_groups, sink_groups)
 
-        return results
+        result_map: dict[int, list[str]] = {}
+
+        with start_progress_monitor(pipeline, config):
+            if groups is not None:
+                # Batch groups for efficiency
+                batches = batch_groups(groups, n_jobs)
+
+                # Process batched groups
+                batch_results: list[dict[int, list[str]]] = Parallel(
+                    n_jobs=n_jobs,
+                    backend="loky",
+                    **parallel_kwargs,
+                )(delayed(process_index_group)(pipeline, batch) for batch in batches)
+
+                for batch_result in batch_results:
+                    result_map.update(batch_result)
+            else:
+                # Default: one index per task
+                results: list[list[str]] = Parallel(
+                    n_jobs=n_jobs,
+                    backend="loky",
+                    **parallel_kwargs,
+                )(delayed(process_single_index)(pipeline, i) for i in indices)
+
+                for i, result in zip(indices, results, strict=True):
+                    result_map[i] = result
+
+        return [result_map[i] for i in indices]

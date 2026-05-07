@@ -21,12 +21,15 @@ computing running statistics along the way.
 """
 
 import argparse
+import os
 from datetime import datetime, timedelta
 
 from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
+
+os.environ["LOGURU_LEVEL"] = "ERROR"
 
 
 def _generate_hourly_times(year: int, month: int) -> list[datetime]:
@@ -133,7 +136,9 @@ def main() -> None:
     # Run the pipeline with parallel workers.
     # Each forked process gets its own copy of the pipeline, so earth2studio
     # backends are isolated (no async event-loop conflicts).
-    results = run_pipeline(pipeline, n_jobs=args.workers, backend="process_pool", indices=range(args.n_indices))
+    results = run_pipeline(
+        pipeline, n_jobs=args.workers, backend="process_pool", indices=range(args.n_indices), progress="log"
+    )
 
     print(f"\nProcessed {len(results)} timesteps")
 

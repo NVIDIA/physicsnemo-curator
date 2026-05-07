@@ -679,7 +679,9 @@ class TestPrecisionFilter:
         source = VTKSource(str(tmp_path / "vtk"))
         mesh = next(source[0])
 
-        original_temp = mesh.point_data["temperature"].clone()
+        original_temp = mesh.point_data.get("temperature")
+        assert original_temp is not None
+        original_temp = original_temp.clone()
 
         filt = PrecisionFilter(target_dtype="float32")
 
@@ -687,7 +689,8 @@ class TestPrecisionFilter:
             yield mesh
 
         meshes_out = list(filt(gen()))
-        converted_temp = meshes_out[0].point_data["temperature"]
+        converted_temp = meshes_out[0].point_data.get("temperature")
+        assert converted_temp is not None
 
         # Values should be close (within float32 precision)
         assert torch.allclose(converted_temp.double(), original_temp, atol=1e-6)

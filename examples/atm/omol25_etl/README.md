@@ -15,7 +15,7 @@ The pipeline:
 ## Prerequisites
 
 ```bash
-uv sync --group atm
+uv sync --extra atm
 
 # or with pip
 pip install physicsnemo-curator[atm]
