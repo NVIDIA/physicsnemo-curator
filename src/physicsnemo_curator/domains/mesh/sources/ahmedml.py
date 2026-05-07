@@ -227,6 +227,9 @@ class AhmedMLSource(Source[Mesh]):
     ) -> None:
         import fsspec
 
+        from physicsnemo_curator.core.logging import get_logger
+
+        self._log = get_logger(self)
         self._mesh_type: MeshType = mesh_type
         self._mesh_parts: list[MeshPart] = mesh_parts or ["domain"]  # ty: ignore[invalid-assignment]
         self._url = url
@@ -642,48 +645,48 @@ class AhmedMLSource(Source[Mesh]):
         from tensordict import TensorDict
 
         run_id = self._run_indices[index]
-        print(f"[AhmedML run_{run_id}] Starting domain read...")
+        self._log.info("run_%d: Starting domain read", run_id)
 
         # --- Interior (volume VTU → point-cloud) ---
         volume_filename = _MESH_TEMPLATES["volume"].format(i=run_id)
         volume_remote = f"{self._root_path}/run_{run_id}/{volume_filename}"
-        print(f"[AhmedML run_{run_id}] Ensuring local volume file...")
+        self._log.debug("run_%d: Ensuring local volume file", run_id)
         t0 = time.perf_counter()
         volume_path = self._ensure_local(volume_remote)
-        print(f"[AhmedML run_{run_id}] Volume file ready ({time.perf_counter() - t0:.2f}s)")
+        self._log.debug("run_%d: Volume file ready (%.2fs)", run_id, time.perf_counter() - t0)
 
-        print(f"[AhmedML run_{run_id}] Reading interior VTU...")
+        self._log.info("run_%d: Reading interior VTU", run_id)
         t0 = time.perf_counter()
         interior = self._read_vtk_as_interior(volume_path)
         elapsed = time.perf_counter() - t0
-        print(f"[AhmedML run_{run_id}] Interior read complete: {interior.n_points} pts ({elapsed:.2f}s)")
+        self._log.info("run_%d: Interior read complete: %d pts (%.2fs)", run_id, interior.n_points, elapsed)
 
-        print(f"[AhmedML run_{run_id}] Downcasting interior to fp32...")
+        self._log.debug("run_%d: Downcasting interior to fp32", run_id)
         t0 = time.perf_counter()
         interior = self._downcast_fp32(interior)
-        print(f"[AhmedML run_{run_id}] Interior downcast complete ({time.perf_counter() - t0:.2f}s)")
+        self._log.debug("run_%d: Interior downcast complete (%.2fs)", run_id, time.perf_counter() - t0)
 
         # --- Boundary surface (VTP) ---
         boundary_filename = _MESH_TEMPLATES["boundary"].format(i=run_id)
         boundary_remote = f"{self._root_path}/run_{run_id}/{boundary_filename}"
-        print(f"[AhmedML run_{run_id}] Ensuring local boundary file...")
+        self._log.debug("run_%d: Ensuring local boundary file", run_id)
         t0 = time.perf_counter()
         boundary_path = self._ensure_local(boundary_remote)
-        print(f"[AhmedML run_{run_id}] Boundary file ready ({time.perf_counter() - t0:.2f}s)")
+        self._log.debug("run_%d: Boundary file ready (%.2fs)", run_id, time.perf_counter() - t0)
 
-        print(f"[AhmedML run_{run_id}] Reading boundary VTP...")
+        self._log.info("run_%d: Reading boundary VTP", run_id)
         t0 = time.perf_counter()
         surface = self._read_vtk(boundary_path)
         elapsed = time.perf_counter() - t0
-        print(f"[AhmedML run_{run_id}] Boundary read complete: {surface.n_points} pts ({elapsed:.2f}s)")
+        self._log.info("run_%d: Boundary read complete: %d pts (%.2fs)", run_id, surface.n_points, elapsed)
 
-        print(f"[AhmedML run_{run_id}] Downcasting boundary to fp32...")
+        self._log.debug("run_%d: Downcasting boundary to fp32", run_id)
         t0 = time.perf_counter()
         surface = self._downcast_fp32(surface)
-        print(f"[AhmedML run_{run_id}] Boundary downcast complete ({time.perf_counter() - t0:.2f}s)")
+        self._log.debug("run_%d: Boundary downcast complete (%.2fs)", run_id, time.perf_counter() - t0)
 
         # --- Global data from CSVs ---
-        print(f"[AhmedML run_{run_id}] Reading CSV global data...")
+        self._log.debug("run_%d: Reading CSV global data", run_id)
         t0 = time.perf_counter()
         csv_data = self._read_csv_global_data(run_id)
         global_data = (
@@ -691,18 +694,18 @@ class AhmedMLSource(Source[Mesh]):
             if csv_data
             else None
         )
-        print(f"[AhmedML run_{run_id}] CSV read complete ({time.perf_counter() - t0:.2f}s)")
+        self._log.debug("run_%d: CSV read complete (%.2fs)", run_id, time.perf_counter() - t0)
 
         # --- Assemble DomainMesh ---
-        print(f"[AhmedML run_{run_id}] Assembling DomainMesh...")
+        self._log.debug("run_%d: Assembling DomainMesh", run_id)
         t0 = time.perf_counter()
         domain_mesh = DomainMesh(
             interior=interior,
             boundaries={"surface": surface},
             global_data=global_data,
         )
-        print(f"[AhmedML run_{run_id}] DomainMesh assembled ({time.perf_counter() - t0:.2f}s)")
-        print(f"[AhmedML run_{run_id}] Domain read complete!")
+        self._log.debug("run_%d: DomainMesh assembled (%.2fs)", run_id, time.perf_counter() - t0)
+        self._log.info("run_%d: Domain read complete", run_id)
         yield domain_mesh  # type: ignore[misc]  # ty: ignore[invalid-yield]
 
     def _read_stl(self, index: int) -> Generator[Mesh]:
@@ -796,11 +799,11 @@ class AhmedMLSource(Source[Mesh]):
         from physicsnemo_curator._lib import vtk
 
         # Skip point_data since we only need cell_data for the interior point cloud
-        print(f"  [Rust VTK] Reading {path}...")
+        self._log.debug("Reading VTU via Rust backend: %s", path)
         t0 = time.perf_counter()
         rust_mesh = vtk.read_vtk(path, skip_point_data=True)
         elapsed = time.perf_counter() - t0
-        print(f"  [Rust VTK] File parsed: {rust_mesh.n_points} pts, {rust_mesh.n_cells} cells ({elapsed:.2f}s)")
+        self._log.debug("Rust VTK parsed: %d pts, %d cells (%.2fs)", rust_mesh.n_points, rust_mesh.n_cells, elapsed)
 
         # Extract arrays we need and free the rust_mesh reference early
         points = rust_mesh.points  # (n_points, 3)
@@ -808,7 +811,7 @@ class AhmedMLSource(Source[Mesh]):
         offsets = rust_mesh.cell_offsets  # cell boundary offsets
         n_cells = rust_mesh.n_cells
         cell_data = rust_mesh.cell_data
-        print(f"  [Rust VTK] Cell data fields: {list(cell_data.keys())}")
+        self._log.debug("Cell data fields: %s", list(cell_data.keys()))
 
         if cells is None or offsets is None:
             msg = f"VTK file {path} has no cell connectivity; cannot compute centroids."
@@ -819,7 +822,7 @@ class AhmedMLSource(Source[Mesh]):
         # - Cell 0: connectivity[0:offsets[0]]
         # - Cell i: connectivity[offsets[i-1]:offsets[i]]
 
-        print("  [Rust VTK] Computing cell centroids...")
+        self._log.debug("Computing cell centroids...")
         t0 = time.perf_counter()
 
         # Build start indices: [0, offsets[0], offsets[1], ..., offsets[n-2]]
@@ -834,7 +837,7 @@ class AhmedMLSource(Source[Mesh]):
         if np.all(points_per_cell == points_per_cell[0]):
             # Fast path: uniform cell size - fully vectorized
             pts_per_cell = int(points_per_cell[0])
-            print(f"  [Rust VTK] Using fast path (uniform {pts_per_cell} pts/cell)")
+            self._log.debug("Using fast path (uniform %d pts/cell)", pts_per_cell)
             del points_per_cell, starts  # Free memory
 
             cell_point_ids = cells.reshape(n_cells, pts_per_cell)
@@ -848,7 +851,7 @@ class AhmedMLSource(Source[Mesh]):
             del cell_points  # Free memory
         else:
             # Slow path: variable cell sizes - use np.add.reduceat
-            print("  [Rust VTK] Using slow path (variable cell sizes)")
+            self._log.debug("Using slow path (variable cell sizes)")
             # Gather all cell points and sum them per cell
             all_cell_points = points[cells].astype(np.float32, copy=False)
             del cells, points  # Free memory
@@ -861,10 +864,10 @@ class AhmedMLSource(Source[Mesh]):
             centroids = cell_sums / points_per_cell[:, np.newaxis].astype(np.float32)
             del cell_sums, points_per_cell  # Free memory
 
-        print(f"  [Rust VTK] Centroids computed ({time.perf_counter() - t0:.2f}s)")
+        self._log.debug("Centroids computed (%.2fs)", time.perf_counter() - t0)
 
         # Convert to torch tensors
-        print("  [Rust VTK] Converting to torch tensors...")
+        self._log.debug("Converting to torch tensors...")
         t0 = time.perf_counter()
         points_tensor = torch.from_numpy(centroids)
         del centroids  # Free numpy array
@@ -880,7 +883,7 @@ class AhmedMLSource(Source[Mesh]):
         del cell_data  # Free memory
 
         point_data = TensorDict(point_data_dict, batch_size=[n_cells]) if point_data_dict else None
-        print(f"  [Rust VTK] Tensor conversion complete ({time.perf_counter() - t0:.2f}s)")
+        self._log.debug("Tensor conversion complete (%.2fs)", time.perf_counter() - t0)
 
         return Mesh(
             points=points_tensor,

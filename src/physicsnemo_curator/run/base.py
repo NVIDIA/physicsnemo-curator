@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
+    from physicsnemo_curator.core.logging import DatabaseLogHandler
 
 
 @dataclass
@@ -215,6 +216,52 @@ def _flush_filters(pipeline: Pipeline[Any], index: int) -> None:
                 )
 
 
+# Module-level state for worker logging (setup once per process)
+_worker_log_handler: DatabaseLogHandler | None = None
+
+
+def _ensure_worker_logging(pipeline: Pipeline[Any]) -> DatabaseLogHandler | None:
+    """Ensure database logging is set up in worker processes.
+
+    Sets up a DatabaseLogHandler that writes logs to the pipeline store.
+    Called once per worker process on first index processing.
+
+    Parameters
+    ----------
+    pipeline : Pipeline
+        The pipeline being executed.
+
+    Returns
+    -------
+    DatabaseLogHandler | None
+        The handler, or None if metrics tracking is disabled.
+    """
+    global _worker_log_handler  # noqa: PLW0603
+
+    if _worker_log_handler is not None:
+        return _worker_log_handler
+
+    # Only set up if metrics tracking is enabled
+    if not pipeline.track_metrics:
+        return None
+
+    # Check if we're in a worker process (not main)
+    import multiprocessing
+
+    if multiprocessing.current_process().name == "MainProcess":
+        return None
+
+    try:
+        from physicsnemo_curator.core.logging import setup_worker_logging
+
+        store = pipeline._get_store()  # noqa: SLF001
+        _worker_log_handler = setup_worker_logging(store)
+        return _worker_log_handler
+    except Exception:  # noqa: BLE001
+        # Don't crash if logging setup fails
+        return None
+
+
 def process_single_index(pipeline: Pipeline[Any], index: int) -> list[str]:
     """Process a single pipeline index.
 
@@ -234,9 +281,20 @@ def process_single_index(pipeline: Pipeline[Any], index: int) -> list[str]:
     list[str]
         File paths written by the sink.
     """
-    result = pipeline[index]
-    _flush_filters(pipeline, index)
-    return result
+    # Set up database logging in worker processes (once per process)
+    handler = _ensure_worker_logging(pipeline)
+    if handler is not None:
+        handler.set_current_index(index)
+
+    try:
+        result = pipeline[index]
+        _flush_filters(pipeline, index)
+        return result
+    finally:
+        # Flush logs after each index to ensure they're captured
+        if handler is not None:
+            handler.flush()
+            handler.set_current_index(None)
 
 
 def process_single_index_packed(args: tuple[Pipeline[Any], int]) -> list[str]:
@@ -253,9 +311,8 @@ def process_single_index_packed(args: tuple[Pipeline[Any], int]) -> list[str]:
         File paths written by the sink.
     """
     pipeline, index = args
-    result = pipeline[index]
-    _flush_filters(pipeline, index)
-    return result
+    # Delegate to main function for logging setup
+    return process_single_index(pipeline, index)
 
 
 def intersect_partitions(
@@ -430,10 +487,21 @@ def process_index_group(pipeline: Pipeline[Any], indices: list[int]) -> dict[int
     dict[int, list[str]]
         Mapping of index to sink output paths.
     """
+    # Set up database logging in worker processes (once per process)
+    handler = _ensure_worker_logging(pipeline)
+
     results: dict[int, list[str]] = {}
-    for idx in indices:
-        results[idx] = pipeline[idx]
-        _flush_filters(pipeline, idx)
+    try:
+        for idx in indices:
+            if handler is not None:
+                handler.set_current_index(idx)
+            results[idx] = pipeline[idx]
+            _flush_filters(pipeline, idx)
+    finally:
+        # Flush logs after processing the group
+        if handler is not None:
+            handler.flush()
+            handler.set_current_index(None)
     return results
 
 

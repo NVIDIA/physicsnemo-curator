@@ -426,7 +426,7 @@ class DrivAerMLSource(Source[Mesh]):
             path = self._ensure_local(remote_path)
             mesh = self._read_vtk(path)
             self._cleanup_local(path)
-            yield mesh
+            yield self._downcast_fp32(mesh)
 
     # -- VTK reading ----------------------------------------------------------
 
@@ -734,7 +734,7 @@ class DrivAerMLSource(Source[Mesh]):
             local_path = self._ensure_local(direct_remote)
             mesh = self._read_vtk(local_path)
             self._cleanup_local(local_path)
-            yield mesh
+            yield self._downcast_fp32(mesh)
             return
         except FileNotFoundError:
             pass
@@ -745,7 +745,7 @@ class DrivAerMLSource(Source[Mesh]):
             mesh = self._read_vtk(volume_path)
         finally:
             pathlib.Path(volume_path).unlink(missing_ok=True)
-        yield mesh
+        yield self._downcast_fp32(mesh)
 
     def _concat_volume_parts_tempfile(self, run_id: int) -> str:
         """Concatenate split volume VTU parts into a temporary file.
@@ -864,7 +864,7 @@ class DrivAerMLSource(Source[Mesh]):
             local_path = self._ensure_local(remote_path, fs=fs, protocol=protocol)
             mesh = self._read_vtk(local_path)
             self._cleanup_local(local_path)
-            yield mesh
+            yield self._downcast_fp32(mesh)
 
     # -- Multi-mode methods ---------------------------------------------------
 

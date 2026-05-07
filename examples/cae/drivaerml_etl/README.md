@@ -18,10 +18,10 @@ The pipeline:
 ## Prerequisites
 
 ```bash
-uv sync --extra mesh
+uv sync --extra mesh --extra loky
 
 # or with pip
-pip install physicsnemo-curator[mesh]
+pip install physicsnemo-curator[mesh,loky]
 pip install huggingface_hub[cli]
 ```
 

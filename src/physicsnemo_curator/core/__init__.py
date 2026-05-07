@@ -19,6 +19,12 @@
 from __future__ import annotations
 
 from physicsnemo_curator.core.base import Filter, Param, Pipeline, Sink, Source
+from physicsnemo_curator.core.logging import (
+    DatabaseLogHandler,
+    configure_logging,
+    get_logger,
+    setup_worker_logging,
+)
 from physicsnemo_curator.core.pipeline_store import PipelineMetrics, PipelineStore
 from physicsnemo_curator.core.registry import registry
 from physicsnemo_curator.core.serialization import (
@@ -30,6 +36,7 @@ from physicsnemo_curator.core.serialization import (
 from physicsnemo_curator.run import run_pipeline
 
 __all__ = [
+    "DatabaseLogHandler",
     "Filter",
     "Param",
     "Pipeline",
@@ -37,10 +44,13 @@ __all__ = [
     "PipelineStore",
     "Sink",
     "Source",
+    "configure_logging",
     "deserialize_pipeline",
+    "get_logger",
     "load_pipeline",
     "registry",
     "run_pipeline",
     "save_pipeline",
     "serialize_pipeline",
+    "setup_worker_logging",
 ]

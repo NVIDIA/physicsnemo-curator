@@ -231,6 +231,57 @@ def _error_log(store: DashboardStore) -> pn.Column:
     )
 
 
+def _logs_panel(store: DashboardStore) -> pn.Column:
+    """Build the logs panel with process filter.
+
+    Parameters
+    ----------
+    store : DashboardStore
+        The dashboard data store.
+
+    Returns
+    -------
+    pn.Column
+        Column with filter dropdown and log table.
+    """
+    # Get all logs and worker IDs
+    df = store.logs_df(limit=500, min_level=0)
+    worker_ids = store.log_worker_ids()
+
+    if df.empty:
+        return pn.Column(
+            pn.pane.Markdown("### Pipeline Logs"),
+            pn.pane.Markdown("*No log entries recorded.*"),
+        )
+
+    # Create filter dropdown with "All" as default
+    options = ["All"] + worker_ids
+    worker_filter = pn.widgets.Select(
+        name="Filter by Process",
+        options=options,
+        value="All",
+        width=200,
+    )
+
+    # Create reactive filtered DataFrame
+    @pn.depends(worker_filter)  # ty: ignore[invalid-argument-type]
+    def filtered_logs(selected_worker: str) -> pn.pane.DataFrame:
+        """Filter logs by selected worker."""
+        filtered = df if selected_worker == "All" else df[df["worker_id"] == selected_worker]
+        return pn.pane.DataFrame(
+            filtered.tail(200),  # Show last 200 entries
+            index=False,
+            sizing_mode="stretch_width",
+            max_height=300,
+        )
+
+    return pn.Column(
+        pn.pane.Markdown(f"### Pipeline Logs ({len(df)} entries)"),
+        worker_filter,
+        filtered_logs,
+    )
+
+
 def overview_tab(store: DashboardStore) -> pn.Column:
     """Build the Overview tab layout with auto-refresh support.
 
@@ -261,6 +312,7 @@ def overview_tab(store: DashboardStore) -> pn.Column:
                     elevation=2,
                 ),
                 pmui.Paper(_error_log(store), elevation=2),
+                pmui.Paper(_logs_panel(store), elevation=2),
             ]
         )
 

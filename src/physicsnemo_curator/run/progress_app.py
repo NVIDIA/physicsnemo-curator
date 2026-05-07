@@ -187,6 +187,7 @@ class PipelineProgressApp(App[None]):
         self._loguru_sink_id: int | None = None
         self._page = 0
         self._workers_data: list[dict] = []
+        self._last_log_id = 0  # Track last seen database log entry
 
     def compose(self) -> ComposeResult:
         """Build the top-level layout."""
@@ -319,10 +320,30 @@ class PipelineProgressApp(App[None]):
 
         self._render_workers()
 
+        # Poll database logs from workers
+        self._poll_database_logs()
+
         # Check if pipeline is done
         if self._stop_event.is_set():
             self._cleanup_logging()
             self.exit()
+
+    def _poll_database_logs(self) -> None:
+        """Read new log entries from the database and display them."""
+        try:
+            # Get logs since last poll (INFO level and above by default)
+            logs = self._store.get_logs(since_id=self._last_log_id, limit=100, min_level=logging.INFO)
+            for entry in logs:
+                self._last_log_id = entry["id"]
+                # Format: [Worker-1] timestamp LEVEL: message
+                ts = entry["timestamp"][11:19] if "T" in entry["timestamp"] else entry["timestamp"][:8]
+                worker = entry["worker_id"] or "Main"
+                level = entry["level_name"]
+                msg = entry["message"]
+                self.append_log(f"[{worker}] {ts} {level}: {msg}")
+        except Exception:  # noqa: BLE001
+            # Don't crash on log read failures
+            pass
 
     def _cleanup_logging(self) -> None:
         """Remove the TUI log handler from the root logger and loguru sink."""

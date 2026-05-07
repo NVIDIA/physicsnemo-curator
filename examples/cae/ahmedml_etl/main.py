@@ -36,8 +36,10 @@ parameters) as ``global_data`` on every mesh.
 """
 
 import argparse
+import logging
 from pathlib import Path
 
+from physicsnemo_curator.core.logging import configure_logging
 from physicsnemo_curator.domains.mesh.filters.random_permutation import RandomPermutationFilter
 from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
@@ -72,7 +74,16 @@ def main() -> None:
         default=None,
         help="Limit processing to first N runs (default: all)",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (DEBUG level)",
+    )
     args = parser.parse_args()
+
+    # Configure logging - shows INFO by default, DEBUG with --verbose
+    configure_logging(level=logging.DEBUG if args.verbose else logging.INFO)
 
     input_dir: Path = args.input.resolve()
     output_dir: Path = args.output.resolve()

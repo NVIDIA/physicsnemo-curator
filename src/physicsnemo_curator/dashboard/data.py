@@ -64,7 +64,7 @@ class DashboardStore(param.Parameterized):
         """Clear cached DataFrames so the next access re-queries."""
         self._cache.clear()
 
-    @param.depends("refresh", watch=True)
+    @param.depends("refresh", watch=True)  # ty: ignore[invalid-argument-type]
     def _on_refresh(self) -> None:
         """Invalidate cache when refresh is triggered."""
         self._invalidate()
@@ -249,3 +249,48 @@ class DashboardStore(param.Parameterized):
         """
         raw = self._store.all_filter_artifacts()
         return {name: [str(self._store.resolve_artifact(p)) for p in paths] for name, paths in raw.items()}
+
+    def logs_df(self, limit: int = 500, min_level: int = 0) -> pd.DataFrame:
+        """DataFrame of log entries from the pipeline run.
+
+        Parameters
+        ----------
+        limit : int
+            Maximum number of log entries to retrieve (default: 500).
+        min_level : int
+            Minimum log level (0=DEBUG, 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR).
+
+        Returns
+        -------
+        pd.DataFrame
+            Log entries with columns: timestamp, level_name, worker_id, idx, message.
+        """
+        cache_key = f"logs_df_{limit}_{min_level}"
+        if cache_key not in self._cache:
+            logs = self._store.get_logs(since_id=0, limit=limit, min_level=min_level)
+            if logs:
+                df = pd.DataFrame(logs)
+                # Parse timestamp for display
+                df["time"] = df["timestamp"].str[11:19]  # Extract HH:MM:SS
+                # Fill None worker_id with "Main"
+                df["worker_id"] = df["worker_id"].fillna("Main")
+                # Select and order columns for display
+                df = df[["time", "level_name", "worker_id", "idx", "message"]]
+                df = df.rename(columns={"level_name": "level", "idx": "index"})
+            else:
+                df = pd.DataFrame(columns=["time", "level", "worker_id", "index", "message"])
+            self._cache[cache_key] = df
+        return self._cache[cache_key]
+
+    def log_worker_ids(self) -> list[str]:
+        """Return unique worker IDs from logs.
+
+        Returns
+        -------
+        list[str]
+            Sorted list of unique worker IDs (including "Main").
+        """
+        df = self.logs_df()
+        if df.empty:
+            return []
+        return sorted(df["worker_id"].unique().tolist())

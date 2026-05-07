@@ -19,7 +19,6 @@
 import argparse
 from pathlib import Path
 
-from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.filters.random_permutation import RandomPermutationFilter
 from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
@@ -73,12 +72,12 @@ def main() -> None:
 
     # Build the pipeline:
     # 1. MeshStatsFilter — per-field statistics with Welford accumulators
-    # 2. PrecisionFilter — cast float64 to float32
-    # 3. RandomPermutationFilter — shuffle point/cell order
-    # 4. MeshSink — write to per-run subdirectories
+    # 2. RandomPermutationFilter — shuffle point/cell order
+    # 3. MeshSink — write to per-run subdirectories
+    # Note: PrecisionFilter is not needed since DrivAerMLSource already
+    # downcasts to float32 internally.
     pipeline = (
         source.filter(MeshStatsFilter(output=str(output_dir / "stats.parquet")))
-        .filter(PrecisionFilter(target_dtype="float32"))
         .filter(RandomPermutationFilter(seed=42))
         .write(
             MeshSink(

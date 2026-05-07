@@ -711,3 +711,97 @@ class TestFilterArtifacts:
         store.reset_index(0)
         assert store.filter_artifacts_for_index(0) == {}
         assert store.filter_artifacts_for_index(1) == {"StatsFilter": ["/stats_1.pq"]}
+
+
+# ---------------------------------------------------------------------------
+# Test database logging
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineStoreLogs:
+    """Tests for PipelineStore log recording and retrieval."""
+
+    @pytest.fixture
+    def store(self, tmp_path):
+        """Create a fresh PipelineStore for each test."""
+        db = tmp_path / "test.db"
+        config = {"source": "test", "filters": [], "sink": "test"}
+        return PipelineStore(db, config, "testhash")
+
+    def test_record_logs_empty(self, store) -> None:
+        """record_logs with empty list is a no-op."""
+        store.record_logs([])
+        assert store.get_logs() == []
+
+    def test_record_and_get_logs(self, store) -> None:
+        """record_logs stores entries and get_logs retrieves them."""
+        logs = [
+            ("2025-01-01T10:00:00Z", 20, "INFO", "test.logger", "Message 1", "Worker-1", 0),
+            ("2025-01-01T10:00:01Z", 20, "INFO", "test.logger", "Message 2", "Worker-1", 1),
+        ]
+        store.record_logs(logs)
+
+        retrieved = store.get_logs()
+        assert len(retrieved) == 2
+        assert retrieved[0]["message"] == "Message 1"
+        assert retrieved[0]["worker_id"] == "Worker-1"
+        assert retrieved[0]["idx"] == 0
+        assert retrieved[1]["message"] == "Message 2"
+
+    def test_get_logs_since_id(self, store) -> None:
+        """get_logs(since_id=N) returns only logs with id > N."""
+        logs = [
+            ("2025-01-01T10:00:00Z", 20, "INFO", "test", "First", None, None),
+            ("2025-01-01T10:00:01Z", 20, "INFO", "test", "Second", None, None),
+            ("2025-01-01T10:00:02Z", 20, "INFO", "test", "Third", None, None),
+        ]
+        store.record_logs(logs)
+
+        all_logs = store.get_logs()
+        assert len(all_logs) == 3
+
+        # Get logs after the first one
+        first_id = all_logs[0]["id"]
+        later_logs = store.get_logs(since_id=first_id)
+        assert len(later_logs) == 2
+        assert later_logs[0]["message"] == "Second"
+
+    def test_get_logs_min_level(self, store) -> None:
+        """get_logs(min_level=N) filters by log level."""
+        logs = [
+            ("2025-01-01T10:00:00Z", 10, "DEBUG", "test", "Debug msg", None, None),
+            ("2025-01-01T10:00:01Z", 20, "INFO", "test", "Info msg", None, None),
+            ("2025-01-01T10:00:02Z", 30, "WARNING", "test", "Warning msg", None, None),
+        ]
+        store.record_logs(logs)
+
+        # Get INFO and above (level >= 20)
+        info_logs = store.get_logs(min_level=20)
+        assert len(info_logs) == 2
+        assert info_logs[0]["level_name"] == "INFO"
+        assert info_logs[1]["level_name"] == "WARNING"
+
+        # Get WARNING and above (level >= 30)
+        warn_logs = store.get_logs(min_level=30)
+        assert len(warn_logs) == 1
+        assert warn_logs[0]["level_name"] == "WARNING"
+
+    def test_get_logs_limit(self, store) -> None:
+        """get_logs(limit=N) caps the number of results."""
+        logs = [("2025-01-01T10:00:00Z", 20, "INFO", "test", f"Message {i}", None, None) for i in range(10)]
+        store.record_logs(logs)
+
+        limited = store.get_logs(limit=3)
+        assert len(limited) == 3
+        assert limited[0]["message"] == "Message 0"
+        assert limited[2]["message"] == "Message 2"
+
+    def test_logs_persist_after_reset(self, store) -> None:
+        """reset() clears logs for the current run."""
+        logs = [("2025-01-01T10:00:00Z", 20, "INFO", "test", "Before reset", None, None)]
+        store.record_logs(logs)
+
+        store.reset()
+
+        # After reset, a new run_id is generated, so old logs won't appear
+        assert store.get_logs() == []

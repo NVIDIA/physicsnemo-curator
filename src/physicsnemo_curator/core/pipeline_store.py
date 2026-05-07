@@ -601,6 +601,20 @@ CREATE TABLE IF NOT EXISTS filter_artifacts (
     PRIMARY KEY (path, idx, run_id),
     FOREIGN KEY (idx, run_id) REFERENCES index_results (idx, run_id)
 );
+
+CREATE TABLE IF NOT EXISTS logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id      INTEGER NOT NULL,
+    timestamp   TEXT    NOT NULL,
+    level       INTEGER NOT NULL,
+    level_name  TEXT    NOT NULL,
+    logger_name TEXT    NOT NULL,
+    message     TEXT    NOT NULL,
+    worker_id   TEXT,
+    idx         INTEGER,
+    FOREIGN KEY (run_id) REFERENCES pipeline_runs (run_id)
+);
+CREATE INDEX IF NOT EXISTS idx_logs_run_timestamp ON logs (run_id, timestamp);
 """
 
 
@@ -1245,6 +1259,88 @@ class PipelineStore:
         conn = self._connect()
         try:
             conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        finally:
+            conn.close()
+
+    # -------------------------------------------------------------------------
+    # Logging methods
+    # -------------------------------------------------------------------------
+
+    def record_logs(
+        self,
+        logs: list[tuple[str, int, str, str, str, str | None, int | None]],
+    ) -> None:
+        """Record a batch of log entries.
+
+        Uses a single transaction for efficiency and minimal lock time.
+        Each entry is a tuple of:
+        ``(timestamp, level, level_name, logger_name, message, worker_id, idx)``
+
+        Parameters
+        ----------
+        logs : list[tuple]
+            List of log entry tuples.
+        """
+        if not logs:
+            return
+
+        conn = self._connect()
+        try:
+            conn.executemany(
+                "INSERT INTO logs "
+                "(run_id, timestamp, level, level_name, logger_name, message, worker_id, idx) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [(self._run_id, *entry) for entry in logs],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_logs(
+        self,
+        since_id: int = 0,
+        limit: int = 100,
+        min_level: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Retrieve log entries since a given ID.
+
+        Parameters
+        ----------
+        since_id : int
+            Return logs with id > since_id (for polling new entries).
+        limit : int
+            Maximum number of entries to return.
+        min_level : int
+            Minimum log level (e.g., 20 for INFO, 10 for DEBUG).
+
+        Returns
+        -------
+        list[dict]
+            Log entries with keys: id, timestamp, level, level_name,
+            logger_name, message, worker_id, idx.
+        """
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT id, timestamp, level, level_name, logger_name, message, worker_id, idx "
+                "FROM logs "
+                "WHERE run_id = ? AND id > ? AND level >= ? "
+                "ORDER BY id ASC LIMIT ?",
+                (self._run_id, since_id, min_level, limit),
+            ).fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "timestamp": row[1],
+                    "level": row[2],
+                    "level_name": row[3],
+                    "logger_name": row[4],
+                    "message": row[5],
+                    "worker_id": row[6],
+                    "idx": row[7],
+                }
+                for row in rows
+            ]
         finally:
             conn.close()
 

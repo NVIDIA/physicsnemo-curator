@@ -58,6 +58,9 @@ class LogProgressMonitor:
     notebooks, scripts, and non-interactive environments where the
     full-screen Textual TUI is not appropriate.
 
+    Also prints log entries from worker processes that were written to
+    the database.
+
     Parameters
     ----------
     store : PipelineStore
@@ -76,15 +79,35 @@ class LogProgressMonitor:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._start_time: float = 0.0
+        self._last_log_id: int = 0  # Track last seen database log entry
 
     def _poll_loop(self) -> None:
         """Poll the database and print progress lines."""
         self._start_time = time.monotonic()
         while not self._stop_event.is_set():
+            self._print_logs()
             self._print_progress()
             self._stop_event.wait(self._poll_interval)
-        # Final print on stop
+        # Final poll on stop
+        self._print_logs()
         self._print_progress()
+
+    def _print_logs(self) -> None:
+        """Print new log entries from the database."""
+        try:
+            # Get logs since last poll (INFO level and above)
+            logs = self._store.get_logs(since_id=self._last_log_id, limit=100, min_level=20)
+            for entry in logs:
+                self._last_log_id = entry["id"]
+                # Format: [Worker-1] HH:MM:SS LEVEL: message
+                ts = entry["timestamp"][11:19] if "T" in entry["timestamp"] else entry["timestamp"][:8]
+                worker = entry["worker_id"] or "Main"
+                level = entry["level_name"]
+                msg = entry["message"]
+                print(f"[{worker}] {ts} {level}: {msg}", flush=True)  # noqa: T201
+        except Exception:  # noqa: BLE001
+            # Don't crash on log read failures
+            pass
 
     def _print_progress(self) -> None:
         """Print a timestamped progress line."""
