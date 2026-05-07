@@ -224,7 +224,7 @@ class RandomPermutationFilter(Filter["Mesh"]):
             t0 = time.perf_counter()
 
             if isinstance(mesh, _DomainMesh):
-                n_pts = mesh.interior.n_points if mesh.interior else 0
+                n_pts = mesh.interior.n_points if mesh.interior is not None else 0
                 self._log.info("Shuffling DomainMesh %d (seed=%d)", counter, effective_seed)
                 self._shuffle_domain_mesh(mesh, effective_seed)
             else:
