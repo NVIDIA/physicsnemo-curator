@@ -539,11 +539,12 @@ def _get_worker_id() -> str:
 
 _SCHEMA_SQL = """\
 CREATE TABLE IF NOT EXISTS pipeline_runs (
-    run_id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    config_hash  TEXT    UNIQUE NOT NULL,
-    config_json  TEXT    NOT NULL,
-    started_at   TEXT    NOT NULL,
-    run_dir      TEXT
+    run_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    config_hash   TEXT    UNIQUE NOT NULL,
+    config_json   TEXT    NOT NULL,
+    started_at    TEXT    NOT NULL,
+    run_dir       TEXT,
+    total_indices INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS index_results (
@@ -913,6 +914,8 @@ class PipelineStore:
             run_cols = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_runs)").fetchall()}
             if "run_dir" not in run_cols:
                 conn.execute("ALTER TABLE pipeline_runs ADD COLUMN run_dir TEXT")
+            if "total_indices" not in run_cols:
+                conn.execute("ALTER TABLE pipeline_runs ADD COLUMN total_indices INTEGER")
             conn.commit()
 
             # Atomically insert if not exists, then SELECT to get run_id.
@@ -1244,6 +1247,46 @@ class PipelineStore:
             "total_elapsed_s": total_elapsed_ns / 1e9,
             "workers": worker_count,
         }
+
+    def set_total_indices(self, total: int) -> None:
+        """Store the total number of source indices for this run.
+
+        Called by the pipeline runner once the source length is known.
+        This value is persisted so the dashboard can show accurate
+        progress even when the pipeline is still running.
+
+        Parameters
+        ----------
+        total : int
+            Total number of indices the pipeline will process.
+        """
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE pipeline_runs SET total_indices = ? WHERE run_id = ?",
+                (total, self._run_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_total_indices(self) -> int | None:
+        """Get the total number of source indices for this run.
+
+        Returns
+        -------
+        int | None
+            Total indices if set, otherwise None.
+        """
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT total_indices FROM pipeline_runs WHERE run_id = ?",
+                (self._run_id,),
+            ).fetchone()
+            return row[0] if row else None
+        finally:
+            conn.close()
 
     def checkpoint(self) -> None:
         """Force a WAL checkpoint to flush data to the main database file.

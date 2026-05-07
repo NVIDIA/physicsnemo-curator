@@ -805,3 +805,30 @@ class TestPipelineStoreLogs:
 
         # After reset, a new run_id is generated, so old logs won't appear
         assert store.get_logs() == []
+
+
+class TestTotalIndices:
+    """Tests for total_indices tracking."""
+
+    @pytest.fixture
+    def store(self, tmp_path):
+        """Create a fresh PipelineStore for each test."""
+        db = tmp_path / "test.db"
+        config = {"source": "test", "filters": [], "sink": "test"}
+        return PipelineStore(db, config, "testhash")
+
+    def test_get_total_indices_none_initially(self, store) -> None:
+        """get_total_indices returns None before being set."""
+        assert store.get_total_indices() is None
+
+    def test_set_and_get_total_indices(self, store) -> None:
+        """set_total_indices stores and get_total_indices retrieves."""
+        store.set_total_indices(100)
+        assert store.get_total_indices() == 100
+
+    def test_total_indices_update(self, store) -> None:
+        """set_total_indices can update the value."""
+        store.set_total_indices(50)
+        assert store.get_total_indices() == 50
+        store.set_total_indices(75)
+        assert store.get_total_indices() == 75

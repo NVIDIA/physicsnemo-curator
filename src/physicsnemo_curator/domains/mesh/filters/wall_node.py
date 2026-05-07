@@ -164,7 +164,7 @@ def _filter_tensordict(
         val = td.get(key)
         if val is not None:
             filtered[str(key)] = val[idx]
-    return TensorDict(filtered, batch_size=[new_size])  # ty: ignore[invalid-argument-type]
+    return TensorDict(filtered, batch_size=[new_size])
 
 
 class WallNodeFilter(Filter["Mesh"]):

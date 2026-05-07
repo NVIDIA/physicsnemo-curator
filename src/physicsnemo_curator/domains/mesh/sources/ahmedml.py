@@ -227,9 +227,10 @@ class AhmedMLSource(Source[Mesh]):
     ) -> None:
         import fsspec
 
-        from physicsnemo_curator.core.logging import get_logger
+        from physicsnemo_curator.core.logging import flush_logs, get_logger
 
         self._log = get_logger(self)
+        self._flush_logs = flush_logs
         self._mesh_type: MeshType = mesh_type
         self._mesh_parts: list[MeshPart] = mesh_parts or ["domain"]  # ty: ignore[invalid-assignment]
         self._url = url
@@ -590,7 +591,7 @@ class AhmedMLSource(Source[Mesh]):
                 cells=mesh.cells,
                 point_data=mesh.point_data,
                 cell_data=mesh.cell_data,
-                global_data=TensorDict(csv_data, batch_size=[]),  # ty: ignore[invalid-argument-type]
+                global_data=TensorDict(csv_data, batch_size=[]),
             )
         return mesh
 
@@ -646,6 +647,7 @@ class AhmedMLSource(Source[Mesh]):
 
         run_id = self._run_indices[index]
         self._log.info("run_%d: Starting domain read", run_id)
+        self._flush_logs()
 
         # --- Interior (volume VTU → point-cloud) ---
         volume_filename = _MESH_TEMPLATES["volume"].format(i=run_id)
@@ -689,11 +691,7 @@ class AhmedMLSource(Source[Mesh]):
         self._log.debug("run_%d: Reading CSV global data", run_id)
         t0 = time.perf_counter()
         csv_data = self._read_csv_global_data(run_id)
-        global_data = (
-            TensorDict(csv_data, batch_size=[])  # ty: ignore[invalid-argument-type]
-            if csv_data
-            else None
-        )
+        global_data = TensorDict(csv_data, batch_size=[]) if csv_data else None
         self._log.debug("run_%d: CSV read complete (%.2fs)", run_id, time.perf_counter() - t0)
 
         # --- Assemble DomainMesh ---
@@ -706,7 +704,7 @@ class AhmedMLSource(Source[Mesh]):
         )
         self._log.debug("run_%d: DomainMesh assembled (%.2fs)", run_id, time.perf_counter() - t0)
         self._log.info("run_%d: Domain read complete", run_id)
-        yield domain_mesh  # type: ignore[misc]  # ty: ignore[invalid-yield]
+        yield domain_mesh  # type: ignore[misc]
 
     def _read_stl(self, index: int) -> Generator[Mesh]:
         """Read the STL geometry file for a given run.

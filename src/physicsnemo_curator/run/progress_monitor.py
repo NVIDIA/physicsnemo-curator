@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
+    from physicsnemo_curator.core.logging import DatabaseLogHandler
     from physicsnemo_curator.run.base import RunConfig
 
 
@@ -51,21 +52,40 @@ class LogProgressMonitor:
     ----------
     store : PipelineStore
         Pipeline store instance (used for read-only polling).
-    total : int
-        Total number of indices to process.
     poll_interval : float
         Seconds between progress polls (default 5.0).
     """
 
-    def __init__(self, store: Any, total: int, poll_interval: float = 5.0) -> None:
+    def __init__(self, store: Any, poll_interval: float = 5.0) -> None:
         """Initialise the log progress monitor."""
         self._store = store
-        self._total = total
         self._poll_interval = poll_interval
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._start_time: float = 0.0
         self._last_log_id: int = 0  # Track last seen database log entry
+        self._db_log_handler: DatabaseLogHandler | None = None
+        self._setup_db_logging()
+
+    def _setup_db_logging(self) -> None:
+        """Set up database logging for main process logs."""
+        import logging
+
+        from physicsnemo_curator.core.logging import DatabaseLogHandler
+
+        self._db_log_handler = DatabaseLogHandler(self._store, worker_id=None)
+        self._db_log_handler.setLevel(logging.INFO)
+        logging.getLogger("physicsnemo_curator").addHandler(self._db_log_handler)
+        logging.getLogger("physicsnemo_curator").setLevel(logging.INFO)
+
+    def _cleanup_db_logging(self) -> None:
+        """Remove and flush the database log handler."""
+        import logging
+
+        if self._db_log_handler is not None:
+            self._db_log_handler.flush()
+            logging.getLogger("physicsnemo_curator").removeHandler(self._db_log_handler)
+            self._db_log_handler = None
 
     def _poll_loop(self) -> None:
         """Poll the database and print progress lines."""
@@ -100,25 +120,26 @@ class LogProgressMonitor:
         try:
             completed = len(self._store.completed_indices())
             failed = len(self._store.failed_indices())
+            total = self._store.get_total_indices() or 0
         except Exception:  # noqa: BLE001
             return
 
         done = completed + failed
         elapsed = time.monotonic() - self._start_time
-        pct = (done / self._total * 100) if self._total > 0 else 100.0
+        pct = (done / total * 100) if total > 0 else 100.0
         ts = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
 
         # Estimate remaining time
-        if done > 0 and done < self._total:
+        if done > 0 and done < total:
             rate = elapsed / done
-            remaining = rate * (self._total - done)
+            remaining = rate * (total - done)
             eta_str = f", ETA {remaining:.0f}s"
-        elif done >= self._total:
+        elif done >= total:
             eta_str = ", done"
         else:
             eta_str = ""
 
-        status = f"[{ts}] Progress: {done}/{self._total} ({pct:.1f}%) | elapsed {elapsed:.1f}s{eta_str}"
+        status = f"[{ts}] Progress: {done}/{total} ({pct:.1f}%) | elapsed {elapsed:.1f}s{eta_str}"
         if failed > 0:
             status += f" | {failed} failed"
         print(status, flush=True)  # noqa: T201
@@ -134,6 +155,7 @@ class LogProgressMonitor:
         if self._thread is not None:
             self._thread.join(timeout=5.0)
             self._thread = None
+        self._cleanup_db_logging()
 
     def __enter__(self) -> LogProgressMonitor:
         """Start the monitor on context entry."""
@@ -155,22 +177,19 @@ class ProgressMonitor:
     ----------
     store : PipelineStore
         Pipeline store instance (used for read-only polling).
-    total : int
-        Total number of indices to process.
     n_workers : int
         Number of parallel workers.
     invocation_id : str | None
         If set, filter workers by this invocation ID.
     """
 
-    def __init__(self, store: Any, total: int, n_workers: int, invocation_id: str | None = None) -> None:
+    def __init__(self, store: Any, n_workers: int, invocation_id: str | None = None) -> None:
         """Initialise the progress monitor."""
         from physicsnemo_curator.run.progress_app import PipelineProgressApp
 
         self._stop_event = threading.Event()
         self._app = PipelineProgressApp(
             store=store,
-            total=total,
             n_workers=n_workers,
             stop_event=self._stop_event,
             invocation_id=invocation_id,
@@ -267,8 +286,11 @@ def start_progress_monitor(
     total = len(indices)
     n_workers = config.resolved_n_jobs
 
+    # Store total indices count so the dashboard can show accurate progress
+    store.set_total_indices(total)
+
     # Log mode when TUI is disabled or terminal is non-interactive
     if not config.use_tui or not sys.stdout.isatty():
-        return LogProgressMonitor(store=store, total=total)
+        return LogProgressMonitor(store=store)
 
-    return ProgressMonitor(store=store, total=total, n_workers=n_workers, invocation_id=invocation_id)
+    return ProgressMonitor(store=store, n_workers=n_workers, invocation_id=invocation_id)

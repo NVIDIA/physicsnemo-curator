@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
     from textual.events import Print
 
+    from physicsnemo_curator.core.logging import DatabaseLogHandler
     from physicsnemo_curator.core.pipeline_store import PipelineStore
 
 _WORKERS_PER_PAGE = 8  # 2 columns x 4 rows
@@ -170,7 +171,6 @@ class PipelineProgressApp(App[None]):
     def __init__(
         self,
         store: PipelineStore,
-        total: int,
         n_workers: int,
         stop_event: Event,
         invocation_id: str | None = None,
@@ -178,22 +178,27 @@ class PipelineProgressApp(App[None]):
         """Initialise the progress app."""
         super().__init__()
         self._store = store
-        self._total = total
         self._n_workers = n_workers
         self._stop_event = stop_event
         self._invocation_id = invocation_id
         self._start_time = time.monotonic()
         self._log_handler: _TUILogHandler | None = None
+        self._db_log_handler: DatabaseLogHandler | None = None
         self._loguru_sink_id: int | None = None
         self._page = 0
         self._workers_data: list[dict] = []
         self._last_log_id = 0  # Track last seen database log entry
 
+    def _get_total(self) -> int:
+        """Get total indices from the database."""
+        return self._store.get_total_indices() or 0
+
     def compose(self) -> ComposeResult:
         """Build the top-level layout."""
+        total = self._get_total()
         yield Header()
         yield Vertical(
-            ProgressBar(total=self._total, show_eta=True, id="overall-bar"),
+            ProgressBar(total=total, show_eta=True, id="overall-bar"),
             Static(
                 "Completed: 0 | Failed: 0 | Remaining: 0 | Elapsed: 0s",
                 id="overall-label",
@@ -220,6 +225,14 @@ class PipelineProgressApp(App[None]):
             logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s", datefmt="%H:%M:%S")
         )
         logging.getLogger().addHandler(self._log_handler)
+
+        # Also attach a database log handler so main-process logs are written
+        # to the database for the dashboard to display.
+        from physicsnemo_curator.core.logging import DatabaseLogHandler
+
+        self._db_log_handler = DatabaseLogHandler(self._store, worker_id=None)
+        self._db_log_handler.setLevel(logging.INFO)
+        logging.getLogger("physicsnemo_curator").addHandler(self._db_log_handler)
 
         # Enable INFO-level logging for curator components (default is WARNING).
         # This allows component logs to propagate to the TUI handler.
@@ -278,7 +291,8 @@ class PipelineProgressApp(App[None]):
 
     def _render_workers(self) -> None:
         """Render the current page of workers into the grid slots."""
-        per_worker_total = math.ceil(self._total / max(len(self._workers_data), 1))
+        total = self._get_total()
+        per_worker_total = math.ceil(total / max(len(self._workers_data), 1))
         start = self._page * _WORKERS_PER_PAGE
         page_workers = self._workers_data[start : start + _WORKERS_PER_PAGE]
 
@@ -301,7 +315,8 @@ class PipelineProgressApp(App[None]):
 
     def _poll(self) -> None:
         """Poll the database and update all widgets."""
-        summary = self._store.summary(self._total)
+        total = self._get_total()
+        summary = self._store.summary(total)
         self._workers_data = self._store.active_workers(invocation_id=self._invocation_id)
 
         # Overall bar
@@ -354,6 +369,10 @@ class PipelineProgressApp(App[None]):
         if self._log_handler is not None:
             logging.getLogger().removeHandler(self._log_handler)
             self._log_handler = None
+        if self._db_log_handler is not None:
+            self._db_log_handler.flush()
+            logging.getLogger("physicsnemo_curator").removeHandler(self._db_log_handler)
+            self._db_log_handler = None
         if self._loguru_sink_id is not None:
             try:
                 from loguru import logger

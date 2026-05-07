@@ -77,10 +77,10 @@ def _permute_tensordict(
                 permuted[str(key)] = result
         elif child is not None:
             permuted[str(key)] = child[perm]
-    return TensorDict(permuted, batch_size=[new_size])  # ty: ignore[invalid-argument-type]
+    return TensorDict(permuted, batch_size=[new_size])
 
 
-def _shuffle_mesh(mesh: object, rng: torch.Generator) -> None:
+def _shuffle_mesh(mesh: Mesh, rng: torch.Generator) -> None:
     """Shuffle point and cell ordering of a single mesh in place.
 
     Generates independent random permutations for points and cells.
@@ -95,19 +95,19 @@ def _shuffle_mesh(mesh: object, rng: torch.Generator) -> None:
     rng : torch.Generator
         Seeded random number generator.
     """
-    n_points = mesh.points.shape[0] if mesh.points is not None else 0  # ty: ignore[unresolved-attribute]
+    n_points = mesh.points.shape[0] if mesh.points is not None else 0
 
     # --- Shuffle points ---
     if n_points > 1:
         perm_pts = torch.randperm(n_points, generator=rng)
 
         # Reorder point coordinates
-        mesh.points = mesh.points[perm_pts]  # ty: ignore[unresolved-attribute]
+        mesh.points = mesh.points[perm_pts]
 
         # Reorder point data
-        if mesh.point_data is not None:  # ty: ignore[unresolved-attribute]
-            mesh.point_data = _permute_tensordict(  # ty: ignore[unresolved-attribute]
-                mesh.point_data,  # ty: ignore[unresolved-attribute]
+        if mesh.point_data is not None:
+            mesh.point_data = _permute_tensordict(
+                mesh.point_data,
                 perm_pts,
                 n_points,
             )
@@ -115,24 +115,24 @@ def _shuffle_mesh(mesh: object, rng: torch.Generator) -> None:
         # Remap cell connectivity: build inverse permutation so that
         # new_cells[i,j] = inv_perm[old_cells[i,j]] maps old point
         # indices to their new positions.
-        if mesh.cells is not None:  # ty: ignore[unresolved-attribute]
+        if mesh.cells is not None:
             inv_perm = torch.empty_like(perm_pts)
             inv_perm[perm_pts] = torch.arange(n_points)
-            mesh.cells = inv_perm[mesh.cells]  # ty: ignore[unresolved-attribute]
+            mesh.cells = inv_perm[mesh.cells]
 
     # --- Shuffle cells ---
-    n_cells = mesh.cells.shape[0] if mesh.cells is not None else 0  # ty: ignore[unresolved-attribute]
+    n_cells = mesh.cells.shape[0] if mesh.cells is not None else 0
 
     if n_cells > 1:
         perm_cells = torch.randperm(n_cells, generator=rng)
 
         # Reorder cell connectivity rows
-        mesh.cells = mesh.cells[perm_cells]  # ty: ignore[unresolved-attribute]
+        mesh.cells = mesh.cells[perm_cells]
 
         # Reorder cell data
-        if mesh.cell_data is not None:  # ty: ignore[unresolved-attribute]
-            mesh.cell_data = _permute_tensordict(  # ty: ignore[unresolved-attribute]
-                mesh.cell_data,  # ty: ignore[unresolved-attribute]
+        if mesh.cell_data is not None:
+            mesh.cell_data = _permute_tensordict(
+                mesh.cell_data,
                 perm_cells,
                 n_cells,
             )

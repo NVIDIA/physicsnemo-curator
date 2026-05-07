@@ -218,7 +218,7 @@ class TestDatabaseLogHandler:
 
         record = logging.LogRecord(
             name="test",
-            level=logging.INFO,
+            level=logging.DEBUG,  # Use DEBUG to test buffering (INFO+ flushes immediately)
             pathname="",
             lineno=0,
             msg="Test message",
@@ -227,7 +227,7 @@ class TestDatabaseLogHandler:
         )
         handler.emit(record)
 
-        # Should be buffered, not yet in database
+        # Should be buffered, not yet in database (DEBUG level doesn't trigger immediate flush)
         assert len(handler._buffer) == 1
         assert store.get_logs() == []
 
@@ -266,7 +266,7 @@ class TestDatabaseLogHandler:
         for i in range(3):
             record = logging.LogRecord(
                 name="test",
-                level=logging.INFO,
+                level=logging.DEBUG,
                 pathname="",
                 lineno=0,
                 msg=f"Message {i}",
@@ -282,13 +282,13 @@ class TestDatabaseLogHandler:
         handler.close()
 
     def test_flush_interval_triggers_flush(self, store) -> None:
-        """Exceeding flush_interval triggers automatic flush."""
+        """Exceeding flush_interval triggers automatic flush on next emit."""
         handler = DatabaseLogHandler(store, worker_id="Worker-1", buffer_size=100, flush_interval=0.01)
         handler.setFormatter(logging.Formatter("%(message)s"))
 
         record = logging.LogRecord(
             name="test",
-            level=logging.INFO,
+            level=logging.DEBUG,
             pathname="",
             lineno=0,
             msg="First message",
@@ -297,13 +297,16 @@ class TestDatabaseLogHandler:
         )
         handler.emit(record)
 
+        # Initially buffered
+        assert len(handler._buffer) == 1
+
         # Wait for interval to pass
         time.sleep(0.02)
 
-        # Next emit should trigger flush
+        # Next emit should trigger flush due to elapsed time
         record2 = logging.LogRecord(
             name="test",
-            level=logging.INFO,
+            level=logging.DEBUG,
             pathname="",
             lineno=0,
             msg="Second message",
@@ -312,9 +315,9 @@ class TestDatabaseLogHandler:
         )
         handler.emit(record2)
 
-        # First message should be flushed, second in buffer
+        # Both should be flushed
         logs = store.get_logs()
-        assert len(logs) >= 1
+        assert len(logs) == 2
 
         handler.close()
 
@@ -400,6 +403,53 @@ class TestSetupWorkerLogging:
 
         try:
             assert handler.level == logging.WARNING
+        finally:
+            root.handlers = original_handlers
+            handler.close()
+
+
+# ---------------------------------------------------------------------------
+# Test flush_logs
+# ---------------------------------------------------------------------------
+
+
+class TestFlushLogs:
+    """Tests for flush_logs function."""
+
+    def test_flush_logs_flushes_all_db_handlers(self, store) -> None:
+        """flush_logs flushes all DatabaseLogHandler instances."""
+        from physicsnemo_curator.core.logging import flush_logs
+
+        root = logging.getLogger("physicsnemo_curator")
+        original_handlers = root.handlers.copy()
+
+        handler = DatabaseLogHandler(store, worker_id="Worker-1", buffer_size=100, flush_interval=999)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        root.addHandler(handler)
+
+        try:
+            # Emit a record (should be buffered)
+            record = logging.LogRecord(
+                name="test",
+                level=logging.DEBUG,
+                pathname="",
+                lineno=0,
+                msg="Buffered message",
+                args=(),
+                exc_info=None,
+            )
+            handler.emit(record)
+            assert len(handler._buffer) == 1
+            assert store.get_logs() == []
+
+            # Call flush_logs
+            flush_logs()
+
+            # Should be flushed now
+            assert len(handler._buffer) == 0
+            logs = store.get_logs()
+            assert len(logs) == 1
+            assert logs[0]["message"] == "Buffered message"
         finally:
             root.handlers = original_handlers
             handler.close()

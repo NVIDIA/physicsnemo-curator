@@ -226,9 +226,10 @@ class DrivAerMLSource(Source[Mesh]):
     ) -> None:
         import fsspec
 
-        from physicsnemo_curator.core.logging import get_logger
+        from physicsnemo_curator.core.logging import flush_logs, get_logger
 
         self._log = get_logger(self)
+        self._flush_logs = flush_logs
 
         self._mesh_type: MeshType = mesh_type
         self._url = url
@@ -394,7 +395,7 @@ class DrivAerMLSource(Source[Mesh]):
         part = self._mesh_parts[seq]
         return _MESH_NAME_TEMPLATES[part].format(run_id=run_id)
 
-    def __getitem__(self, index: int) -> Generator[Mesh | DomainMesh]:  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    def __getitem__(self, index: int) -> Generator[Mesh | DomainMesh]:  # type: ignore[override]
         """Read the mesh(es) for the *index*-th run.
 
         For ``"boundary"`` and ``"volume"`` mesh types, yields a single
@@ -428,6 +429,7 @@ class DrivAerMLSource(Source[Mesh]):
 
             run_id = self._run_indices[index]
             self._log.info("run_%d: Reading boundary mesh", run_id)
+            self._flush_logs()
             t0 = time.perf_counter()
 
             filename = self._file_template.format(i=run_id)
@@ -500,11 +502,7 @@ class DrivAerMLSource(Source[Mesh]):
                 arr = torch.from_numpy(data)
                 point_data_dict[name] = arr
 
-            point_data = (
-                TensorDict(point_data_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
-                if point_data_dict
-                else None
-            )
+            point_data = TensorDict(point_data_dict, batch_size=[n_points]) if point_data_dict else None
 
             # Cell data
             cell_data_dict: dict[str, torch.Tensor] = {}
@@ -512,11 +510,7 @@ class DrivAerMLSource(Source[Mesh]):
                 arr = torch.from_numpy(data)
                 cell_data_dict[name] = arr
 
-            cell_data = (
-                TensorDict(cell_data_dict, batch_size=[n_cells])  # ty: ignore[invalid-argument-type]
-                if cell_data_dict
-                else None
-            )
+            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None
 
             return Mesh(
                 points=points,
@@ -749,6 +743,7 @@ class DrivAerMLSource(Source[Mesh]):
 
         run_id = self._run_indices[index]
         self._log.info("run_%d: Reading volume mesh", run_id)
+        self._flush_logs()
         t0 = time.perf_counter()
 
         # Try direct VTU first; fall back to concatenating parts.
@@ -907,6 +902,7 @@ class DrivAerMLSource(Source[Mesh]):
         run_id = self._run_indices[index]
         fs, protocol, files = self._slices_run_data[index]
         self._log.info("run_%d: Reading %d slice files", run_id, len(files))
+        self._flush_logs()
         t0 = time.perf_counter()
 
         for i, remote_path in enumerate(files):
@@ -977,6 +973,7 @@ class DrivAerMLSource(Source[Mesh]):
 
         run_id = self._run_indices[index]
         self._log.info("run_%d: Starting domain read", run_id)
+        self._flush_logs()
         t_total = time.perf_counter()
 
         # --- Interior (volume VTU → point-cloud) ---
@@ -1062,10 +1059,7 @@ class DrivAerMLSource(Source[Mesh]):
                         run_id,
                     )
                 else:
-                    has_data = (
-                        bool(rust_mesh.cell_data)  # ty: ignore[unresolved-attribute]
-                        or (rust_mesh.cells is not None and rust_mesh.cells.size > 0)  # ty: ignore[unresolved-attribute]
-                    )
+                    has_data = bool(rust_mesh.cell_data) or (rust_mesh.cells is not None and rust_mesh.cells.size > 0)  # ty: ignore[unresolved-attribute]
                     if has_data:
                         return self._build_centroid_mesh(rust_mesh)
                     logger.debug(
@@ -1125,9 +1119,7 @@ class DrivAerMLSource(Source[Mesh]):
         n_cells = rust_mesh.n_cells  # ty: ignore[unresolved-attribute]
         connectivity = rust_mesh.cells  # ty: ignore[unresolved-attribute]
 
-        points_raw = torch.from_numpy(
-            rust_mesh.points  # ty: ignore[unresolved-attribute]
-        )
+        points_raw = torch.from_numpy(rust_mesh.points)  # ty: ignore[unresolved-attribute]
         offsets = rust_mesh.cell_offsets  # ty: ignore[unresolved-attribute]
 
         if (
@@ -1177,11 +1169,7 @@ class DrivAerMLSource(Source[Mesh]):
             point_data_dict[name] = arr
 
         n_pts = centroids.shape[0]
-        point_data = (
-            TensorDict(point_data_dict, batch_size=[n_pts])  # ty: ignore[invalid-argument-type]
-            if point_data_dict
-            else None
-        )
+        point_data = TensorDict(point_data_dict, batch_size=[n_pts]) if point_data_dict else None
 
         return Mesh(points=centroids, cells=None, point_data=point_data)
 
@@ -1245,11 +1233,7 @@ class DrivAerMLSource(Source[Mesh]):
                     # Fallback: no connectivity available
                     cells = torch.arange(n_cells, dtype=torch.int64).unsqueeze(1)
 
-            cell_data = (
-                TensorDict(cell_data_dict, batch_size=[n_cells])  # ty: ignore[invalid-argument-type]
-                if cell_data_dict
-                else None
-            )
+            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None
 
             return Mesh(points=points, cells=cells, point_data=None, cell_data=cell_data)
 
@@ -1299,6 +1283,7 @@ class DrivAerMLSource(Source[Mesh]):
 
         run_id = self._run_indices[index]
         self._log.info("run_%d: Reading STL mesh", run_id)
+        self._flush_logs()
         t0 = time.perf_counter()
 
         filename = f"drivaer_{run_id}.stl"
@@ -1333,6 +1318,7 @@ class DrivAerMLSource(Source[Mesh]):
 
         run_id = self._run_indices[index]
         self._log.info("run_%d: Reading single-solid STL mesh", run_id)
+        self._flush_logs()
         t0 = time.perf_counter()
 
         filename = f"drivaer_{run_id}.stl"

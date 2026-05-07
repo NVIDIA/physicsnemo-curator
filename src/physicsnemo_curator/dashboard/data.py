@@ -128,7 +128,7 @@ class DashboardStore(param.Parameterized):
                 pd.DataFrame(rows)
                 if rows
                 else pd.DataFrame(
-                    columns=["index", "status", "wall_time_s", "peak_memory_mb", "gpu_memory_mb", "error"]
+                    columns=["index", "status", "wall_time_s", "peak_memory_mb", "gpu_memory_mb", "error"]  # ty: ignore[invalid-argument-type]
                 )
             )
             self._cache["index_df"] = df.sort_values("index").reset_index(drop=True)
@@ -161,7 +161,7 @@ class DashboardStore(param.Parameterized):
             df = (
                 pd.DataFrame(rows)
                 if rows
-                else pd.DataFrame(columns=["index", "stage_name", "stage_order", "wall_time_s"])
+                else pd.DataFrame(columns=["index", "stage_name", "stage_order", "wall_time_s"])  # ty: ignore[invalid-argument-type]
             )
             self._cache["stage_df"] = df
         return self._cache["stage_df"]
@@ -177,10 +177,15 @@ class DashboardStore(param.Parameterized):
             ``elapsed_s``, ``config_hash``, ``db_path``, ``workers``.
         """
         if "summary" not in self._cache:
-            # Use source length from config if available, fall back to metrics
-            total = len(self._store.completed_indices()) + len(self._store.failed_indices())
-            remaining = self._store.remaining_indices(total)
-            total += len(remaining)
+            # Use stored total_indices if available, fall back to computed value
+            stored_total = self._store.get_total_indices()
+            if stored_total is not None:
+                total = stored_total
+            else:
+                # Fall back: compute from completed + failed + remaining
+                total = len(self._store.completed_indices()) + len(self._store.failed_indices())
+                remaining = self._store.remaining_indices(total)
+                total += len(remaining)
             self._cache["summary"] = self._store.summary(total)
         return self._cache["summary"]
 
@@ -202,7 +207,7 @@ class DashboardStore(param.Parameterized):
                 pd.DataFrame(workers)
                 if workers
                 else pd.DataFrame(
-                    columns=["worker_id", "pid", "hostname", "started_at", "last_heartbeat", "current_index"]
+                    columns=["worker_id", "pid", "hostname", "started_at", "last_heartbeat", "current_index"]  # ty: ignore[invalid-argument-type]
                 )
             )
             self._cache["workers_df"] = df
@@ -278,7 +283,7 @@ class DashboardStore(param.Parameterized):
                 df = df[["time", "level_name", "worker_id", "idx", "message"]]
                 df = df.rename(columns={"level_name": "level", "idx": "index"})
             else:
-                df = pd.DataFrame(columns=["time", "level", "worker_id", "index", "message"])
+                df = pd.DataFrame(columns=["time", "level", "worker_id", "index", "message"])  # ty: ignore[invalid-argument-type]
             self._cache[cache_key] = df
         return self._cache[cache_key]
 

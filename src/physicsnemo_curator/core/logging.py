@@ -140,6 +140,9 @@ class DatabaseLogHandler(logging.Handler):
     or when the buffer reaches a threshold. This minimizes database
     lock contention in multi-process scenarios.
 
+    Call :meth:`flush` explicitly at key points (e.g., after source reads)
+    to ensure logs appear promptly during long operations.
+
     Parameters
     ----------
     store : PipelineStore
@@ -341,3 +344,23 @@ def setup_worker_logging(
     root_logger.addHandler(handler)
 
     return handler
+
+
+def flush_logs() -> None:
+    """Flush all database log handlers.
+
+    Call this before long blocking operations to ensure logs
+    appear promptly in the TUI/dashboard.
+
+    Examples
+    --------
+    >>> from physicsnemo_curator.core.logging import flush_logs, get_logger
+    >>> log = get_logger("MySource")
+    >>> log.info("Starting long read...")
+    >>> flush_logs()  # Ensure log appears before blocking
+    >>> data = read_large_file()  # Long operation
+    """
+    root_logger = logging.getLogger("physicsnemo_curator")
+    for handler in root_logger.handlers:
+        if isinstance(handler, DatabaseLogHandler):
+            handler.flush()

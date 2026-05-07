@@ -136,9 +136,7 @@ def main() -> None:
     # Run the pipeline with parallel workers.
     # Each forked process gets its own copy of the pipeline, so earth2studio
     # backends are isolated (no async event-loop conflicts).
-    results = run_pipeline(
-        pipeline, n_jobs=args.workers, backend="process_pool", indices=range(args.n_indices), use_tui=False
-    )
+    results = run_pipeline(pipeline, n_jobs=args.workers, backend="process_pool", indices=range(args.n_indices))
 
     print(f"\nProcessed {len(results)} timesteps")
 
