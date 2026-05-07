@@ -221,6 +221,10 @@ class PipelineProgressApp(App[None]):
         )
         logging.getLogger().addHandler(self._log_handler)
 
+        # Enable INFO-level logging for curator components (default is WARNING).
+        # This allows component logs to propagate to the TUI handler.
+        logging.getLogger("physicsnemo_curator").setLevel(logging.INFO)
+
         log_panel = self.query_one("#log-panel", RichLog)
         log_panel.border_title = "Log"
 
