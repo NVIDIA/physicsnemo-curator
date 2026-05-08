@@ -29,6 +29,7 @@ Available Backends
   (requires ``joblib``).
 * ``"dask"`` — ``dask.bag`` for parallel/distributed execution
   (requires ``dask``).
+
 Custom Backends
 ---------------
 You can register custom backends using :func:`register_backend`::
