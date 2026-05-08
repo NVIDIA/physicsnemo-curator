@@ -37,8 +37,6 @@ import time
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
-import zarr
-from zarr.codecs import BloscCodec
 
 from physicsnemo_curator.core.base import Param, Sink
 from physicsnemo_curator.core.logging import get_logger
@@ -252,6 +250,9 @@ class MeshZarrSink(Sink["Mesh"]):
         output_path : pathlib.Path
             Path to the output Zarr store.
         """
+        import zarr
+        from zarr.codecs import BloscCodec
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Create compressor using zarr v3 codec

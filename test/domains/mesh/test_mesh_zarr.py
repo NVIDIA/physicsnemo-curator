@@ -24,8 +24,10 @@ import tempfile
 import numpy as np
 import pytest
 import torch
-import zarr
-from tensordict import TensorDict
+
+zarr = pytest.importorskip("zarr")
+
+from tensordict import TensorDict  # noqa: E402
 
 pytestmark = pytest.mark.requires("mesh")
 

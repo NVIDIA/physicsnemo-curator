@@ -17,6 +17,15 @@
 """Mesh data sinks/writers."""
 
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.domains.mesh.sinks.mesh_zarr import MeshZarrSink
 
 __all__ = ["MeshSink", "MeshZarrSink"]
+
+
+def __getattr__(name: str):
+    """Lazy-load MeshZarrSink to avoid zarr import at module load."""
+    if name == "MeshZarrSink":
+        from physicsnemo_curator.domains.mesh.sinks.mesh_zarr import MeshZarrSink
+
+        return MeshZarrSink
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
