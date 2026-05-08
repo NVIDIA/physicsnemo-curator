@@ -18,14 +18,18 @@
 
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 
-__all__ = ["MeshSink", "MeshZarrSink"]
+__all__ = ["MeshSink", "MeshVTUSink", "MeshZarrSink"]
 
 
 def __getattr__(name: str):
-    """Lazy-load MeshZarrSink to avoid zarr import at module load."""
+    """Lazy-load optional sinks to avoid import at module load."""
     if name == "MeshZarrSink":
         from physicsnemo_curator.domains.mesh.sinks.mesh_zarr import MeshZarrSink
 
         return MeshZarrSink
+    if name == "MeshVTUSink":
+        from physicsnemo_curator.domains.mesh.sinks.mesh_vtu import MeshVTUSink
+
+        return MeshVTUSink
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

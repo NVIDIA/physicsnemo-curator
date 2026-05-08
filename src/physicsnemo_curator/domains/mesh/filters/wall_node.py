@@ -106,6 +106,9 @@ def _remap_connectivity(
 ) -> tuple[torch.Tensor, np.ndarray]:
     """Remap cell connectivity after node removal.
 
+    Handles both uniform cells and mixed-type cells padded with -1
+    sentinel values.  Padding entries (-1) are preserved unchanged.
+
     Parameters
     ----------
     cells : torch.Tensor
@@ -119,19 +122,107 @@ def _remap_connectivity(
         - New cells tensor with remapped node indices.
         - Boolean mask of shape ``(E,)`` — ``True`` for kept cells.
     """
-    n_original = int(cells.max().item()) + 1
+    cells_np = cells.numpy()
+
+    # Detect mixed-mode padding (-1 sentinels)
+    has_padding = np.any(cells_np < 0)
+
+    # Size array to accommodate all possible node indices
+    valid_cells = cells_np[cells_np >= 0]
+    n_from_cells = int(valid_cells.max()) + 1 if valid_cells.size > 0 else 0
+    n_from_keep = int(keep_indices.max()) + 1 if len(keep_indices) > 0 else 0
+    n_original = max(n_from_cells, n_from_keep)
+
     # Build old-to-new index map.  Unmapped nodes get -1.
     old_to_new = np.full(n_original, -1, dtype=np.int64)
     old_to_new[keep_indices] = np.arange(len(keep_indices), dtype=np.int64)
 
-    cells_np = cells.numpy()
-    remapped = old_to_new[cells_np]  # (E, nodes_per_cell)
+    # Remap valid indices only (preserve -1 padding)
+    remapped = np.where(cells_np >= 0, old_to_new[np.clip(cells_np, 0, n_original - 1)], -1)
 
-    # A cell is valid if all its nodes survive.
-    cell_valid = np.all(remapped >= 0, axis=1)
+    # A cell is valid if all its *real* (non-padding) nodes survive.
+    if has_padding:
+        # For mixed cells: a cell is valid if every non-padding node maps successfully
+        real_mask = cells_np >= 0  # True for real nodes, False for padding
+        node_survived = remapped >= 0  # True if the node was remapped successfully
+        # Cell valid if all real nodes survived
+        cell_valid = np.all(~real_mask | node_survived, axis=1)
+    else:
+        cell_valid = np.all(remapped >= 0, axis=1)
 
     new_cells = torch.from_numpy(remapped[cell_valid])
     return new_cells, cell_valid
+
+
+def _remap_mixed_connectivity(
+    global_data: TensorDict,
+    keep_indices: np.ndarray,
+) -> tuple[TensorDict, np.ndarray]:
+    """Remap mixed connectivity stored in global_data after node removal.
+
+    Parameters
+    ----------
+    global_data : TensorDict
+        Global data containing ``mixed_connectivity``, ``mixed_offsets``,
+        and ``mixed_cell_types``.
+    keep_indices : np.ndarray
+        Sorted array of kept node indices.
+
+    Returns
+    -------
+    tuple[TensorDict, np.ndarray]
+        - Updated global_data with remapped connectivity.
+        - Boolean mask of shape ``(n_cells,)`` — ``True`` for kept cells.
+    """
+    connectivity: np.ndarray = global_data["mixed_connectivity"].numpy()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    offsets: np.ndarray = global_data["mixed_offsets"].numpy()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    cell_types: np.ndarray = global_data["mixed_cell_types"].numpy()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+
+    n_cells = len(offsets) - 1
+
+    # Build old-to-new index map
+    n_original = int(keep_indices.max()) + 1 if len(keep_indices) > 0 else 0
+    # Also account for max value in connectivity
+    if connectivity.size > 0:
+        n_original = max(n_original, int(connectivity.max()) + 1)
+    old_to_new = np.full(n_original, -1, dtype=np.int64)
+    old_to_new[keep_indices] = np.arange(len(keep_indices), dtype=np.int64)
+
+    # Remap connectivity and determine which cells survive
+    cell_valid = np.ones(n_cells, dtype=bool)
+    new_conn_parts: list[np.ndarray] = []
+    new_offsets = [np.int64(0)]
+
+    for i in range(n_cells):
+        start = offsets[i]
+        end = offsets[i + 1]
+        cell_nodes = connectivity[start:end]
+        remapped_nodes = old_to_new[cell_nodes]
+
+        # Cell is valid if all nodes survived
+        if np.any(remapped_nodes < 0):
+            cell_valid[i] = False
+        else:
+            new_conn_parts.append(remapped_nodes)
+            new_offsets.append(new_offsets[-1] + len(remapped_nodes))
+
+    # Build new flat connectivity and offsets
+    new_connectivity = np.concatenate(new_conn_parts) if new_conn_parts else np.array([], dtype=np.int64)
+    new_offsets_arr = np.array(new_offsets, dtype=np.int64)
+    new_cell_types = cell_types[cell_valid]
+
+    # Build updated global_data
+    gd_dict: dict[str, torch.Tensor] = {}
+    for key in global_data:
+        if key not in ("mixed_connectivity", "mixed_offsets", "mixed_cell_types"):
+            gd_dict[str(key)] = global_data[key]  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    gd_dict["mixed_connectivity"] = torch.from_numpy(new_connectivity)
+    gd_dict["mixed_offsets"] = torch.from_numpy(new_offsets_arr)
+    gd_dict["mixed_cell_types"] = torch.from_numpy(new_cell_types)
+
+    new_global_data = TensorDict(gd_dict, batch_size=[])  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+
+    return new_global_data, cell_valid
 
 
 def _filter_tensordict(
@@ -274,10 +365,22 @@ class WallNodeFilter(Filter["Mesh"]):
             # Filter points.
             new_points = mesh.points[torch.from_numpy(keep_indices).long()]
 
-            # Remap connectivity.
-            new_cells, cell_mask = _remap_connectivity(mesh.cells, keep_indices)
+            # Check if this is a mixed-mode mesh with connectivity in global_data
+            has_mixed = mesh.global_data is not None and "mixed_connectivity" in mesh.global_data
 
-            if len(new_cells) == 0:
+            if has_mixed:
+                # Remap mixed connectivity stored in global_data
+                new_global_data, cell_mask = _remap_mixed_connectivity(mesh.global_data, keep_indices)
+                new_cells: torch.Tensor | None = None
+                n_cells_original = int(mesh.global_data["mixed_offsets"].shape[0]) - 1
+            else:
+                # Standard uniform connectivity
+                new_cells, cell_mask = _remap_connectivity(mesh.cells, keep_indices)
+                new_global_data = mesh.global_data
+                n_cells_original = mesh.n_cells
+
+            n_cells_kept = int(cell_mask.sum())
+            if n_cells_kept == 0:
                 logger.warning(
                     "WallNodeFilter: all cells degenerate after filtering, skipping mesh",
                 )
@@ -287,14 +390,14 @@ class WallNodeFilter(Filter["Mesh"]):
             new_point_data = _filter_tensordict(mesh.point_data, keep_mask, n_kept)
 
             # Filter cell_data.
-            new_cell_data = _filter_tensordict(mesh.cell_data, cell_mask, int(cell_mask.sum()))
+            new_cell_data = _filter_tensordict(mesh.cell_data, cell_mask, n_cells_kept)
 
             new_mesh = Mesh(
                 points=new_points,
                 cells=new_cells,
                 point_data=new_point_data,
                 cell_data=new_cell_data,
-                global_data=mesh.global_data,
+                global_data=new_global_data,
             )
 
             logger.info(
@@ -302,8 +405,8 @@ class WallNodeFilter(Filter["Mesh"]):
                 n_kept,
                 n_original,
                 100.0 * n_kept / n_original,
-                len(new_cells),
-                mesh.n_cells,
+                n_cells_kept,
+                n_cells_original,
             )
 
             yield new_mesh

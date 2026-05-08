@@ -50,7 +50,17 @@ def mock_vtk_run(tmp_path: Path):
 
     # Create consistent mesh structure
     points_base = rng.uniform(-10, 10, size=(n_points, 3)).astype(np.float32)
-    cells = rng.integers(0, n_points, size=(n_cells, 3)).astype(np.int64)
+    # Ensure all points are referenced by at least one cell (first 4 cells
+    # cover indices 0-9 by careful construction, then random fill for the rest)
+    cells = np.array(
+        [
+            [0, 1, 2],
+            [3, 4, 5],
+            [6, 7, 8],
+            [9, 0, 1],
+        ],
+        dtype=np.int64,
+    )
 
     # Build cell array in VTK format: [n_nodes, n0, n1, n2, ...]
     cell_array = []
@@ -66,9 +76,16 @@ def mock_vtk_run(tmp_path: Path):
 
         grid = pv.UnstructuredGrid(cell_array, cell_types, points)
 
-        # Add optional fields
+        # Add optional fields (point data)
         grid.point_data["velocity"] = rng.uniform(-1, 1, size=(n_points, 3)).astype(np.float32)
-        grid.cell_data["stress"] = rng.uniform(0, 100, size=(n_cells, 6)).astype(np.float32)
+
+        # Add GPS_SIG* stress components (point data) - Voigt notation
+        grid.point_data["GPS_SIGXX"] = rng.uniform(0, 100, size=n_points).astype(np.float32)
+        grid.point_data["GPS_SIGYY"] = rng.uniform(0, 100, size=n_points).astype(np.float32)
+        grid.point_data["GPS_SIGZZ"] = rng.uniform(0, 100, size=n_points).astype(np.float32)
+        grid.point_data["GPS_SIGXY"] = rng.uniform(-50, 50, size=n_points).astype(np.float32)
+        grid.point_data["GPS_SIGYZ"] = rng.uniform(-50, 50, size=n_points).astype(np.float32)
+        grid.point_data["GPS_SIGXZ"] = rng.uniform(-50, 50, size=n_points).astype(np.float32)
 
         vtk_path = run_dir / f"timestep_{t:03d}.vtk"
         grid.save(str(vtk_path))
@@ -159,7 +176,7 @@ class TestOpenRadiossSourceIntegration:
         """OpenRadiossSource should read mesh with displacement fields."""
         from physicsnemo_curator.domains.mesh.sources.openradioss import OpenRadiossSource
 
-        source = OpenRadiossSource(input_dir=str(mock_vtk_run))
+        source = OpenRadiossSource(input_dir=str(mock_vtk_run), cell_type="tri")
         meshes = list(source[0])
 
         assert len(meshes) == 1
@@ -187,29 +204,38 @@ class TestOpenRadiossSourceIntegration:
         """OpenRadiossSource should read velocity when requested."""
         from physicsnemo_curator.domains.mesh.sources.openradioss import OpenRadiossSource
 
-        source = OpenRadiossSource(input_dir=str(mock_vtk_run), read_velocity=True)
+        source = OpenRadiossSource(input_dir=str(mock_vtk_run), read_velocity=True, cell_type="tri")
         meshes = list(source[0])
         mesh = meshes[0]
 
         assert "velocity_t000" in mesh.point_data
 
     def test_read_stress(self, mock_vtk_run):
-        """OpenRadiossSource should read stress when requested."""
+        """OpenRadiossSource should read nodal stress when requested."""
         from physicsnemo_curator.domains.mesh.sources.openradioss import OpenRadiossSource
 
-        source = OpenRadiossSource(input_dir=str(mock_vtk_run), read_stress=True)
+        source = OpenRadiossSource(input_dir=str(mock_vtk_run), read_stress=True, cell_type="tri")
         meshes = list(source[0])
         mesh = meshes[0]
 
-        # Stress should be in cell_data as von Mises
-        assert mesh.cell_data is not None
-        assert "stress_vm_t000" in mesh.cell_data
+        # Stress should be in point_data (nodal stress from GPS_SIG* fields)
+        assert "stress_vm_t000" in mesh.point_data
+        assert "stress_voigt_t000" in mesh.point_data
+
+        # Voigt should have 6 components
+        voigt = mesh.point_data["stress_voigt_t000"].numpy()
+        assert voigt.shape == (10, 6)
+
+        # Von Mises should be scalar per point
+        vm = mesh.point_data["stress_vm_t000"].numpy()
+        assert vm.shape == (10,)
+        assert (vm >= 0).all()  # type: ignore[operator]  # ty: ignore[unsupported-operator]  # Von Mises is always non-negative
 
     def test_displacement_is_relative_to_t0(self, mock_vtk_run):
         """Displacement at t=0 should be approximately zero."""
         from physicsnemo_curator.domains.mesh.sources.openradioss import OpenRadiossSource
 
-        source = OpenRadiossSource(input_dir=str(mock_vtk_run))
+        source = OpenRadiossSource(input_dir=str(mock_vtk_run), cell_type="tri")
         meshes = list(source[0])
         mesh = meshes[0]
 
@@ -220,7 +246,7 @@ class TestOpenRadiossSourceIntegration:
         """OpenRadiossSource should support negative indexing."""
         from physicsnemo_curator.domains.mesh.sources.openradioss import OpenRadiossSource
 
-        source = OpenRadiossSource(input_dir=str(mock_vtk_run))
+        source = OpenRadiossSource(input_dir=str(mock_vtk_run), cell_type="tri")
         meshes = list(source[-1])
 
         assert len(meshes) == 1

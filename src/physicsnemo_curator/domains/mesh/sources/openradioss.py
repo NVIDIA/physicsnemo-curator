@@ -98,8 +98,8 @@ class OpenRadiossSource(Source["Mesh"]):
         Glob pattern for VTK files within each run directory.  Default is
         ``"*.vtk"`` which matches all VTK files.
     read_stress : bool
-        If ``True``, read von Mises stress from element data.  Default
-        is ``False``.
+        If ``True``, read nodal stress from point data (GPS_SIGXX, etc.)
+        and compute Von Mises stress.  Default is ``False``.
     read_velocity : bool
         If ``True``, read velocity fields from point data.  Default is
         ``False``.
@@ -151,7 +151,7 @@ class OpenRadiossSource(Source["Mesh"]):
             ),
             Param(
                 name="read_stress",
-                description="Read von Mises stress from element data",
+                description="Read nodal stress from point data (GPS_SIG* fields)",
                 type=bool,
                 default=False,
             ),
@@ -173,7 +173,24 @@ class OpenRadiossSource(Source["Mesh"]):
                 type=bool,
                 default=False,
             ),
+            Param(
+                name="cell_type",
+                description=(
+                    "VTK cell type to extract: 'tet' (10), 'tri' (5), "
+                    "'all' (most common), or 'mixed' (all types, padded)"
+                ),
+                type=str,
+                default="tet",
+            ),
         ]
+
+    # VTK cell type codes
+    _VTK_TET = 10
+    _VTK_TRI = 5
+    _VTK_QUAD = 9
+    _VTK_HEX = 12
+    _VTK_WEDGE = 13
+    _VTK_PYRAMID = 14
 
     def __init__(
         self,
@@ -183,6 +200,7 @@ class OpenRadiossSource(Source["Mesh"]):
         read_velocity: bool = False,
         read_acceleration: bool = False,
         read_temperature: bool = False,
+        cell_type: str = "tet",
     ) -> None:
         """Initialize the OpenRadioss source.
 
@@ -200,6 +218,8 @@ class OpenRadiossSource(Source["Mesh"]):
             Read acceleration fields from point data.
         read_temperature : bool
             Read temperature fields from point data.
+        cell_type : str
+            VTK cell type to extract: 'tet', 'tri', 'all', or 'mixed'.
         """
         self._log = get_logger(self)
         self._flush_logs = flush_logs
@@ -210,6 +230,12 @@ class OpenRadiossSource(Source["Mesh"]):
         self._read_velocity = read_velocity
         self._read_acceleration = read_acceleration
         self._read_temperature = read_temperature
+        self._cell_type = cell_type
+
+        # Validate cell_type
+        if cell_type not in ("tet", "tri", "all", "mixed"):
+            msg = f"cell_type must be 'tet', 'tri', 'all', or 'mixed', got: {cell_type}"
+            raise ValueError(msg)
 
         if not self._input_dir.is_dir():
             msg = f"input_dir does not exist or is not a directory: {self._input_dir}"
@@ -300,15 +326,29 @@ class OpenRadiossSource(Source["Mesh"]):
         # Read first file to get mesh structure
         grid0 = pv.read(vtk_files[0])
         n_points = grid0.n_points
-        n_cells = grid0.n_cells
 
         # Extract reference coordinates (t=0)
         coords = np.array(grid0.points, dtype=np.float32)  # (N, 3)
 
-        # Extract cell connectivity
-        cells_array, cell_types = self._extract_connectivity(grid0)
+        # Extract cell connectivity (filtered by cell_type)
+        cells_array, cell_types, cell_mask = self._extract_connectivity(grid0)
+        n_cells = cells_array.shape[0]  # Number of filtered cells
 
-        # Initialize arrays for all timesteps
+        # Compute referenced nodes for point pruning (done after reading all data)
+        # In mixed mode, -1 is the padding sentinel and should be excluded
+        valid_indices = cells_array[cells_array >= 0]
+        referenced_nodes = np.unique(valid_indices)
+        n_points_pruned = len(referenced_nodes)
+
+        if n_points_pruned < n_points:
+            self._log.info(
+                "Will prune unreferenced points: %d -> %d (%.1f%% reduction)",
+                n_points,
+                n_points_pruned,
+                100.0 * (1.0 - n_points_pruned / n_points),
+            )
+
+        # Initialize arrays for all timesteps (at full original size for reading)
         positions = np.zeros((n_timesteps, n_points, 3), dtype=np.float32)
         positions[0] = coords
 
@@ -316,10 +356,12 @@ class OpenRadiossSource(Source["Mesh"]):
         velocities = np.zeros((n_timesteps, n_points, 3), dtype=np.float32) if self._read_velocity else None
         accelerations = np.zeros((n_timesteps, n_points, 3), dtype=np.float32) if self._read_acceleration else None
         temperatures = np.zeros((n_timesteps, n_points), dtype=np.float32) if self._read_temperature else None
-        stress_vm = np.zeros((n_timesteps, n_cells), dtype=np.float32) if self._read_stress else None
+        # Nodal stress: Voigt tensor (N, 6) and Von Mises scalar (N,) per timestep
+        stress_voigt = np.zeros((n_timesteps, n_points, 6), dtype=np.float32) if self._read_stress else None
+        stress_vm = np.zeros((n_timesteps, n_points), dtype=np.float32) if self._read_stress else None
 
         # Extract fields from first timestep
-        self._extract_fields(grid0, 0, velocities, accelerations, temperatures, stress_vm)
+        self._extract_fields(grid0, 0, velocities, accelerations, temperatures, stress_voigt, stress_vm)
 
         # Read remaining timesteps
         for t, vtk_file in enumerate(vtk_files[1:], start=1):
@@ -331,10 +373,36 @@ class OpenRadiossSource(Source["Mesh"]):
                 raise ValueError(msg)
 
             positions[t] = np.array(grid.points, dtype=np.float32)
-            self._extract_fields(grid, t, velocities, accelerations, temperatures, stress_vm)
+            self._extract_fields(grid, t, velocities, accelerations, temperatures, stress_voigt, stress_vm)
 
         # Compute displacements relative to t=0
         displacements = positions - positions[0:1]  # (T, N, 3)
+
+        # Prune unreferenced points: slice all point arrays to only referenced nodes
+        if n_points_pruned < n_points:
+            # Build old-to-new index mapping for cell connectivity
+            old_to_new = np.full(n_points, -1, dtype=np.int64)
+            old_to_new[referenced_nodes] = np.arange(n_points_pruned, dtype=np.int64)
+
+            # Remap cell connectivity (preserve -1 sentinels for mixed mode padding)
+            mask_valid = cells_array >= 0
+            cells_array[mask_valid] = old_to_new[cells_array[mask_valid]]
+
+            # Slice point arrays to referenced nodes only
+            coords = coords[referenced_nodes]
+            displacements = displacements[:, referenced_nodes]
+            if velocities is not None:
+                velocities = velocities[:, referenced_nodes]
+            if accelerations is not None:
+                accelerations = accelerations[:, referenced_nodes]
+            if temperatures is not None:
+                temperatures = temperatures[:, referenced_nodes]
+            if stress_voigt is not None:
+                stress_voigt = stress_voigt[:, referenced_nodes]
+            if stress_vm is not None:
+                stress_vm = stress_vm[:, referenced_nodes]
+
+            n_points = n_points_pruned
 
         # Build point_data
         pd_dict: dict[str, torch.Tensor] = {}
@@ -361,31 +429,55 @@ class OpenRadiossSource(Source["Mesh"]):
             for t in range(n_timesteps):
                 pd_dict[f"temperature_t{t:03d}"] = torch.from_numpy(temperatures[t])
 
+        # Optional nodal stress fields (Voigt tensor and Von Mises)
+        if stress_voigt is not None:
+            for t in range(n_timesteps):
+                pd_dict[f"stress_voigt_t{t:03d}"] = torch.from_numpy(stress_voigt[t])
+        if stress_vm is not None:
+            for t in range(n_timesteps):
+                pd_dict[f"stress_vm_t{t:03d}"] = torch.from_numpy(stress_vm[t])
+
         point_data = TensorDict(pd_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
 
-        # Build cell_data
-        cell_data = None
-        if stress_vm is not None:
-            cd_dict: dict[str, torch.Tensor] = {}
-            for t in range(n_timesteps):
-                cd_dict[f"stress_vm_t{t:03d}"] = torch.from_numpy(stress_vm[t])
-            cell_data = TensorDict(cd_dict, batch_size=[n_cells])  # ty: ignore[invalid-argument-type]
+        # Build cell_data — not used for mixed mode (cell types are in global_data)
+        cd: TensorDict | None = None
 
         # Build global_data
-        global_data = TensorDict(
-            {"num_timesteps": torch.tensor([n_timesteps], dtype=torch.int64)},
-            batch_size=[],
-        )
+        gd_dict: dict[str, torch.Tensor] = {
+            "num_timesteps": torch.tensor([n_timesteps], dtype=torch.int64),
+        }
+
+        # For mixed mode, store connectivity as flat array + offsets in global_data
+        # because Mesh.cells requires uniform node count (infers manifold dim from shape).
+        if self._cell_type == "mixed":
+            # Convert padded (E, max_nodes) to flat connectivity + offsets
+            flat_conn_parts: list[np.ndarray] = []
+            offsets = np.zeros(n_cells + 1, dtype=np.int64)
+            for i in range(n_cells):
+                row = cells_array[i]
+                valid = row[row >= 0]
+                flat_conn_parts.append(valid)
+                offsets[i + 1] = offsets[i] + len(valid)
+            flat_connectivity = np.concatenate(flat_conn_parts) if flat_conn_parts else np.array([], dtype=np.int64)
+
+            gd_dict["mixed_connectivity"] = torch.from_numpy(flat_connectivity)
+            gd_dict["mixed_offsets"] = torch.from_numpy(offsets)
+            gd_dict["mixed_cell_types"] = torch.from_numpy(cell_types.astype(np.int64))
+
+        global_data = TensorDict(gd_dict, batch_size=[])  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
         # Build mesh
         points_tensor = torch.from_numpy(coords)
-        cells_tensor = torch.from_numpy(cells_array)
+
+        # For mixed mode, pass cells=None because Mesh uses cells.shape[-1] to infer
+        # manifold dimensionality and cannot handle padded cells.
+        cells_for_mesh = None if self._cell_type == "mixed" else torch.from_numpy(cells_array)
 
         mesh = Mesh(
             points=points_tensor,
-            cells=cells_tensor,
+            cells=cells_for_mesh,
             point_data=point_data,
-            cell_data=cell_data,
+            cell_data=cd,
             global_data=global_data,
         )
 
@@ -400,8 +492,13 @@ class OpenRadiossSource(Source["Mesh"]):
 
         return mesh
 
-    def _extract_connectivity(self, grid: Any) -> tuple[np.ndarray, np.ndarray]:
+    def _extract_connectivity(self, grid: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Extract cell connectivity from a PyVista grid.
+
+        Filters cells to only include the configured cell type (tet, tri, all,
+        or mixed).  For 'tet' and 'tri', only cells with exactly 4 or 3 nodes
+        are kept.  For 'mixed', ALL cells are kept and padded to the maximum
+        node count with -1 sentinel values.
 
         Parameters
         ----------
@@ -410,33 +507,94 @@ class OpenRadiossSource(Source["Mesh"]):
 
         Returns
         -------
-        tuple[np.ndarray, np.ndarray]
-            Connectivity array (E, max_nodes_per_cell) and cell types.
+        tuple[np.ndarray, np.ndarray, np.ndarray]
+            Connectivity array (E, nodes_per_cell), cell types, and cell mask.
         """
         # Get cell connectivity - PyVista stores as flat array with counts
         cells = grid.cells
         cell_types = np.array(grid.celltypes)
         n_cells = grid.n_cells
 
-        # Parse connectivity - find max nodes per cell
-        offset = 0
-        cell_node_counts = []
-        for _ in range(n_cells):
-            n_nodes = cells[offset]
-            cell_node_counts.append(n_nodes)
-            offset += n_nodes + 1
+        # Determine which cells to keep based on cell_type setting
+        if self._cell_type == "tet":
+            # Keep only tetrahedra (VTK type 10, 4 nodes)
+            keep_mask = cell_types == self._VTK_TET
+            nodes_per_cell = 4
+        elif self._cell_type == "tri":
+            # Keep only triangles (VTK type 5, 3 nodes)
+            keep_mask = cell_types == self._VTK_TRI
+            nodes_per_cell = 3
+        elif self._cell_type == "mixed":
+            # Keep ALL cells, pad to max node count with -1 sentinel
+            keep_mask = np.ones(n_cells, dtype=bool)
+            # Determine max nodes per cell across all cell types
+            type_to_nodes = {
+                self._VTK_TRI: 3,
+                self._VTK_TET: 4,
+                self._VTK_QUAD: 4,
+                self._VTK_PYRAMID: 5,
+                self._VTK_WEDGE: 6,
+                self._VTK_HEX: 8,
+            }
+            max_nodes = max(type_to_nodes.get(ct, 4) for ct in np.unique(cell_types))
+            nodes_per_cell = max_nodes
+        else:
+            # 'all' mode - but we still need uniform cell sizes
+            # Find the most common cell type and use that
+            from collections import Counter
 
-        max_nodes = max(cell_node_counts)
+            type_counts = Counter(cell_types)
+            most_common_type = type_counts.most_common(1)[0][0]
+            keep_mask = cell_types == most_common_type
 
-        # Build padded connectivity array
-        connectivity = np.full((n_cells, max_nodes), -1, dtype=np.int64)
+            # Determine nodes per cell from VTK type
+            type_to_nodes = {
+                self._VTK_TRI: 3,
+                self._VTK_TET: 4,
+                self._VTK_QUAD: 4,
+                self._VTK_PYRAMID: 5,  # Will fail Mesh validation
+                self._VTK_WEDGE: 6,  # Will fail Mesh validation
+                self._VTK_HEX: 8,  # Will fail Mesh validation
+            }
+            nodes_per_cell = type_to_nodes.get(most_common_type, 4)
+            if nodes_per_cell > 4:
+                self._log.warning(
+                    "Most common cell type %d has %d nodes, which exceeds Mesh limit of 4. "
+                    "Use cell_type='tet' to filter to tetrahedra only.",
+                    most_common_type,
+                    nodes_per_cell,
+                )
+
+        n_keep = int(keep_mask.sum())
+        if n_keep == 0:
+            msg = f"No cells of type '{self._cell_type}' found in mesh"
+            raise ValueError(msg)
+
+        self._log.debug(
+            "Filtering cells: keeping %d of %d (type=%s)",
+            n_keep,
+            n_cells,
+            self._cell_type,
+        )
+
+        # Parse and filter connectivity
+        # For 'mixed' mode, pad shorter cells with -1
+        connectivity = np.full((n_keep, nodes_per_cell), -1, dtype=np.int64)
+        filtered_types = np.zeros(n_keep, dtype=np.uint8)
+
         offset = 0
+        out_idx = 0
         for i in range(n_cells):
             n_nodes = cells[offset]
-            connectivity[i, :n_nodes] = cells[offset + 1 : offset + 1 + n_nodes]
+            if keep_mask[i]:
+                # Extract actual node count (may be less than nodes_per_cell)
+                actual_nodes = min(n_nodes, nodes_per_cell)
+                connectivity[out_idx, :actual_nodes] = cells[offset + 1 : offset + 1 + actual_nodes]
+                filtered_types[out_idx] = cell_types[i]
+                out_idx += 1
             offset += n_nodes + 1
 
-        return connectivity, cell_types
+        return connectivity, filtered_types, keep_mask
 
     def _extract_fields(
         self,
@@ -445,6 +603,7 @@ class OpenRadiossSource(Source["Mesh"]):
         velocities: np.ndarray | None,
         accelerations: np.ndarray | None,
         temperatures: np.ndarray | None,
+        stress_voigt: np.ndarray | None,
         stress_vm: np.ndarray | None,
     ) -> None:
         """Extract field data from a VTK grid for a single timestep.
@@ -461,8 +620,10 @@ class OpenRadiossSource(Source["Mesh"]):
             Array to fill with acceleration data.
         temperatures : np.ndarray | None
             Array to fill with temperature data.
+        stress_voigt : np.ndarray | None
+            Array to fill with Voigt stress tensor (N, 6).
         stress_vm : np.ndarray | None
-            Array to fill with von Mises stress data.
+            Array to fill with von Mises stress (N,).
         """
         # Velocity (point data)
         if velocities is not None:
@@ -485,21 +646,41 @@ class OpenRadiossSource(Source["Mesh"]):
                     temperatures[t] = np.array(grid.point_data[name], dtype=np.float32)
                     break
 
-        # Stress (cell data) - compute von Mises if Voigt components available
-        if stress_vm is not None:
-            # Try direct von Mises first
-            for name in ["stress_vm", "von_mises", "VonMises", "VONMISES"]:
-                if name in grid.cell_data:
-                    stress_vm[t] = np.array(grid.cell_data[name], dtype=np.float32)
-                    return
+        # Nodal stress (point data) - read GPS_SIG* components from OpenRadioss
+        if stress_voigt is not None and stress_vm is not None:
+            # Try to read stress Voigt components from point_data
+            # OpenRadioss exports: GPS_SIGXX, GPS_SIGYY, GPS_SIGZZ, GPS_SIGXY, GPS_SIGYZ/GPS_SIGZY, GPS_SIGXZ
+            pd = grid.point_data
+            keys_lower = {k.lower(): k for k in pd}
 
-            # Try Voigt stress tensor
-            for name in ["stress", "Stress", "STRESS"]:
-                if name in grid.cell_data:
-                    stress_voigt = np.array(grid.cell_data[name], dtype=np.float32)
-                    if stress_voigt.shape[-1] == 6:
-                        stress_vm[t] = _von_mises_from_voigt(stress_voigt)
-                        return
+            # Component order: [xx, yy, zz, xy, yz, xz] (Voigt notation)
+            component_candidates = [
+                ("gps_sigxx",),  # xx
+                ("gps_sigyy",),  # yy
+                ("gps_sigzz",),  # zz
+                ("gps_sigxy",),  # xy
+                ("gps_sigyz", "gps_sigzy"),  # yz (OpenRadioss may use SIGZY)
+                ("gps_sigxz",),  # xz
+            ]
+
+            found_keys = []
+            for candidates in component_candidates:
+                key = next((keys_lower[c] for c in candidates if c in keys_lower), None)
+                found_keys.append(key)
+
+            if all(k is not None for k in found_keys):
+                # Stack into Voigt tensor (N, 6)
+                components = [np.array(pd[k], dtype=np.float32) for k in found_keys]
+                voigt = np.stack(components, axis=1)  # (N, 6)
+                stress_voigt[t] = voigt
+                stress_vm[t] = _von_mises_from_voigt(voigt)
+            elif t == 0:
+                # Log warning only on first timestep
+                self._log.warning(
+                    "Nodal stress not found in point_data. Expected GPS_SIGXX, GPS_SIGYY, "
+                    "GPS_SIGZZ, GPS_SIGXY, GPS_SIGYZ, GPS_SIGXZ. Found: %s",
+                    list(pd.keys()),
+                )
 
     def run_id(self, index: int) -> str:
         """Return the run identifier for a given index.
