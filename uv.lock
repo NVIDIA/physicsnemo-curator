@@ -3219,13 +3219,11 @@ dask = [
 loky = [
     { name = "joblib" },
 ]
-lsdyna = [
-    { name = "lasso-python" },
-]
 mesh = [
     { name = "ansys-dpf-core" },
     { name = "huggingface-hub" },
     { name = "jaxtyping" },
+    { name = "lasso-python" },
     { name = "nvidia-physicsnemo" },
     { name = "pyarrow" },
     { name = "pyvista" },
@@ -3234,9 +3232,7 @@ mesh = [
     { name = "torch" },
     { name = "tqdm" },
     { name = "warp-lang" },
-]
-yaml = [
-    { name = "pyyaml" },
+    { name = "zarr" },
 ]
 
 [package.dev-dependencies]
@@ -3279,7 +3275,7 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'mesh'" },
     { name = "jaxtyping", marker = "extra == 'mesh'" },
     { name = "joblib", marker = "extra == 'loky'", specifier = ">=1.3" },
-    { name = "lasso-python", marker = "extra == 'lsdyna'", specifier = ">=2.0" },
+    { name = "lasso-python", marker = "extra == 'mesh'" },
     { name = "lmdb", marker = "extra == 'atm'" },
     { name = "nvalchemi-toolkit", marker = "extra == 'atm'", git = "https://github.com/NVIDIA/nvalchemi-toolkit" },
     { name = "nvidia-physicsnemo", marker = "extra == 'mesh'", git = "https://github.com/NVIDIA/physicsnemo" },
@@ -3290,7 +3286,6 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'dashboard'", specifier = ">=14.0" },
     { name = "pyarrow", marker = "extra == 'mesh'" },
     { name = "pyvista", marker = "extra == 'mesh'" },
-    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0" },
     { name = "s3fs", marker = "extra == 'mesh'" },
     { name = "tensordict", marker = "extra == 'mesh'" },
     { name = "textual", specifier = ">=1.0" },
@@ -3301,8 +3296,9 @@ requires-dist = [
     { name = "warp-lang", marker = "extra == 'mesh'" },
     { name = "xarray", marker = "extra == 'da'", specifier = ">=2024.1" },
     { name = "zarr", marker = "extra == 'da'", specifier = ">=3.0" },
+    { name = "zarr", marker = "extra == 'mesh'", specifier = ">=3.0" },
 ]
-provides-extras = ["loky", "lsdyna", "dask", "yaml", "mesh", "da", "atm", "dashboard"]
+provides-extras = ["loky", "dask", "mesh", "da", "atm", "dashboard"]
 
 [package.metadata.requires-dev]
 dev = [

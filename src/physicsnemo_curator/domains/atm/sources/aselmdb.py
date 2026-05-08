@@ -60,13 +60,13 @@ References
 
 from __future__ import annotations
 
-import logging
 import pathlib
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 import numpy as np
 
 from physicsnemo_curator.core.base import Param, Source
+from physicsnemo_curator.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -74,7 +74,7 @@ if TYPE_CHECKING:
     import torch
     from nvalchemi.data import AtomicData
 
-logger = logging.getLogger(__name__)
+logger = get_logger("ASELMDBSource")
 
 # Reserved LMDB keys that are not data rows (same set as the Rust reader).
 _RESERVED_LMDB_KEYS = frozenset({"nextid", "deleted_ids", "metadata"})
@@ -836,8 +836,8 @@ class ASELMDBSource(Source["AtomicData"]):
         row_index = index - self._cumulative_counts[file_index]
 
         db_path = self._db_files[file_index]
-        logger.debug(
-            "Reading structure %d from file %d (%s), row %d",
+        logger.info(
+            "Reading index %d from file %d (%s), row %d",
             index,
             file_index,
             db_path.name,

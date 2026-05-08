@@ -329,7 +329,8 @@ class AtomicDataZarrSink(Sink["AtomicData"]):
             self._natoms = np.asarray(natoms, dtype=np.int64)
             if nedges is not None:
                 self._nedges = np.asarray(nedges, dtype=np.int64)
-            self._field_schema = _extract_schema(schema)  # type: ignore[arg-type]
+            assert schema is not None  # guaranteed by _parallel check
+            self._field_schema = _extract_schema(schema)
             self._preallocate()
         else:
             # Sequential fallback state.
