@@ -15,3 +15,8 @@
 # limitations under the License.
 
 """Mesh data sinks/writers."""
+
+from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from physicsnemo_curator.domains.mesh.sinks.mesh_zarr import MeshZarrSink
+
+__all__ = ["MeshSink", "MeshZarrSink"]

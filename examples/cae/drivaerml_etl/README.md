@@ -47,15 +47,23 @@ hf download neashton/drivaerml \
 ```
 
 This creates an `input/drivaerml/` directory with per-run subdirectories
-containing `.vtu` (volume), `.vtp` (surface), and `.stl` (geometry)
-files:
+containing mesh data, geometry, and metadata files:
 
 ```text
 input/drivaerml/
 ├── run_1/
-│   ├── vol_data.vtu          # Volume mesh (cell centroids + fields)
-│   ├── surf_data.vtp         # Boundary surface (triangulated)
-│   └── drivaer.stl           # Vehicle geometry
+│   ├── volume_1.vtu           # Volume mesh (cell centroids + fields)
+│   ├── boundary_1.vtp         # Boundary surface (triangulated)
+│   ├── drivaer_1.stl          # Vehicle geometry (multi-part STL)
+│   ├── geo_parameters_1.csv   # Geometric parameters
+│   ├── geo_ref_1.csv          # Reference geometry
+│   ├── force_mom_1.csv        # Force/moment data
+│   ├── force_mom_constref_1.csv
+│   ├── images/                # Visualization images
+│   └── slices/                # Cross-section slices (.vtp)
+│       ├── xNormal_*.vtp      # X-normal slice planes
+│       ├── yNormal_*.vtp      # Y-normal slice planes
+│       └── zNormal_*.vtp      # Z-normal slice planes
 ├── run_2/
 │   └── ...
 └── ...

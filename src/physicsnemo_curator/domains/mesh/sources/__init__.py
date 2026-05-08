@@ -19,3 +19,21 @@
 Provides pipeline sources for reading mesh data from local files,
 remote URLs, and curated HuggingFace Hub datasets.
 """
+
+from physicsnemo_curator.domains.mesh.sources.ahmedml import AhmedMLSource
+from physicsnemo_curator.domains.mesh.sources.ansys_rst import AnsysRSTSource
+from physicsnemo_curator.domains.mesh.sources.d3plot import D3PlotSource
+from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.domains.mesh.sources.openradioss import OpenRadiossSource
+from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
+
+__all__ = [
+    "AhmedMLSource",
+    "AnsysRSTSource",
+    "D3PlotSource",
+    "DrivAerMLSource",
+    "NavierStokesCylinderSource",
+    "OpenRadiossSource",
+    "VTKSource",
+]
