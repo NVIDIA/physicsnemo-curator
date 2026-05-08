@@ -134,16 +134,6 @@ interactive full-screen pipeline wizard powered by Textual.
 psnc
 ```
 
-### Wizard
-
-The `psnc` command launches a full-screen TUI that guides you through:
-
-1. **Select submodule** — mesh, DataArray, or atomic
-2. **Select source** — dataset-specific reader
-3. **Select filters** — toggle any combination of filters
-4. **Select sink** — output format and destination
-5. **Review & execute** — summary screen, then runs with Textual progress display
-
 ### Dashboard
 
 ```bash

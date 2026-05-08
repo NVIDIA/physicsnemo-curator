@@ -229,7 +229,7 @@ class TestOpenRadiossSourceIntegration:
         # Von Mises should be scalar per point
         vm = mesh.point_data["stress_vm_t000"].numpy()
         assert vm.shape == (10,)
-        assert (vm >= 0).all()  # type: ignore[operator]  # Von Mises is always non-negative
+        assert (vm >= 0).all()  # type: ignore[operator]  # ty: ignore[unsupported-operator]  # Von Mises is always non-negative
 
     def test_displacement_is_relative_to_t0(self, mock_vtk_run):
         """Displacement at t=0 should be approximately zero."""

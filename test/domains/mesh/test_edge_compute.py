@@ -195,8 +195,8 @@ class TestEdgeComputeFilterIntegration:
         n_points = mesh.n_points
 
         # All edge indices should be valid
-        assert np.all(edges >= 0)
-        assert np.all(edges < n_points)
+        assert np.all(edges >= 0)  # ty: ignore[unsupported-operator]
+        assert np.all(edges < n_points)  # ty: ignore[unsupported-operator]
 
     def test_multiple_meshes(self, triangle_mesh, mesh_with_point_data):
         """EdgeComputeFilter should handle multiple meshes."""

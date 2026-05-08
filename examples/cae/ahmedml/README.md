@@ -3,6 +3,8 @@
 Process [AhmedML](https://huggingface.co/datasets/neashton/ahmedml) automotive
 CFD meshes through a complete Source → Filter → Sink pipeline.
 
+![AhmedML sample](sample.jpg)
+
 The AhmedML dataset contains 500 geometric variations of the
 [Ahmed Car Body](https://en.wikipedia.org/wiki/Ahmed_body) with transient
 hybrid RANS-LES CFD simulations (OpenFOAM v2212, ~20 M cells per case).
@@ -104,9 +106,26 @@ output/ahmedml/
 All modes attach CSV metadata (force coefficients and geometric
 parameters) as `global_data` on every yielded mesh.
 
-## See Also
+## Plotting
+
+After running the pipeline, visualize interior flow fields for processed
+runs:
+
+```bash
+# Default: auto-detect fields, Y-slice, 2 runs
+python plot.py
+
+# Custom options
+python plot.py --output output/ahmedml --runs 3 --fields UMean pMean --slice-axis y --out sample.jpg
+```
+
+This produces a JPEG with one row per run and one column per field,
+showing a Y-normal slice through the interior flow colored by field
+magnitude.
+
+## References
 
 - [AhmedML Dataset](https://huggingface.co/datasets/neashton/ahmedml) — HuggingFace page
 - [arXiv:2407.20801](https://arxiv.org/abs/2407.20801) — Dataset paper
-- [DrivAerML ETL](../drivaerml_etl/) — Similar pipeline for DrivAerML dataset
+- [DrivAerML ETL](../drivaerml/) — Similar pipeline for DrivAerML dataset
 - [PhysicsNeMo-Curator Documentation](https://github.com/NVIDIA/physicsnemo-curator) — Framework docs

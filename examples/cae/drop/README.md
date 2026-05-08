@@ -3,6 +3,8 @@
 Process OpenRadioss drop test simulations through a complete
 Source → Filter → Sink pipeline for deep learning.
 
+![Drop test sample](sample.jpg)
+
 ## Pipeline Overview
 
 1. **OpenRadiossSource** — reads per-timestep VTK files produced by
@@ -106,3 +108,26 @@ The VTU output format stores:
 
 This format is consumed directly by the `physicsnemo/examples/structural_mechanics/drop_test`
 recipe for physics-informed machine learning.
+
+## Plotting
+
+After running the pipeline, visualize mesh deformation over timesteps
+colored by Von Mises stress:
+
+```bash
+# Default: Von_Mises field, 5 timestep columns
+python plot.py
+
+# Custom options
+python plot.py --output output/drop --field Von_Mises --timesteps 8 --out sample.jpg
+```
+
+This produces a JPEG with one row per VTU file (run) and one column per
+timestep, showing the deformed mesh colored by the selected field.
+
+## References
+
+- [PhysicsNeMo Drop Test Training Example](https://github.com/NVIDIA/physicsnemo/blob/main/examples/structural_mechanics/drop_test/README.md)
+  — Model training guide
+- [PhysicsNeMo-Curator Documentation](https://github.com/NVIDIA/physicsnemo-curator)
+  — General ETL framework documentation

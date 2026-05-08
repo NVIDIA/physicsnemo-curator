@@ -385,9 +385,9 @@ class MeshVTUSink(Sink["Mesh"]):
         tuple[np.ndarray, np.ndarray]
             Cells array (VTK format) and cell types array.
         """
-        connectivity: np.ndarray = mesh.global_data["mixed_connectivity"].numpy()  # type: ignore[assignment]
-        offsets: np.ndarray = mesh.global_data["mixed_offsets"].numpy()  # type: ignore[assignment]
-        mixed_cell_types: np.ndarray = mesh.global_data["mixed_cell_types"].numpy()  # type: ignore[assignment]
+        connectivity: np.ndarray = mesh.global_data["mixed_connectivity"].numpy()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+        offsets: np.ndarray = mesh.global_data["mixed_offsets"].numpy()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+        mixed_cell_types: np.ndarray = mesh.global_data["mixed_cell_types"].numpy()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         mixed_cell_types = mixed_cell_types.astype(np.uint8)
 
         n_cells = len(offsets) - 1

@@ -704,7 +704,7 @@ class AhmedMLSource(Source[Mesh]):
         )
         self._log.debug("run_%d: DomainMesh assembled (%.2fs)", run_id, time.perf_counter() - t0)
         self._log.info("run_%d: Domain read complete", run_id)
-        yield domain_mesh
+        yield domain_mesh  # ty: ignore[invalid-yield]
 
     def _read_stl(self, index: int) -> Generator[Mesh]:
         """Read the STL geometry file for a given run.

@@ -3,6 +3,8 @@
 Process [DrivAerML](https://huggingface.co/datasets/neashton/drivaerml)
 automotive CFD meshes through a complete Source → Filter → Sink pipeline.
 
+![DrivAerML sample](sample.jpg)
+
 The pipeline:
 
 1. **MeshStatsFilter** — computes per-field statistics (mean, std,
@@ -97,3 +99,26 @@ output/drivaerml/
 │   └── drivaer_2_single_solid.stl.pmsh/
 └── ...
 ```
+
+## Plotting
+
+After running the pipeline, visualize interior flow fields for processed
+runs:
+
+```bash
+# Default: auto-detect fields, Y-slice, 2 runs
+python plot.py
+
+# Custom options
+python plot.py --output output/drivaerml --runs 3 --fields pMeanTrim nutMeanTrim --slice-axis y --out sample.jpg
+```
+
+This produces a JPEG with one row per run and one column per field,
+showing a Y-normal slice through the interior flow colored by field
+magnitude.
+
+## References
+
+- [DrivAerML Dataset](https://huggingface.co/datasets/neashton/drivaerml) — HuggingFace page
+- [AhmedML ETL](../ahmedml/) — Similar pipeline for AhmedML dataset
+- [PhysicsNeMo-Curator Documentation](https://github.com/NVIDIA/physicsnemo-curator) — Framework docs

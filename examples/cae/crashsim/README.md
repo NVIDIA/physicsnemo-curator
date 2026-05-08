@@ -7,6 +7,8 @@ removes non-deforming wall nodes, computes edge connectivity, logs mesh
 metadata, converts fields to single precision, and writes the processed
 meshes to disk.
 
+![Crash simulation sample](sample.jpg)
+
 The pipeline:
 
 1. **WallNodeFilter** — removes non-deforming wall nodes whose maximum
@@ -105,7 +107,22 @@ output/crashsim/
 └── ...
 ```
 
-## See Also
+## Plotting
+
+After running the pipeline, visualize mesh deformation over timesteps:
+
+```bash
+# Default: 5 timestep columns from Zarr output
+python plot.py
+
+# Custom options
+python plot.py --output output/crashsim --timesteps 8 --out sample.jpg
+```
+
+This produces a JPEG with one row per run and one column per timestep,
+showing the XY projection of the mesh point cloud colored by Z coordinate.
+
+## References
 
 - [PhysicsNeMo Crash Training Example](https://github.com/NVIDIA/physicsnemo/blob/main/examples/structural_mechanics/crash/README.md)
   — Model training guide

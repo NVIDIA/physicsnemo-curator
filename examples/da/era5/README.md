@@ -4,6 +4,8 @@ Curate [ERA5][era5] surface reanalysis data through a Source -> Filter -> Sink
 pipeline, fetching one month of hourly data from Google's Analysis-Ready,
 Cloud-Optimized (ARCO) store.
 
+![ERA5 surface wind sample](sample.jpg)
+
 The pipeline:
 
 1. **DataArrayStatsFilter** -- computes running statistics (mean, variance,
@@ -80,6 +82,25 @@ output/era5_surface/
 
 Each variable group in `dataset.zarr` contains a 3-D array with
 dimensions `(time=n, lat=721, lon=1440)` at 0.25 degree resolution.
+
+## Plotting
+
+After running the pipeline, visualize 10-metre wind components at regular
+time intervals:
+
+```bash
+# Default: u10m and v10m at 12-hour steps
+python plot.py
+
+# Custom interval and output path
+python plot.py --output output/era5_surface --step 6 --out era5_wind.jpg
+```
+
+This produces a JPEG with two rows (u10m, v10m) and one column per
+selected timestep, plotted as global lat-lon maps with a diverging
+colormap.
+
+## References
 
 [era5]: https://www.ecmwf.int/en/forecasts/dataset/ecmwf-reanalysis-v5
 [arco]: https://cloud.google.com/storage/docs/public-datasets/era5

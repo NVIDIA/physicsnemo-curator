@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import math
+import shutil
 import time
 from typing import TYPE_CHECKING
 
@@ -188,6 +189,7 @@ class PipelineProgressApp(App[None]):
         self._page = 0
         self._workers_data: list[dict] = []
         self._last_log_id = 0  # Track last seen database log entry
+        self._last_terminal_size: tuple[int, int] = shutil.get_terminal_size()
 
     def _get_total(self) -> int:
         """Get total indices from the database."""
@@ -315,6 +317,16 @@ class PipelineProgressApp(App[None]):
 
     def _poll(self) -> None:
         """Poll the database and update all widgets."""
+        # Detect terminal resize (SIGWINCH is unavailable in daemon threads)
+        current_size = shutil.get_terminal_size()
+        if current_size != self._last_terminal_size:
+            self._last_terminal_size = current_size
+            from textual import events
+            from textual.geometry import Size
+
+            size = Size(current_size.columns, current_size.lines)
+            self.post_message(events.Resize(size, size))
+
         total = self._get_total()
         summary = self._store.summary(total)
         self._workers_data = self._store.active_workers(invocation_id=self._invocation_id)
