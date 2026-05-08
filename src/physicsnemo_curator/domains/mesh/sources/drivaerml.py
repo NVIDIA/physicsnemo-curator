@@ -395,7 +395,7 @@ class DrivAerMLSource(Source[Mesh]):
         part = self._mesh_parts[seq]
         return _MESH_NAME_TEMPLATES[part].format(run_id=run_id)
 
-    def __getitem__(self, index: int) -> Generator[Mesh | DomainMesh]:  # type: ignore[override]
+    def __getitem__(self, index: int) -> Generator[Mesh | DomainMesh]:  # ty: ignore[invalid-method-override]
         """Read the mesh(es) for the *index*-th run.
 
         For ``"boundary"`` and ``"volume"`` mesh types, yields a single
@@ -502,7 +502,7 @@ class DrivAerMLSource(Source[Mesh]):
                 arr = torch.from_numpy(data)
                 point_data_dict[name] = arr
 
-            point_data = TensorDict(point_data_dict, batch_size=[n_points]) if point_data_dict else None
+            point_data = TensorDict(point_data_dict, batch_size=[n_points]) if point_data_dict else None  # ty: ignore[invalid-argument-type]
 
             # Cell data
             cell_data_dict: dict[str, torch.Tensor] = {}
@@ -510,7 +510,7 @@ class DrivAerMLSource(Source[Mesh]):
                 arr = torch.from_numpy(data)
                 cell_data_dict[name] = arr
 
-            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None
+            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # ty: ignore[invalid-argument-type]
 
             return Mesh(
                 points=points,
@@ -1169,7 +1169,7 @@ class DrivAerMLSource(Source[Mesh]):
             point_data_dict[name] = arr
 
         n_pts = centroids.shape[0]
-        point_data = TensorDict(point_data_dict, batch_size=[n_pts]) if point_data_dict else None
+        point_data = TensorDict(point_data_dict, batch_size=[n_pts]) if point_data_dict else None  # ty: ignore[invalid-argument-type]
 
         return Mesh(points=centroids, cells=None, point_data=point_data)
 
@@ -1233,7 +1233,7 @@ class DrivAerMLSource(Source[Mesh]):
                     # Fallback: no connectivity available
                     cells = torch.arange(n_cells, dtype=torch.int64).unsqueeze(1)
 
-            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None
+            cell_data = TensorDict(cell_data_dict, batch_size=[n_cells]) if cell_data_dict else None  # ty: ignore[invalid-argument-type]
 
             return Mesh(points=points, cells=cells, point_data=None, cell_data=cell_data)
 

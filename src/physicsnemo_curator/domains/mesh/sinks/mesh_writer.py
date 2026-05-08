@@ -286,7 +286,7 @@ class MeshSink(Sink["Mesh"]):
             subdir.parent.mkdir(parents=True, exist_ok=True)
 
             t0 = time.perf_counter()
-            mesh.save(str(subdir))  # type: ignore[attr-defined]
+            mesh.save(str(subdir))  # ty: ignore[unresolved-attribute]
             self._log.debug(
                 "idx_%d: Saved %s to %s (%.2fs)",
                 index,

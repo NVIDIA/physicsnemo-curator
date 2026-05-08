@@ -591,7 +591,7 @@ class AhmedMLSource(Source[Mesh]):
                 cells=mesh.cells,
                 point_data=mesh.point_data,
                 cell_data=mesh.cell_data,
-                global_data=TensorDict(csv_data, batch_size=[]),
+                global_data=TensorDict(csv_data, batch_size=[]),  # ty: ignore[invalid-argument-type]
             )
         return mesh
 
@@ -691,7 +691,7 @@ class AhmedMLSource(Source[Mesh]):
         self._log.debug("run_%d: Reading CSV global data", run_id)
         t0 = time.perf_counter()
         csv_data = self._read_csv_global_data(run_id)
-        global_data = TensorDict(csv_data, batch_size=[]) if csv_data else None
+        global_data = TensorDict(csv_data, batch_size=[]) if csv_data else None  # ty: ignore[invalid-argument-type]
         self._log.debug("run_%d: CSV read complete (%.2fs)", run_id, time.perf_counter() - t0)
 
         # --- Assemble DomainMesh ---
@@ -704,7 +704,7 @@ class AhmedMLSource(Source[Mesh]):
         )
         self._log.debug("run_%d: DomainMesh assembled (%.2fs)", run_id, time.perf_counter() - t0)
         self._log.info("run_%d: Domain read complete", run_id)
-        yield domain_mesh  # type: ignore[misc]
+        yield domain_mesh  # ty: ignore[invalid-yield]
 
     def _read_stl(self, index: int) -> Generator[Mesh]:
         """Read the STL geometry file for a given run.

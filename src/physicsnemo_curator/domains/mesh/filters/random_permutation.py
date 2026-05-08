@@ -77,7 +77,7 @@ def _permute_tensordict(
                 permuted[str(key)] = result
         elif child is not None:
             permuted[str(key)] = child[perm]
-    return TensorDict(permuted, batch_size=[new_size])
+    return TensorDict(permuted, batch_size=[new_size])  # ty: ignore[invalid-argument-type]
 
 
 def _shuffle_mesh(mesh: Mesh, rng: torch.Generator) -> None:
@@ -106,7 +106,7 @@ def _shuffle_mesh(mesh: Mesh, rng: torch.Generator) -> None:
 
         # Reorder point data
         if mesh.point_data is not None:
-            mesh.point_data = _permute_tensordict(
+            mesh.point_data = _permute_tensordict(  # ty: ignore[invalid-assignment]
                 mesh.point_data,
                 perm_pts,
                 n_points,
@@ -131,7 +131,7 @@ def _shuffle_mesh(mesh: Mesh, rng: torch.Generator) -> None:
 
         # Reorder cell data
         if mesh.cell_data is not None:
-            mesh.cell_data = _permute_tensordict(
+            mesh.cell_data = _permute_tensordict(  # ty: ignore[invalid-assignment]
                 mesh.cell_data,
                 perm_cells,
                 n_cells,
