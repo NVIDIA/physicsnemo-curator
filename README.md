@@ -60,14 +60,6 @@ pipeline components for users to create their own data processing pipelines.
 
 ### Installation
 
-#### Option 1: pip
-
-```bash
-pip install physicsnemo-curator
-```
-
-#### Option 2: From source with uv
-
 ```bash
 git clone git@github.com:NVIDIA/physicsnemo-curator.git
 cd physicsnemo-curator
@@ -80,31 +72,35 @@ uv run maturin develop
 uv run pre-commit install
 ```
 
-### Quick Start
+### Quick Start Sample
+
+Curate a simple global weather dataset:
+
+```bash
+# First install the data array dependency group
+uv sync --extra da
+```
 
 ```python
-from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
-from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
-from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+from datetime import datetime, timedelta
+
+from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
+from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
+from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
 from physicsnemo_curator.run import run_pipeline
 
-# Build a pipeline: Source → Filters → Sink
+# Hourly timestamps for one day
+times = [datetime(2020, 1, 1) + timedelta(hours=h) for h in range(24)]
+
+# Source → Filter → Sink
 pipeline = (
-    DrivAerMLSource(mesh_type="boundary")
-    .filter(MeshStatsFilter(output="stats.parquet"))
-    .filter(PrecisionFilter(target_dtype="float32"))
-    .write(MeshSink(output_dir="output/meshes/"))
+    ERA5Source(times=times, variables=["u10m", "v10m", "t2m"], backend="arco")
+    .filter(DataArrayStatsFilter(output="output/stats.zarr", dims=("time",)))
+    .write(ZarrSink(output_path="output/dataset.zarr"))
 )
 
-# Execute in parallel (4 workers, first 10 runs)
-results = run_pipeline(
-    pipeline,
-    n_jobs=4,
-    backend="process_pool",
-    indices=range(10),
-    progress=True,
-)
+# Execute in parallel
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 ```
 
 ### Optional Dependencies
