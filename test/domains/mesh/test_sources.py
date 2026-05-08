@@ -89,65 +89,6 @@ class TestAhmedMLSourceUnit:
         assert len(AhmedMLSource.description) > 0
 
 
-@pytest.mark.requires("mesh")
-class TestWindsorMLSourceUnit:
-    """Unit tests for WindsorMLSource parameter descriptors."""
-
-    def test_params_list(self) -> None:
-        """params() should return a non-empty list of Param objects."""
-        from physicsnemo_curator.domains.mesh.sources.windsorml import WindsorMLSource
-
-        params = WindsorMLSource.params()
-        assert len(params) > 0
-        names = [p.name for p in params]
-        assert "mesh_type" in names
-
-    def test_mesh_type_choices(self) -> None:
-        """WindsorML should only offer boundary and volume (no slices)."""
-        from physicsnemo_curator.domains.mesh.sources.windsorml import WindsorMLSource
-
-        params = WindsorMLSource.params()
-        mesh_type_param = next(p for p in params if p.name == "mesh_type")
-        assert mesh_type_param.choices == ["boundary", "volume"]
-
-    def test_name_and_description(self) -> None:
-        """Class should have name and description ClassVars."""
-        from physicsnemo_curator.domains.mesh.sources.windsorml import WindsorMLSource
-
-        assert WindsorMLSource.name == "WindsorML"
-        assert len(WindsorMLSource.description) > 0
-
-
-@pytest.mark.requires("mesh")
-class TestWindTunnelSourceUnit:
-    """Unit tests for WindTunnelSource parameter descriptors."""
-
-    def test_params_list(self) -> None:
-        """params() should return a non-empty list of Param objects."""
-        from physicsnemo_curator.domains.mesh.sources.windtunnel import WindTunnelSource
-
-        params = WindTunnelSource.params()
-        assert len(params) > 0
-        names = [p.name for p in params]
-        assert "split" in names
-        assert "mesh_type" not in names  # uses 'split' instead
-
-    def test_split_choices(self) -> None:
-        """WindTunnel should offer train/validation/test/all splits."""
-        from physicsnemo_curator.domains.mesh.sources.windtunnel import WindTunnelSource
-
-        params = WindTunnelSource.params()
-        split_param = next(p for p in params if p.name == "split")
-        assert split_param.choices == ["train", "validation", "test", "all"]
-
-    def test_name_and_description(self) -> None:
-        """Class should have name and description ClassVars."""
-        from physicsnemo_curator.domains.mesh.sources.windtunnel import WindTunnelSource
-
-        assert WindTunnelSource.name == "WindTunnel-20k"
-        assert len(WindTunnelSource.description) > 0
-
-
 # ---------------------------------------------------------------------------
 # Unit tests — Registry integration
 # ---------------------------------------------------------------------------
@@ -158,7 +99,7 @@ class TestRegistryIntegration:
     """Verify that all dataset sources are registered correctly."""
 
     def test_all_sources_registered(self) -> None:
-        """All four dataset sources should appear in the mesh registry."""
+        """Dataset sources should appear in the mesh registry."""
         import physicsnemo_curator.domains.mesh  # noqa: F401
         from physicsnemo_curator.core.registry import registry
 
@@ -166,8 +107,6 @@ class TestRegistryIntegration:
         source_names = {s.name for s in sources}
         assert "DrivAerML" in source_names
         assert "AhmedML" in source_names
-        assert "WindsorML" in source_names
-        assert "WindTunnel-20k" in source_names
 
 
 # ---------------------------------------------------------------------------
@@ -331,103 +270,3 @@ class TestAhmedMLSourceE2E:
         """Boundary meshes should carry flow field cell data."""
         mesh = next(self.source[0])
         assert len(mesh.cell_data) > 0
-
-
-# ---------------------------------------------------------------------------
-# E2E tests — WindsorML
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.requires("mesh")
-@pytest.mark.e2e
-@pytest.mark.slow
-class TestWindsorMLSourceE2E:
-    """End-to-end tests fetching real WindsorML data from HuggingFace."""
-
-    @pytest.fixture(autouse=True)
-    def _setup(self, tmp_path: pathlib.Path) -> None:
-        """Build the source with a local cache directory."""
-        from physicsnemo_curator.domains.mesh.sources.windsorml import WindsorMLSource
-
-        try:
-            self.source = WindsorMLSource(
-                mesh_type="boundary",
-                cache_storage=str(tmp_path / "cache"),
-                warn_on_lost_data=False,
-            )
-        except _NETWORK_ERRORS as exc:
-            pytest.skip(f"HuggingFace API unreachable: {exc}")
-        self.tmp_path = tmp_path
-
-    def test_discovers_runs(self) -> None:
-        """Should discover 350 runs."""
-        assert len(self.source) == 350
-
-    def test_run_indices_start_from_zero(self) -> None:
-        """WindsorML runs start at run_0."""
-        assert self.source._run_indices[0] == 0
-
-    def test_reads_boundary_mesh(self) -> None:
-        """Should read the first boundary mesh as a valid Mesh."""
-        from physicsnemo.mesh import Mesh
-
-        mesh = next(self.source[0])
-        assert isinstance(mesh, Mesh)
-        assert mesh.n_points > 0
-        assert mesh.n_cells > 0
-
-    def test_boundary_is_surface(self) -> None:
-        """Boundary meshes should be 2D surfaces in 3D space."""
-        mesh = next(self.source[0])
-        assert mesh.n_spatial_dims == 3
-        assert mesh.n_manifold_dims == 2
-
-    def test_boundary_has_cell_data(self) -> None:
-        """Boundary meshes should carry flow field data."""
-        mesh = next(self.source[0])
-        assert len(mesh.cell_data) > 0
-
-
-# ---------------------------------------------------------------------------
-# E2E tests — WindTunnel-20k
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.requires("mesh")
-@pytest.mark.e2e
-@pytest.mark.slow
-class TestWindTunnelSourceE2E:
-    """End-to-end tests fetching real WindTunnel-20k data from HuggingFace."""
-
-    @pytest.fixture(autouse=True)
-    def _setup(self, tmp_path: pathlib.Path) -> None:
-        """Build the source for the test split (smallest)."""
-        from physicsnemo_curator.domains.mesh.sources.windtunnel import WindTunnelSource
-
-        try:
-            self.source = WindTunnelSource(
-                split="test",
-                cache_storage=str(tmp_path / "cache"),
-                warn_on_lost_data=False,
-            )
-        except _NETWORK_ERRORS as exc:
-            pytest.skip(f"HuggingFace API unreachable: {exc}")
-        self.tmp_path = tmp_path
-
-    def test_discovers_simulations(self) -> None:
-        """Test split should have ~1,980 simulations."""
-        assert len(self.source) > 1000
-
-    def test_reads_pressure_field_mesh(self) -> None:
-        """Should read the first pressure field mesh as a valid Mesh."""
-        from physicsnemo.mesh import Mesh
-
-        mesh = next(self.source[0])
-        assert isinstance(mesh, Mesh)
-        assert mesh.n_points > 0
-
-    def test_mesh_has_point_data(self) -> None:
-        """Pressure field meshes should have point data (pressure)."""
-        mesh = next(self.source[0])
-        # WindTunnel pressure field has 'p' as point data.
-        assert mesh.n_points > 0
