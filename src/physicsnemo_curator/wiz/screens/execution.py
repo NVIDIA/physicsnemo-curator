@@ -87,7 +87,7 @@ class ExecutionScreen(Screen[None]):
         """
         app: CuratorApp = self.app  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         pipeline = app.state.pipeline
-        n = len(pipeline)  # ty: ignore[invalid-argument-type]
+        n = len(pipeline)
         all_paths: list[list[str]] = []
         start = time.monotonic()
 

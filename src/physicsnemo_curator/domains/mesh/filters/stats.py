@@ -607,7 +607,7 @@ class MeshStatsFilter(Filter["Mesh"]):
             sizing_mode="fixed",
         )
 
-        @pn.depends(  # ty: ignore[invalid-argument-type]
+        @pn.depends(
             x_select.param.value,
             y_select.param.value,
             field_key_filter.param.value,

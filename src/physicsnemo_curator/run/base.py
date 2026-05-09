@@ -459,7 +459,7 @@ def batch_groups(groups: list[list[int]], n_workers: int) -> list[list[int]]:
 
     for group in sorted_groups:
         size, batch_idx = heapq.heappop(heap)
-        batches[batch_idx].extend(group)  # ty: ignore[invalid-argument-type]
+        batches[batch_idx].extend(group)
         heapq.heappush(heap, (size + len(group), batch_idx))
 
     # Remove empty batches (if n_workers > n_groups, already handled above).

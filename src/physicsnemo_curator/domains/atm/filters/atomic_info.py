@@ -327,7 +327,7 @@ class AtomicInfoFilter(Filter["AtomicData"]):
         info : dict[str, object]
             Atomic data metadata dictionary.
         """
-        memory_mb = int(info.get("memory_estimate_bytes", 0)) / (1024 * 1024)  # ty: ignore[invalid-argument-type]
+        memory_mb = int(info.get("memory_estimate_bytes", 0)) / (1024 * 1024)
         msg = (
             f"AtomicData {info['item_index']}: "
             f"{info['n_atoms']} atoms, {info['n_edges']} edges, "

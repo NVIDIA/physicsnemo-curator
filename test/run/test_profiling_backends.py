@@ -120,7 +120,7 @@ class TestSequentialProfiling:
         """Profiled results should match non-profiled results."""
         raw_pipeline = Pipeline(
             source=_ProfNumberSource(5),
-            filters=[_ProfDoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_ProfDoubleFilter()],
             sink=_ProfListSink(),
             track_metrics=False,
         )
@@ -160,7 +160,7 @@ class TestThreadPoolProfiling:
         """Process pool profiled results match raw results."""
         raw_pipeline = Pipeline(
             source=_ProfNumberSource(5),
-            filters=[_ProfDoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_ProfDoubleFilter()],
             sink=_ProfListSink(),
             track_metrics=False,
         )
@@ -190,7 +190,7 @@ class TestProcessPoolProfiling:
         """Process pool profiled results match raw results."""
         raw_pipeline = Pipeline(
             source=_ProfNumberSource(5),
-            filters=[_ProfDoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_ProfDoubleFilter()],
             sink=_ProfListSink(),
             track_metrics=False,
         )

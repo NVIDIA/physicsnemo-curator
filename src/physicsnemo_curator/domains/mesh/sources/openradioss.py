@@ -437,7 +437,7 @@ class OpenRadiossSource(Source["Mesh"]):
             for t in range(n_timesteps):
                 pd_dict[f"stress_vm_t{t:03d}"] = torch.from_numpy(stress_vm[t])
 
-        point_data = TensorDict(pd_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
+        point_data = TensorDict(pd_dict, batch_size=[n_points])
 
         # Build cell_data — not used for mixed mode (cell types are in global_data)
         cd: TensorDict | None = None
@@ -464,7 +464,7 @@ class OpenRadiossSource(Source["Mesh"]):
             gd_dict["mixed_offsets"] = torch.from_numpy(offsets)
             gd_dict["mixed_cell_types"] = torch.from_numpy(cell_types.astype(np.int64))
 
-        global_data = TensorDict(gd_dict, batch_size=[])  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+        global_data = TensorDict(gd_dict, batch_size=[])  # type: ignore[arg-type]
 
         # Build mesh
         points_tensor = torch.from_numpy(coords)

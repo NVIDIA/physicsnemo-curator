@@ -77,7 +77,7 @@ def _permute_tensordict(
                 permuted[str(key)] = result
         elif child is not None:
             permuted[str(key)] = child[perm]
-    return TensorDict(permuted, batch_size=[new_size])  # ty: ignore[invalid-argument-type]
+    return TensorDict(permuted, batch_size=[new_size])
 
 
 def _shuffle_mesh(mesh: Mesh, rng: torch.Generator) -> None:

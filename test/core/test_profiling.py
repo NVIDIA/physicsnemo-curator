@@ -308,14 +308,14 @@ class TestProfiledPipeline:
         """Pipeline with metrics returns same results as without."""
         pipeline_metrics = Pipeline(
             source=_TimedSource(3, delay=0.0),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_CollectSink(),
             track_metrics=True,
             db_dir=tmp_path / ".pnc",
         )
         pipeline_plain = Pipeline(
             source=_TimedSource(3, delay=0.0),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_CollectSink(),
             track_metrics=False,
         )
@@ -327,7 +327,7 @@ class TestProfiledPipeline:
         """Single index produces IndexMetrics with correct stage count."""
         pipeline = Pipeline(
             source=_TimedSource(2, delay=0.001),
-            filters=[_SlowFilter(delay=0.001)],  # ty: ignore[invalid-argument-type]
+            filters=[_SlowFilter(delay=0.001)],
             sink=_CollectSink(),
             track_metrics=True,
             db_dir=tmp_path / ".pnc",
@@ -348,7 +348,7 @@ class TestProfiledPipeline:
         """Each stage has positive wall time."""
         pipeline = Pipeline(
             source=_TimedSource(1, delay=0.005),
-            filters=[_SlowFilter(delay=0.005)],  # ty: ignore[invalid-argument-type]
+            filters=[_SlowFilter(delay=0.005)],
             sink=_CollectSink(),
             track_metrics=True,
             db_dir=tmp_path / ".pnc",
@@ -363,7 +363,7 @@ class TestProfiledPipeline:
         """Sum of stage times should approximate total index time."""
         pipeline = Pipeline(
             source=_TimedSource(1, delay=0.01),
-            filters=[_SlowFilter(delay=0.01)],  # ty: ignore[invalid-argument-type]
+            filters=[_SlowFilter(delay=0.01)],
             sink=_CollectSink(),
             track_metrics=True,
             db_dir=tmp_path / ".pnc",
@@ -420,7 +420,7 @@ class TestProfiledPipeline:
         """Metrics are collected for all indices."""
         pipeline = Pipeline(
             source=_TimedSource(5, delay=0.0),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_CollectSink(),
             track_metrics=True,
             db_dir=tmp_path / ".pnc",
@@ -452,7 +452,7 @@ class TestProfiledPipeline:
         """Errors in stages propagate without being swallowed."""
         pipeline = Pipeline(
             source=_TimedSource(1, delay=0.0),
-            filters=[_ErrorFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_ErrorFilter()],
             sink=_CollectSink(),
             track_metrics=True,
             db_dir=tmp_path / ".pnc",
@@ -464,7 +464,7 @@ class TestProfiledPipeline:
         """Pipeline with track_metrics survives pickle round-trip."""
         pipeline = Pipeline(
             source=_TimedSource(3, delay=0.0),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_CollectSink(),
             track_metrics=True,
             db_dir=tmp_path / ".pnc",
@@ -569,7 +569,7 @@ class TestConcurrentMetrics:
         """Multiple threads calling __getitem__ concurrently."""
         pipeline = Pipeline(
             source=_TimedSource(20, delay=0.0),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_CollectSink(),
             track_metrics=True,
             db_dir=tmp_path / ".pnc",

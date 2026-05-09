@@ -15,3 +15,9 @@
 # limitations under the License.
 
 """DataArray source components for the ``da`` submodule."""
+
+from physicsnemo_curator.domains.da.sources.random import RandomDataArraySource
+
+__all__ = [
+    "RandomDataArraySource",
+]

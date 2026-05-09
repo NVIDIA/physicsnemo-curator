@@ -59,13 +59,13 @@ def simple_mesh():
         disp = rng.uniform(-1, 1, size=(n_points, 3)).astype(np.float32)
         pd_dict[f"displacement_t{t:03d}"] = torch.from_numpy(disp)
 
-    point_data = TensorDict(pd_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
+    point_data = TensorDict(pd_dict, batch_size=[n_points])
 
     # Cell data with stress
     cd_dict: dict[str, torch.Tensor] = {}
     for t in range(n_timesteps):
         cd_dict[f"stress_vm_t{t:03d}"] = torch.from_numpy(rng.uniform(0, 100, size=(n_cells,)).astype(np.float32))
-    cell_data = TensorDict(cd_dict, batch_size=[n_cells])  # ty: ignore[invalid-argument-type]
+    cell_data = TensorDict(cd_dict, batch_size=[n_cells])
 
     return Mesh(
         points=points,
@@ -98,7 +98,7 @@ def triangle_mesh():
 
     pd_dict: dict[str, torch.Tensor] = {}
     pd_dict["displacement_t000"] = torch.zeros(n_points, 3, dtype=torch.float32)
-    point_data = TensorDict(pd_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
+    point_data = TensorDict(pd_dict, batch_size=[n_points])
 
     return Mesh(points=points, cells=cells, point_data=point_data)
 
@@ -322,7 +322,7 @@ class TestMeshVTUSinkIntegration:
         pd_dict["displacement_t000"] = torch.zeros(n_points, 3, dtype=torch.float32)
         pd_dict["stress_vm_t000"] = torch.from_numpy(rng.uniform(0, 100, size=(n_points,)).astype(np.float32))
         pd_dict["stress_vm_t001"] = torch.from_numpy(rng.uniform(0, 100, size=(n_points,)).astype(np.float32))
-        point_data = TensorDict(pd_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
+        point_data = TensorDict(pd_dict, batch_size=[n_points])
 
         mesh = Mesh(points=points, cells=None, point_data=point_data)
 

@@ -220,7 +220,7 @@ def _remap_mixed_connectivity(
     gd_dict["mixed_offsets"] = torch.from_numpy(new_offsets_arr)
     gd_dict["mixed_cell_types"] = torch.from_numpy(new_cell_types)
 
-    new_global_data = TensorDict(gd_dict, batch_size=[])  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    new_global_data = TensorDict(gd_dict, batch_size=[])  # type: ignore[arg-type]
 
     return new_global_data, cell_valid
 
@@ -255,7 +255,7 @@ def _filter_tensordict(
         val = td.get(key)
         if val is not None:
             filtered[str(key)] = val[idx]
-    return TensorDict(filtered, batch_size=[new_size])  # ty: ignore[invalid-argument-type]
+    return TensorDict(filtered, batch_size=[new_size])
 
 
 class WallNodeFilter(Filter["Mesh"]):

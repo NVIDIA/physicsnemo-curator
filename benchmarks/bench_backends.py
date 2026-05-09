@@ -120,7 +120,7 @@ class TimeBackendScaling:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[filt],  # ty: ignore[invalid-argument-type]
+            filters=[filt],
             sink=sink,
             track_metrics=False,
             track_memory=False,
@@ -179,7 +179,7 @@ class TimeBackendWithIO:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[precision],  # ty: ignore[invalid-argument-type]
+            filters=[precision],
             sink=sink,
             track_metrics=False,
             track_memory=False,
@@ -224,7 +224,7 @@ class MemBackendOverhead:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[filt],  # ty: ignore[invalid-argument-type]
+            filters=[filt],
             sink=sink,
             track_metrics=False,
             track_memory=False,
@@ -267,7 +267,7 @@ class TrackBackendSpeedup:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[filt],  # ty: ignore[invalid-argument-type]
+            filters=[filt],
             sink=sink,
             track_metrics=False,
             track_memory=False,

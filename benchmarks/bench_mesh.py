@@ -60,7 +60,7 @@ class TimeMeshE2E:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[precision, info],  # ty: ignore[invalid-argument-type]
+            filters=[precision, info],
             sink=sink,
             track_metrics=False,
             track_memory=False,
@@ -116,7 +116,7 @@ class MemMeshE2E:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[precision, info],  # ty: ignore[invalid-argument-type]
+            filters=[precision, info],
             sink=sink,
             track_metrics=False,
             track_memory=False,

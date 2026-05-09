@@ -335,7 +335,7 @@ class TestLoadPipeline:
         out_dir = tmp_path / "output"
         pipeline = Pipeline(
             source=_IntSource(count=1),
-            filters=[_AddFilter(amount=10)],  # ty: ignore[invalid-argument-type]
+            filters=[_AddFilter(amount=10)],
             sink=_FileSink(output_dir=str(out_dir)),
         )
         path = tmp_path / "pipeline.json"
@@ -350,7 +350,7 @@ class TestLoadPipeline:
         out_dir = tmp_path / "output"
         pipeline = Pipeline(
             source=_IntSource(count=1),
-            filters=[_AddFilter(amount=10)],  # ty: ignore[invalid-argument-type]
+            filters=[_AddFilter(amount=10)],
             sink=_FileSink(output_dir=str(out_dir)),
         )
         path = tmp_path / "pipeline.yaml"

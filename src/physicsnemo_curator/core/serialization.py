@@ -295,7 +295,7 @@ def deserialize_pipeline(data: dict[str, Any]) -> Pipeline[Any]:
     if data.get("sink") is not None:
         sink = _reconstruct_component(data["sink"])
 
-    return Pipeline(source=source, filters=filters, sink=sink)  # ty: ignore[invalid-argument-type]
+    return Pipeline(source=source, filters=filters, sink=sink)
 
 
 def load_pipeline(path: str | pathlib.Path) -> Pipeline[Any]:

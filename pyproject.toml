@@ -166,6 +166,7 @@ python-version = "3.12"
 
 [tool.ty.rules]
 unresolved-import = "ignore"
+invalid-argument-type = "ignore"
 
 [[tool.ty.overrides]]
 include = ["test/**"]

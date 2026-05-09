@@ -99,7 +99,7 @@ class TimeDAE2E:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[moments],  # ty: ignore[invalid-argument-type]
+            filters=[moments],
             sink=sink,
             track_metrics=False,
             track_memory=False,
@@ -141,7 +141,7 @@ class MemDAE2E:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[moments],  # ty: ignore[invalid-argument-type]
+            filters=[moments],
             sink=sink,
             track_metrics=False,
             track_memory=False,

@@ -366,7 +366,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         var_select = pn.widgets.Select(name="Variable", options=var_names, value=var_names[0])
         stat_select = pn.widgets.Select(name="Statistic", options=stat_names, value="mean")
 
-        @pn.depends(  # ty: ignore[invalid-argument-type]
+        @pn.depends(
             var_select.param.value,
             stat_select.param.value,
         )

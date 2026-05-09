@@ -615,7 +615,7 @@ class Pipeline[T]:
             current_stream: _TimedGenerator[T] = timed_source
 
             for f in self.filters:
-                raw_output = f(current_stream)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+                raw_output = f(current_stream)  # type: ignore[arg-type]
                 wrapped: _TimedGenerator[T] = _TimedGenerator(raw_output)
                 filter_wrappers.append(wrapped)
                 current_stream = wrapped

@@ -26,6 +26,7 @@ from physicsnemo_curator.domains.mesh.sources.d3plot import D3PlotSource
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 from physicsnemo_curator.domains.mesh.sources.openradioss import OpenRadiossSource
+from physicsnemo_curator.domains.mesh.sources.random import RandomMeshSource
 from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "DrivAerMLSource",
     "NavierStokesCylinderSource",
     "OpenRadiossSource",
+    "RandomMeshSource",
     "VTKSource",
 ]

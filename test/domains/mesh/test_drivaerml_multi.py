@@ -84,7 +84,7 @@ class TestMeshSinkRunIdPlaceholder:
             run_ids=[5, 12],
             mesh_names_map={"domain": "domain_{run_id}"},
         )
-        sink.set_source(source)  # ty: ignore[invalid-argument-type]
+        sink.set_source(source)
 
         meshes = iter([_make_simple_mesh()])
         paths = sink(meshes, index=0)
@@ -106,7 +106,7 @@ class TestMeshSinkRunIdPlaceholder:
                 "stl": "drivaer_{run_id}.stl",
             },
         )
-        sink.set_source(source)  # ty: ignore[invalid-argument-type]
+        sink.set_source(source)
 
         mesh1 = _make_simple_mesh()
         mesh2 = _make_simple_mesh()

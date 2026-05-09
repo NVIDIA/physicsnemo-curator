@@ -15,3 +15,9 @@
 # limitations under the License.
 
 """Data sources for the atm (atomic) submodule."""
+
+from physicsnemo_curator.domains.atm.sources.random import RandomAtomicSource
+
+__all__ = [
+    "RandomAtomicSource",
+]

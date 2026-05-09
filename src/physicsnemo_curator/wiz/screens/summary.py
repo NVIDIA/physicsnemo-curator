@@ -125,7 +125,7 @@ class SummaryScreen(Screen[None]):
             return
 
         try:
-            save_pipeline(app.state.pipeline, path)  # ty: ignore[invalid-argument-type]
+            save_pipeline(app.state.pipeline, path)
             self.notify(f"Saved to {path}", severity="information")
         except Exception as exc:  # noqa: BLE001
             self.notify(f"Save failed: {exc}", severity="error")

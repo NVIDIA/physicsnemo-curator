@@ -111,7 +111,7 @@ def _decode_ndarray_markers(obj: object) -> object:
     """
     if isinstance(obj, dict):
         if "__ndarray__" in obj:
-            marker: object = obj["__ndarray__"]  # ty: ignore[invalid-argument-type]
+            marker: object = obj["__ndarray__"]
             if not isinstance(marker, list) or len(marker) != 3:
                 return obj  # pragma: no cover — defensive
             shape: list[int] = marker[0]  # ty: ignore[invalid-assignment]

@@ -58,13 +58,13 @@ def simple_mesh():
         disp = rng.uniform(-1, 1, size=(n_points, 3)).astype(np.float32)
         pd_dict[f"displacement_t{t:03d}"] = torch.from_numpy(disp)
 
-    point_data = TensorDict(pd_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
+    point_data = TensorDict(pd_dict, batch_size=[n_points])
 
     # Cell data
     cd_dict: dict[str, torch.Tensor] = {}
     for t in range(n_timesteps):
         cd_dict[f"stress_vm_t{t:03d}"] = torch.from_numpy(rng.uniform(0, 100, size=(n_cells,)).astype(np.float32))
-    cell_data = TensorDict(cd_dict, batch_size=[n_cells])  # ty: ignore[invalid-argument-type]
+    cell_data = TensorDict(cd_dict, batch_size=[n_cells])
 
     # Global data with edges
     edges = torch.tensor([[0, 1], [1, 2], [2, 0], [0, 3]], dtype=torch.int64)
@@ -98,7 +98,7 @@ def mesh_without_edges():
     pd_dict: dict[str, torch.Tensor] = {}
     for t in range(n_timesteps):
         pd_dict[f"displacement_t{t:03d}"] = torch.randn(n_points, 3, dtype=torch.float32)
-    point_data = TensorDict(pd_dict, batch_size=[n_points])  # ty: ignore[invalid-argument-type]
+    point_data = TensorDict(pd_dict, batch_size=[n_points])
 
     global_data = TensorDict(
         {"num_timesteps": torch.tensor([n_timesteps], dtype=torch.int64)},

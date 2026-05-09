@@ -64,7 +64,7 @@ class DashboardStore(param.Parameterized):
         """Clear cached DataFrames so the next access re-queries."""
         self._cache.clear()
 
-    @param.depends("refresh", watch=True)  # ty: ignore[invalid-argument-type]
+    @param.depends("refresh", watch=True)
     def _on_refresh(self) -> None:
         """Invalidate cache when refresh is triggered."""
         self._invalidate()
@@ -128,7 +128,7 @@ class DashboardStore(param.Parameterized):
                 pd.DataFrame(rows)
                 if rows
                 else pd.DataFrame(
-                    columns=["index", "status", "wall_time_s", "peak_memory_mb", "gpu_memory_mb", "error"]  # ty: ignore[invalid-argument-type]
+                    columns=["index", "status", "wall_time_s", "peak_memory_mb", "gpu_memory_mb", "error"]
                 )
             )
             self._cache["index_df"] = df.sort_values("index").reset_index(drop=True)
@@ -161,7 +161,7 @@ class DashboardStore(param.Parameterized):
             df = (
                 pd.DataFrame(rows)
                 if rows
-                else pd.DataFrame(columns=["index", "stage_name", "stage_order", "wall_time_s"])  # ty: ignore[invalid-argument-type]
+                else pd.DataFrame(columns=["index", "stage_name", "stage_order", "wall_time_s"])
             )
             self._cache["stage_df"] = df
         return self._cache["stage_df"]
@@ -207,7 +207,7 @@ class DashboardStore(param.Parameterized):
                 pd.DataFrame(workers)
                 if workers
                 else pd.DataFrame(
-                    columns=["worker_id", "pid", "hostname", "started_at", "last_heartbeat", "current_index"]  # ty: ignore[invalid-argument-type]
+                    columns=["worker_id", "pid", "hostname", "started_at", "last_heartbeat", "current_index"]
                 )
             )
             self._cache["workers_df"] = df
@@ -283,7 +283,7 @@ class DashboardStore(param.Parameterized):
                 df = df[["time", "level_name", "worker_id", "idx", "message"]]
                 df = df.rename(columns={"level_name": "level", "idx": "index"})
             else:
-                df = pd.DataFrame(columns=["time", "level", "worker_id", "index", "message"])  # ty: ignore[invalid-argument-type]
+                df = pd.DataFrame(columns=["time", "level", "worker_id", "index", "message"])
             self._cache[cache_key] = df
         return self._cache[cache_key]
 

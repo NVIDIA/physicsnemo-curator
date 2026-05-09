@@ -298,7 +298,7 @@ class TestSkipLogic:
         db_dir = tmp_path / ".pnc"
         pipeline = Pipeline(
             source=_CountSource(count=3),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -313,7 +313,7 @@ class TestSkipLogic:
         # Second pipeline with same config gets a fresh DB
         pipeline2 = Pipeline(
             source=_CountSource(count=3),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -327,7 +327,7 @@ class TestSkipLogic:
         db_dir = tmp_path / ".pnc"
         pipeline = Pipeline(
             source=_CountSource(count=3),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -340,7 +340,7 @@ class TestSkipLogic:
         # Second pipeline with resume=True reuses the same DB
         pipeline2 = Pipeline(
             source=_CountSource(count=3),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -447,7 +447,7 @@ class TestProvenance:
         db_dir = tmp_path / ".pnc"
         pipeline1 = Pipeline(
             source=_CountSource(count=5),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -457,7 +457,7 @@ class TestProvenance:
 
         pipeline2 = Pipeline(
             source=_CountSource(count=5),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -472,7 +472,7 @@ class TestProvenance:
         db_dir = tmp_path / ".pnc"
         pipeline1 = Pipeline(
             source=_CountSource(count=5),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -484,7 +484,7 @@ class TestProvenance:
 
         pipeline2 = Pipeline(
             source=_CountSource(count=5),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -635,7 +635,7 @@ class TestRunPipelineIntegration:
 
         pipeline = Pipeline(
             source=_CountSource(count=5),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -648,7 +648,7 @@ class TestRunPipelineIntegration:
         # Second pipeline gets a fresh DB — processes all 5 from scratch
         pipeline2 = Pipeline(
             source=_CountSource(count=5),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -663,7 +663,7 @@ class TestRunPipelineIntegration:
 
         pipeline = Pipeline(
             source=_CountSource(count=5),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,
@@ -677,7 +677,7 @@ class TestRunPipelineIntegration:
         # Second pipeline with resume=True reuses the same DB
         pipeline2 = Pipeline(
             source=_CountSource(count=5),
-            filters=[_DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[_DoubleFilter()],
             sink=_PathSink(output_dir=str(tmp_path / "output")),
             track_metrics=True,
             db_dir=db_dir,

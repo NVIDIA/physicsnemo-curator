@@ -30,7 +30,7 @@ from physicsnemo_curator.run import run_pipeline
 # Build a Resumable Pipeline
 resumable = Pipeline(
     source=NavierStokesCylinderSource(),
-    filters=[PrecisionFilter(target_dtype="float32")],  # ty: ignore[invalid-argument-type]
+    filters=[PrecisionFilter(target_dtype="float32")],
     sink=MeshSink(output_dir="output/checkpoint/meshes/"),
     resume=True,
     db_dir=Path("output/checkpoint/"),

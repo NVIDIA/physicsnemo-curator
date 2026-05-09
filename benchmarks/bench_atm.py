@@ -42,7 +42,7 @@ class TimeATME2E:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[stats],  # ty: ignore[invalid-argument-type]
+            filters=[stats],
             sink=sink,
             track_metrics=False,
             track_memory=False,
@@ -86,7 +86,7 @@ class MemATME2E:
 
         self.pipeline = Pipeline(
             source=source,
-            filters=[stats],  # ty: ignore[invalid-argument-type]
+            filters=[stats],
             sink=sink,
             track_metrics=False,
             track_memory=False,

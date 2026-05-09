@@ -280,7 +280,7 @@ def pipeline_tab(store: DashboardStore, registry: WidgetRegistry) -> pn.Column:
 
         # Calculate pagination
         page_size = page_size_select.value
-        total_rows = len(filtered)  # ty: ignore[invalid-argument-type]
+        total_rows = len(filtered)
         total_pages = max(1, (total_rows + page_size - 1) // page_size)
         _state["total_pages"] = total_pages
 

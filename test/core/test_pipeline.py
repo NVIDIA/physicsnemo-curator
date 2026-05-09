@@ -470,7 +470,7 @@ class TestPsncCacheDirEnvVar:
         sink = CollectSink()
         pipeline = Pipeline(
             source=source,
-            filters=[DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[DoubleFilter()],
             sink=sink,
             track_metrics=True,
         )
@@ -492,7 +492,7 @@ class TestPsncCacheDirEnvVar:
         sink = CollectSink()
         pipeline = Pipeline(
             source=source,
-            filters=[DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[DoubleFilter()],
             sink=sink,
             track_metrics=True,
             db_dir=explicit_dir,
@@ -518,7 +518,7 @@ class TestDbPathProperty:
         sink = CollectSink()
         pipeline = Pipeline(
             source=source,
-            filters=[DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[DoubleFilter()],
             sink=sink,
             track_metrics=True,
             db_dir=tmp_path,
@@ -536,7 +536,7 @@ class TestDbPathProperty:
         sink = CollectSink()
         pipeline = Pipeline(
             source=source,
-            filters=[DoubleFilter()],  # ty: ignore[invalid-argument-type]
+            filters=[DoubleFilter()],
             sink=sink,
             track_metrics=False,
         )
@@ -602,7 +602,7 @@ class TestFilterArtifactsIntegration:
         sink = CollectSink()
         pipeline = Pipeline(
             source=source,
-            filters=[filt],  # ty: ignore[invalid-argument-type]
+            filters=[filt],
             sink=sink,
             track_metrics=True,
             db_dir=tmp_path / ".pnc",
@@ -633,7 +633,7 @@ class TestFilterArtifactsIntegration:
         sink = CollectSink()
         pipeline = Pipeline(
             source=source,
-            filters=[filt],  # ty: ignore[invalid-argument-type]
+            filters=[filt],
             sink=sink,
             track_metrics=True,
             db_dir=tmp_path / ".pnc",

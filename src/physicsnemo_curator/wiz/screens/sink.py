@@ -173,7 +173,7 @@ class SinkScreen(Screen[None]):
 
         # Build the full pipeline
         pipeline = Pipeline(
-            source=app.state.source_instance,  # ty: ignore[invalid-argument-type]
+            source=app.state.source_instance,
             filters=app.state.filter_instances,
             sink=sink_instance,
         )

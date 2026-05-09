@@ -264,7 +264,7 @@ def _logs_panel(store: DashboardStore) -> pn.Column:
     )
 
     # Create reactive filtered DataFrame
-    @pn.depends(worker_filter)  # ty: ignore[invalid-argument-type]
+    @pn.depends(worker_filter)
     def filtered_logs(selected_worker: str) -> pn.pane.DataFrame:
         """Filter logs by selected worker."""
         filtered = df if selected_worker == "All" else df[df["worker_id"] == selected_worker]

@@ -555,7 +555,7 @@ class AtomicStatsFilter(Filter["AtomicData"]):
             field_filter,
         )
 
-        @pn.depends(  # ty: ignore[invalid-argument-type]
+        @pn.depends(
             x_select.param.value,
             y_select.param.value,
             level_filter.param.value,
