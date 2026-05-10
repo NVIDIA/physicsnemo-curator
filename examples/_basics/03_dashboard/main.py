@@ -66,6 +66,6 @@ metrics.to_console()
 # from physicsnemo_curator.dashboard import launch
 # launch(str(pipeline.db_path), port=5006, open_browser=True)
 
-print(f"\nTo launch the dashboard manually, run:")
-print(f"  from physicsnemo_curator.dashboard import launch")
+print("\nTo launch the dashboard manually, run:")
+print("  from physicsnemo_curator.dashboard import launch")
 print(f"  launch('{pipeline.db_path}')")
