@@ -86,7 +86,7 @@ class SineFlowSource(Source["Mesh"]):
         pts = np.stack([xx.ravel(), yy.ravel(), np.zeros(side * side, dtype=np.float32)], axis=1)
         # Add small jitter
         pts[:, :2] += rng.standard_normal(pts[:, :2].shape).astype(np.float32) * 0.01
-        self._points = torch.from_numpy(pts[: n_points])
+        self._points = torch.from_numpy(pts[:n_points])
 
         # Simple triangulation: connect adjacent grid points
         cells = []
