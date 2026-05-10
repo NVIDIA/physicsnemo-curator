@@ -61,6 +61,9 @@ results = run_pipeline(
 )
 ```
 
+> **Note:** If the TUI progress display is not useful for your workflow, set `use_tui=False` to
+> get a traditional console log instead.
+
 ### 3. Inspect Results
 
 `results` is a list of lists — one entry per processed index, each containing the file paths
