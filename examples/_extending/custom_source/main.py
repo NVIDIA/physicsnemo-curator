@@ -21,12 +21,9 @@ See README.md for a full walkthrough of this example.
 
 from __future__ import annotations
 
-import tempfile
 from typing import TYPE_CHECKING, ClassVar
 
-import fsspec
 import numpy as np
-import pyarrow.parquet as pq
 import torch
 from physicsnemo.mesh import Mesh
 from tensordict import TensorDict
@@ -36,32 +33,29 @@ from physicsnemo_curator.core.base import Param, Source
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    import pyarrow as pa
-
-
-_DEFAULT_URL = "hf://datasets/SISSAmathLab/navier-stokes-cylinder"
-
 
 # Step 1 — Define the Source
 
 
-class CylinderFlowSource(Source["Mesh"]):
-    """Read Navier-Stokes cylinder flow data from HuggingFace Parquet.
+class SineFlowSource(Source["Mesh"]):
+    """Generate synthetic 2D flow fields with a sinusoidal velocity pattern.
 
-    Each pipeline index corresponds to one simulation (viscosity
-    parameter).  The underlying geometry (nodes and triangles) is
-    shared across all simulations and cached on first access.
+    Each pipeline index corresponds to a different phase offset, producing
+    a family of flow fields on a shared triangular grid.  No network access
+    or external data files are required.
 
     Parameters
     ----------
-    url : str
-        HuggingFace Hub dataset URL.
-    cache_storage : str
-        Local directory for caching downloaded Parquet files.
+    n_samples : int
+        Number of flow snapshots this source provides.
+    n_points : int
+        Number of mesh vertices (arranged on a regular grid).
+    seed : int
+        Random seed for mesh geometry jitter.
     """
 
-    name: ClassVar[str] = "Cylinder Flow (Custom)"
-    description: ClassVar[str] = "Read NS cylinder flow from HF Parquet files"
+    name: ClassVar[str] = "Sine Flow (Custom)"
+    description: ClassVar[str] = "Generate synthetic sinusoidal flow on a 2D mesh"
 
     @classmethod
     def params(cls) -> list[Param]:
@@ -70,71 +64,59 @@ class CylinderFlowSource(Source["Mesh"]):
         Returns
         -------
         list[Param]
-            Parameters: url (str), cache_storage (str).
+            Parameters: n_samples, n_points, seed.
         """
         return [
-            Param(name="url", description="HuggingFace dataset URL", type=str, default=_DEFAULT_URL),
-            Param(name="cache_storage", description="Local cache directory", type=str, default=""),
+            Param(name="n_samples", description="Number of flow snapshots", type=int, default=10),
+            Param(name="n_points", description="Number of mesh vertices", type=int, default=100),
+            Param(name="seed", description="Random seed for geometry", type=int, default=42),
         ]
 
-    def __init__(self, url: str = _DEFAULT_URL, cache_storage: str = "") -> None:
-        self._url = url
-        self._cache = cache_storage or tempfile.mkdtemp(prefix="curator_cylinder_")
+    def __init__(self, n_samples: int = 10, n_points: int = 100, seed: int = 42) -> None:
+        self._n_samples = n_samples
+        self._n_points = n_points
+        self._seed = seed
 
-        # Eagerly load lightweight metadata
-        fs = fsspec.filesystem("hf")
-        self._fs = fs
+        # Build a simple 2D grid with triangulation
+        rng = np.random.default_rng(seed)
+        side = int(np.ceil(np.sqrt(n_points)))
+        xs = np.linspace(0, 1, side, dtype=np.float32)
+        ys = np.linspace(0, 1, side, dtype=np.float32)
+        xx, yy = np.meshgrid(xs, ys)
+        pts = np.stack([xx.ravel(), yy.ravel(), np.zeros(side * side, dtype=np.float32)], axis=1)
+        # Add small jitter
+        pts[:, :2] += rng.standard_normal(pts[:, :2].shape).astype(np.float32) * 0.01
+        self._points = torch.from_numpy(pts[: n_points])
 
-        params_path = f"{url}/parameters/part.0.parquet"
-        with fsspec.open(params_path, "rb", hf=fs) as f:
-            self._params_table: pa.Table = pq.read_table(f)
-        self._count = len(self._params_table)
-
-        # Lazy geometry cache
-        self._points: torch.Tensor | None = None
-        self._cells: torch.Tensor | None = None
-
-    def _load_geometry(self) -> None:
-        """Load shared geometry (nodes + triangles) on first access."""
-        if self._points is not None:
-            return
-
-        geo_path = f"{self._url}/geometry/part.0.parquet"
-        with fsspec.open(geo_path, "rb", hf=self._fs) as f:
-            geo_table = pq.read_table(f)
-
-        x = np.array(geo_table.column("x"))
-        y = np.array(geo_table.column("y"))
-        n_points = len(x)
-
-        self._points = torch.stack(
-            [
-                torch.from_numpy(x).float(),
-                torch.from_numpy(y).float(),
-                torch.zeros(n_points),
-            ],
-            dim=1,
-        )
-
-        cells_flat = np.array(geo_table.column("triangles")[0].as_py())
-        self._cells = torch.from_numpy(cells_flat.reshape(-1, 3).astype(np.int64))
+        # Simple triangulation: connect adjacent grid points
+        cells = []
+        for i in range(side - 1):
+            for j in range(side - 1):
+                v0 = i * side + j
+                v1 = v0 + 1
+                v2 = v0 + side
+                v3 = v2 + 1
+                if v3 < n_points:
+                    cells.append([v0, v1, v2])
+                    cells.append([v1, v3, v2])
+        self._cells = torch.tensor(cells, dtype=torch.int64) if cells else torch.zeros((0, 3), dtype=torch.int64)
 
     def __len__(self) -> int:
-        """Return the number of simulations."""
-        return self._count
+        """Return the number of flow snapshots."""
+        return self._n_samples
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
-        """Yield a Mesh for the simulation at *index*.
+        """Yield a Mesh for the flow snapshot at *index*.
 
         Parameters
         ----------
         index : int
-            Zero-based simulation index.  Negative indices supported.
+            Zero-based snapshot index.  Negative indices supported.
 
         Yields
         ------
         Mesh
-            Mesh with velocity and pressure fields.
+            Mesh with velocity_x, velocity_y, and pressure fields.
 
         Raises
         ------
@@ -147,32 +129,27 @@ class CylinderFlowSource(Source["Mesh"]):
             msg = f"Index {index} out of range for source with {len(self)} items."
             raise IndexError(msg)
 
-        self._load_geometry()
-        assert self._points is not None
-        assert self._cells is not None
+        # Generate sinusoidal flow with phase offset per index
+        phase = 2.0 * np.pi * index / self._n_samples
+        x_coords = self._points[:, 0].numpy()
+        y_coords = self._points[:, 1].numpy()
 
-        snap_path = f"{self._url}/snapshots/part.0.parquet"
-        with fsspec.open(snap_path, "rb", hf=self._fs) as f:
-            snap_table = pq.read_table(f)
-
-        row = snap_table.slice(index, 1)
-        vx = np.array(row.column("velocity_x")[0].as_py(), dtype=np.float32)
-        vy = np.array(row.column("velocity_y")[0].as_py(), dtype=np.float32)
-        p = np.array(row.column("pressure")[0].as_py(), dtype=np.float32)
+        vx = np.sin(2 * np.pi * x_coords + phase).astype(np.float32)
+        vy = np.cos(2 * np.pi * y_coords + phase).astype(np.float32)
+        pressure = (np.sin(np.pi * x_coords) * np.cos(np.pi * y_coords)).astype(np.float32)
 
         n_points = self._points.shape[0]
         point_data = TensorDict(
             {
                 "velocity_x": torch.from_numpy(vx),
                 "velocity_y": torch.from_numpy(vy),
-                "pressure": torch.from_numpy(p),
+                "pressure": torch.from_numpy(pressure),
             },
             batch_size=[n_points],
         )
 
-        viscosity = float(self._params_table.column("viscosity")[index].as_py())
         global_data = TensorDict(
-            {"viscosity": torch.tensor(viscosity)},
+            {"phase": torch.tensor(phase, dtype=torch.float32)},
             batch_size=[],
         )
 
@@ -186,13 +163,14 @@ class CylinderFlowSource(Source["Mesh"]):
 
 # Step 2 — Register the Source (Optional)
 
+import physicsnemo_curator.domains.mesh  # noqa: F401 - registers "mesh" submodule
 from physicsnemo_curator.core.registry import registry
 
-registry.register_source("mesh", CylinderFlowSource)
+registry.register_source("mesh", SineFlowSource)
 
 registered = registry.sources("mesh")
 print(f"Registered mesh sources: {list(registered.keys())}")
-assert "Cylinder Flow (Custom)" in registered
+assert "Sine Flow (Custom)" in registered
 
 # Step 3 — Use in a Pipeline
 
@@ -200,11 +178,11 @@ from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.run import run_pipeline
 
-source = CylinderFlowSource()
+source = SineFlowSource(n_samples=5, n_points=64)
 print(f"Simulations available: {len(source)}")
 
-pipeline = source.filter(MeanFilter(output="output/extending/cylinder_stats.parquet")).write(
-    MeshSink(output_dir="output/extending/cylinder_meshes/")
+pipeline = source.filter(MeanFilter(output="output/extending/sine_stats.parquet")).write(
+    MeshSink(output_dir="output/extending/sine_meshes/")
 )
 
 results = run_pipeline(

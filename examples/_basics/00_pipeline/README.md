@@ -1,14 +1,13 @@
 # Creating a Pipeline
 
 This example shows how to build a data curation pipeline using the **Source -> Filter -> Sink**
-pattern. We read meshes from the Navier-Stokes Cylinder dataset, apply statistics and precision
-filters, and write outputs to disk. A pipeline is lazy — nothing is executed until you index into
-it with `pipeline[i]`.
+pattern. We generate random meshes, apply statistics and precision filters, and write outputs to
+disk. A pipeline is lazy — nothing is executed until you index into it with `pipeline[i]`.
 
 ## Prerequisites
 
 ```bash
-uv sync --group mesh
+uv sync --extra mesh
 uv run maturin develop
 ```
 
@@ -22,13 +21,13 @@ uv run python main.py
 
 ### 1. Create a Source
 
-A **Source** is an indexed collection of data items. `NavierStokesCylinderSource` provides 500
-Navier-Stokes flow simulations as `Mesh` objects.
+A **Source** is an indexed collection of data items. `RandomMeshSource` generates synthetic
+tetrahedral meshes with configurable point/cell counts and random scalar fields.
 
 ```python
-from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.domains.mesh.sources.random import RandomMeshSource
 
-source = NavierStokesCylinderSource()
+source = RandomMeshSource(n_samples=10, n_points=100, n_cells=50)
 print(f"Items available: {len(source)}")
 ```
 
@@ -78,7 +77,7 @@ The entire pipeline can also be built in a single expression:
 
 ```python
 pipeline = (
-    NavierStokesCylinderSource()
+    RandomMeshSource(n_samples=10, n_points=100, n_cells=50)
     .filter(MeanFilter(output="stats.parquet"))
     .filter(PrecisionFilter(target_dtype="float32"))
     .write(MeshSink(output_dir="meshes/"))

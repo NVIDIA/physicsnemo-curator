@@ -24,12 +24,12 @@ from pathlib import Path
 from physicsnemo_curator import Pipeline
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.domains.mesh.sources.random import RandomMeshSource
 from physicsnemo_curator.run import run_pipeline
 
 # Build a Resumable Pipeline
 resumable = Pipeline(
-    source=NavierStokesCylinderSource(),
+    source=RandomMeshSource(n_samples=10, n_points=100, n_cells=50),
     filters=[PrecisionFilter(target_dtype="float32")],
     sink=MeshSink(output_dir="output/checkpoint/meshes/"),
     resume=True,

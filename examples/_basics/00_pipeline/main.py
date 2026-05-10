@@ -22,10 +22,10 @@ See README.md for a full walkthrough.
 from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.domains.mesh.sources.random import RandomMeshSource
 
 # Step 1: Create a Source
-source = NavierStokesCylinderSource()
+source = RandomMeshSource(n_samples=10, n_points=100, n_cells=50)
 
 print(f"Source: {source.name}")
 print(f"Items available: {len(source)}")

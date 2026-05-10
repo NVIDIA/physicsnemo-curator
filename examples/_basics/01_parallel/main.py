@@ -21,33 +21,34 @@ See README.md for a full walkthrough.
 
 from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.sources.random import RandomMeshSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
-# Build the Pipeline
-pipeline = (
-    DrivAerMLSource(mesh_type="boundary")
-    .filter(MeanFilter(output="output/parallel/stats.parquet"))
-    .write(MeshSink(output_dir="output/parallel/meshes/"))
-)
+if __name__ == "__main__":
+    # Build the Pipeline
+    pipeline = (
+        RandomMeshSource(n_samples=10, n_points=100, n_cells=50)
+        .filter(MeanFilter(output="output/parallel/stats.parquet"))
+        .write(MeshSink(output_dir="output/parallel/meshes/"))
+    )
 
-print(f"Total runs available: {len(pipeline)}")
+    print(f"Total runs available: {len(pipeline)}")
 
-# Run in Parallel
-results = run_pipeline(
-    pipeline,
-    n_jobs=4,
-    backend="process_pool",
-    indices=range(3),
-    use_tui=True,
-)
+    # Run in Parallel
+    results = run_pipeline(
+        pipeline,
+        n_jobs=4,
+        backend="process_pool",
+        indices=range(3),
+        use_tui=True,
+    )
 
-# Inspect Results
-print(f"\nProcessed {len(results)} runs")
-for i, paths in enumerate(results):
-    print(f"  Run {i}: {paths}")
+    # Inspect Results
+    print(f"\nProcessed {len(results)} runs")
+    for i, paths in enumerate(results):
+        print(f"  Run {i}: {paths}")
 
-# Gather Statistics
-merged = gather_pipeline(pipeline)
-for path in merged:
-    print(f"Merged statistics: {path}")
+    # Gather Statistics
+    merged = gather_pipeline(pipeline)
+    for path in merged:
+        print(f"Merged statistics: {path}")

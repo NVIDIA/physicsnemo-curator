@@ -147,6 +147,7 @@ class HDF5Sink(Sink["xr.DataArray"]):
 
 # Step 2 — Register the Sink (Optional)
 
+import physicsnemo_curator.domains.da  # noqa: F401 - registers "da" submodule
 from physicsnemo_curator.core.registry import registry
 
 registry.register_sink("da", HDF5Sink)
@@ -157,15 +158,15 @@ assert "HDF5 Writer" in registered
 
 # Step 3 — Use in a Pipeline
 
-from datetime import datetime
-
-from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
+from physicsnemo_curator.domains.da.sources.random import RandomDataArraySource
 from physicsnemo_curator.run import run_pipeline
 
-source = ERA5Source(
-    times=[datetime(2020, 6, 1, 0), datetime(2020, 6, 1, 6)],
-    variables=["t2m", "u10m"],
-    backend="arco",
+source = RandomDataArraySource(
+    n_samples=4,
+    n_lat=32,
+    n_lon=64,
+    variables="t2m,u10m",
+    seed=123,
 )
 
 pipeline = source.write(HDF5Sink(output_dir="output/extending/hdf5/"))

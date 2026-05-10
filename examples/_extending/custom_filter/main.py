@@ -98,6 +98,7 @@ class LogTransformFilter(Filter["xr.DataArray"]):
 
 # Step 2 — Register the Filter (Optional)
 
+import physicsnemo_curator.domains.da  # noqa: F401 - registers "da" submodule
 from physicsnemo_curator.core.registry import registry
 
 registry.register_filter("da", LogTransformFilter)
@@ -108,16 +109,16 @@ assert "Log Transform" in registered
 
 # Step 3 — Use in a Pipeline
 
-from datetime import datetime
-
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
-from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
+from physicsnemo_curator.domains.da.sources.random import RandomDataArraySource
 from physicsnemo_curator.run import run_pipeline
 
-source = ERA5Source(
-    times=[datetime(2020, 6, 1, 0), datetime(2020, 6, 1, 6)],
-    variables=["tp", "t2m"],
-    backend="arco",
+source = RandomDataArraySource(
+    n_samples=4,
+    n_lat=32,
+    n_lon=64,
+    variables="tp,t2m",
+    seed=123,
 )
 
 pipeline = source.filter(LogTransformFilter(variable="tp")).write(ZarrSink(output_path="output/extending/log_tp.zarr"))
