@@ -8,8 +8,9 @@ disk. A pipeline is lazy — nothing is executed until you index into it with `p
 
 PhysicsNeMo Curator organizes pipeline components into **domains** — each domain handles a
 specific data type (e.g., `mesh` for unstructured meshes, `da` for gridded DataArrays, `atm` for
-atomic structures). Install the domain extras you need alongside the base package. This example
-uses the `mesh` domain. See the
+atomic structures). The core pipeline concepts (Source, Filter, Sink) remain the same across all
+domains; only the underlying data structure changes. Install the domain extras you need alongside
+the base package. This example uses the `mesh` domain. See the
 [architecture docs](https://nvidia.github.io/physicsnemo-curator/user-guide/architecture.html#submodules)
 for the full list of available domains.
 
