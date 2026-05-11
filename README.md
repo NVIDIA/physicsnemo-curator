@@ -172,11 +172,6 @@ PhysicsNeMo Curator is part of NVIDIA's open-source Physics-ML ecosystem:
 - **GitHub Discussions** — new data formats, transformations, Physics-ML research
 - **GitHub Issues** — bug reports, feature requests, installation issues
 
-## Feedback
-
-Suggestions for improvements? Use our
-[feedback form](https://docs.google.com/forms/d/e/1FAIpQLSfX4zZ0Lp7MMxzi3xqvzX4IQDdWbkNh5H_a_clzIhclE2oSBQ/viewform?usp=sf_link).
-
 ## License
 
 PhysicsNeMo Curator is provided under the Apache License 2.0. See
