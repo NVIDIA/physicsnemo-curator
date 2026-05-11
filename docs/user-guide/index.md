@@ -34,7 +34,6 @@ architecture
 :maxdepth: 1
 
 parallel
-parallel-safety
 checkpointing
 dashboard
 ```
