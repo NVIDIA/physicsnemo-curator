@@ -21,11 +21,20 @@ creating one Zarr group per variable with dimensions
 ``(time, lat, lon)``.  Supports user-specified chunking and Zarr v3
 sharding.
 
+When *n_indices* and *variables* are provided, the sink pre-allocates
+the full Zarr store at construction time and uses region-based writes
+(``mode="r+"``) which are safe for fully concurrent workers — each
+write touches only independent chunk data without modifying shared
+array metadata.
+
+When *n_indices* and *variables* are omitted, the sink falls back to
+append-based writes (``append_dim``) which are only safe for
+sequential execution.
+
 When executed with a parallel backend (``process_pool``), the sink
-partitions pipeline indices into
-chunk-aligned groups so that no two workers write to the same Zarr
-chunk concurrently.  The partitioning dimension defaults to the
-``append_dim`` (``"time"``).
+partitions pipeline indices into chunk-aligned groups so that no two
+workers write to the same Zarr chunk concurrently.  The partitioning
+dimension defaults to the ``append_dim`` (``"time"``).
 """
 
 from __future__ import annotations
@@ -35,6 +44,8 @@ import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, ClassVar
 
+import numpy as np
+import xarray as xr
 import zarr
 
 from physicsnemo_curator.core.base import Param, Sink
@@ -42,8 +53,6 @@ from physicsnemo_curator.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
-
-    import xarray as xr
 
 
 class ZarrSink(Sink["xr.DataArray"]):
@@ -81,12 +90,37 @@ class ZarrSink(Sink["xr.DataArray"]):
         The dimension along which new data is appended on subsequent
         writes.  This is also the dimension used for chunk-aligned
         partitioning.  Defaults to ``"time"``.
+    n_indices : int | None
+        Total number of pipeline indices (time steps) that will be
+        written.  When provided together with *variables*, the store
+        is pre-allocated at construction time enabling safe concurrent
+        region writes.
+    variables : list[str] | None
+        Variable names for pre-allocation.  Each variable becomes a
+        separate Zarr group.  Required when *n_indices* is set.
+    overwrite : bool
+        If *True*, an existing store at *output_path* will be
+        overwritten during pre-allocation.  If *False* (default) and
+        the store already exists, a :class:`FileExistsError` is raised
+        to prevent accidental data loss.
 
     Examples
     --------
+    Sequential (append-based, backward compatible):
+
     >>> sink = ZarrSink(
     ...     output_path="output.zarr",
     ...     chunks={"time": 1, "lat": 721, "lon": 1440},
+    ... )
+
+    Parallel-safe (pre-allocated with region writes):
+
+    >>> sink = ZarrSink(
+    ...     output_path="output.zarr",
+    ...     chunks={"time": 1, "hrrr_x": 1799, "hrrr_y": 1059},
+    ...     n_indices=72,
+    ...     variables=["t2m", "q2m", "tcwv"],
+    ...     overwrite=True,
     ... )
     """
 
@@ -126,12 +160,104 @@ class ZarrSink(Sink["xr.DataArray"]):
         chunks: dict[str, int] | None = None,
         shards: dict[str, int] | None = None,
         append_dim: str = "time",
+        n_indices: int | None = None,
+        variables: list[str] | None = None,
+        overwrite: bool = False,
     ) -> None:
         self._log = get_logger(self)
         self._output_path = pathlib.Path(output_path)
         self._chunks = chunks if chunks is not None else dict(self._DEFAULT_CHUNKS)
         self._shards = shards
         self._append_dim = append_dim
+        self._n_indices = n_indices
+        self._variables = variables
+        self._overwrite = overwrite
+        self._preallocated = False
+
+        # Validate: n_indices and variables must both be set or both be None.
+        if (n_indices is None) != (variables is None):
+            msg = "n_indices and variables must both be provided or both be omitted."
+            raise ValueError(msg)
+
+        # Pre-allocate the store if schema is provided.
+        if n_indices is not None and variables is not None:
+            self._preallocate_store(n_indices, variables)
+
+    def _preallocate_store(self, n_indices: int, variables: list[str]) -> None:
+        """Create the Zarr store with pre-allocated arrays for region writes.
+
+        Each variable gets its own Zarr group at
+        ``<output_path>/<variable_name>/`` with a ``data`` array of
+        shape ``(n_indices, *spatial_dims)``.  Spatial dimension sizes
+        are taken from :attr:`_chunks` (all dimensions except the
+        append dimension).
+
+        Parameters
+        ----------
+        n_indices : int
+            Number of time steps to allocate along the append dimension.
+        variables : list[str]
+            Variable names — one Zarr group per variable.
+        """
+        # Determine spatial dims (everything in chunks except append_dim).
+        spatial_dims = {k: v for k, v in self._chunks.items() if k != self._append_dim}
+        if not spatial_dims:
+            msg = (
+                f"chunks must contain at least one spatial dimension besides '{self._append_dim}'. Got: {self._chunks}"
+            )
+            raise ValueError(msg)
+
+        # Full shape: (n_indices, *spatial_sizes)
+        dim_names = [self._append_dim, *spatial_dims.keys()]
+        shape = (n_indices, *spatial_dims.values())
+        chunk_sizes = tuple(self._chunks.get(d, s) for d, s in zip(dim_names, shape, strict=True))
+
+        # Build encoding
+        encoding: dict[str, dict[str, Any]] = {"data": {"chunks": chunk_sizes}}
+        if self._shards is not None:
+            shard_tuple = tuple(self._shards.get(d, c) for d, c in zip(dim_names, chunk_sizes, strict=True))
+            encoding["data"]["shards"] = shard_tuple
+
+        # Create coords (integer indices for spatial, empty for time)
+        coords: dict[str, Any] = {self._append_dim: np.arange(n_indices)}
+        for dim_name, dim_size in spatial_dims.items():
+            coords[dim_name] = np.arange(dim_size)
+
+        # Check for existing store and respect overwrite flag.
+        if self._output_path.exists() and any((self._output_path / v).exists() for v in variables):
+            if not self._overwrite:
+                msg = (
+                    f"Zarr store already exists at '{self._output_path}'. "
+                    f"Set overwrite=True to replace it, or remove the directory manually."
+                )
+                raise FileExistsError(msg)
+            self._log.warning("Overwriting existing Zarr store at: %s", self._output_path)
+
+        self._output_path.mkdir(parents=True, exist_ok=True)
+
+        for var_name in variables:
+            group_path = self._output_path / var_name
+
+            # Create empty NaN-filled DataArray with correct shape
+            data = np.full(shape, np.nan, dtype=np.float32)
+            da = xr.DataArray(data, dims=dim_names, coords=coords)
+            ds = da.to_dataset(name="data")
+
+            ds.to_zarr(
+                store=str(group_path),
+                mode="w",
+                encoding=encoding,
+                zarr_format=3,
+            )
+            self._log.debug("Pre-allocated Zarr group: %s (shape=%s)", group_path, shape)
+
+        self._preallocated = True
+        self._log.info(
+            "Pre-allocated Zarr store: %d variables, %d time steps, shape=%s",
+            len(variables),
+            n_indices,
+            shape,
+        )
 
     def __call__(self, items: Iterator[xr.DataArray], index: int) -> list[str]:
         """Consume DataArrays and write each variable to the Zarr store.
@@ -139,13 +265,17 @@ class ZarrSink(Sink["xr.DataArray"]):
         Output paths are derived from the coordinates of the incoming
         data (one Zarr group per variable), not from *index*.
 
+        When the store was pre-allocated (via *n_indices* + *variables*),
+        writes use region indexing keyed by *index* for safe concurrent
+        access.
+
         Parameters
         ----------
         items : Iterator[xr.DataArray]
             Stream of DataArrays with dims ``(time, variable, lat, lon)``.
         index : int
-            Pipeline source index (not used for path naming — the data's
-            own coordinates determine the output layout).
+            Pipeline source index.  Used as the time-slot position for
+            region writes when the store is pre-allocated.
 
         Returns
         -------
@@ -157,7 +287,7 @@ class ZarrSink(Sink["xr.DataArray"]):
         paths: list[str] = []
 
         for da in items:
-            written = self._write_dataarray(da)
+            written = self._write_dataarray(da, index)
             paths.extend(written)
             self._log.debug("Wrote %d groups for DataArray", len(written))
 
@@ -172,9 +302,10 @@ class ZarrSink(Sink["xr.DataArray"]):
         each group to a single worker, preventing concurrent writes to
         the same chunk.
 
-        If the chunk size along the append dimension is 1, every index
-        is its own chunk and no partitioning is needed — returns *None*
-        to signal that one-index-per-worker dispatch is fine.
+        If the store is pre-allocated with region writes, or if the chunk
+        size along the append dimension is 1, every index is its own
+        chunk and no partitioning is needed — returns *None* to signal
+        that one-index-per-worker dispatch is fine.
 
         Parameters
         ----------
@@ -185,8 +316,12 @@ class ZarrSink(Sink["xr.DataArray"]):
         -------
         list[list[int]] | None
             Chunk-aligned groups, or *None* if each index already maps
-            to a unique chunk (chunk size == 1).
+            to a unique chunk (chunk size == 1 or pre-allocated store).
         """
+        # Pre-allocated stores use region writes — fully concurrent-safe.
+        if self._preallocated:
+            return None
+
         chunk_size = self._chunks.get(self._append_dim, 1)
         if chunk_size <= 1:
             return None
@@ -201,13 +336,15 @@ class ZarrSink(Sink["xr.DataArray"]):
         # Return groups sorted by chunk id, each internally sorted.
         return [sorted(group) for _, group in sorted(groups.items())]
 
-    def _write_dataarray(self, da: xr.DataArray) -> list[str]:
+    def _write_dataarray(self, da: xr.DataArray, index: int) -> list[str]:
         """Split a DataArray by variable and write each to its Zarr group.
 
         Parameters
         ----------
         da : xr.DataArray
             Input with dims ``(time, variable, lat, lon)``.
+        index : int
+            Pipeline index used for region writes.
 
         Returns
         -------
@@ -219,7 +356,7 @@ class ZarrSink(Sink["xr.DataArray"]):
         # If no 'variable' dim, write directly
         if "variable" not in da.dims:
             group_path = self._output_path / "data"
-            self._append_to_zarr(da, group_path)
+            self._write_to_zarr(da, group_path, index)
             paths.append(str(group_path))
             return paths
 
@@ -229,13 +366,80 @@ class ZarrSink(Sink["xr.DataArray"]):
             var_da = da.sel(variable=var_name).drop_vars("variable")
             var_str = str(var_name)
             group_path = self._output_path / var_str
-            self._append_to_zarr(var_da, group_path)
+            self._write_to_zarr(var_da, group_path, index)
             paths.append(str(group_path))
 
         return paths
 
+    def _write_to_zarr(self, da: xr.DataArray, group_path: pathlib.Path, index: int) -> None:
+        """Write a DataArray to a Zarr group using the appropriate strategy.
+
+        When the store is pre-allocated, uses region writes
+        (``mode="r+"``).  Otherwise falls back to append-based writes
+        for backward compatibility with sequential pipelines.
+
+        Parameters
+        ----------
+        da : xr.DataArray
+            Data to write (should have the append dim as the first dim).
+        group_path : pathlib.Path
+            Path to the Zarr group directory.
+        index : int
+            Pipeline index — used as the position along the append
+            dimension for region writes.
+        """
+        if self._preallocated:
+            self._region_write(da, group_path, index)
+        else:
+            self._append_to_zarr(da, group_path)
+
+    def _region_write(self, da: xr.DataArray, group_path: pathlib.Path, index: int) -> None:
+        """Write a DataArray to a pre-allocated Zarr group using region indexing.
+
+        Each call writes to a specific slice along the append dimension,
+        determined by *index*.  This is concurrent-safe because each
+        worker writes to disjoint chunk regions without modifying shared
+        array metadata.
+
+        Parameters
+        ----------
+        da : xr.DataArray
+            Data to write.  Must have exactly one element along the
+            append dimension.
+        group_path : pathlib.Path
+            Path to the pre-allocated Zarr group.
+        index : int
+            Position along the append dimension to write to.
+        """
+        ds = da.to_dataset(name="data")
+
+        # Build region spec: slice the append dim at the index position.
+        region: dict[str, slice] = {self._append_dim: slice(index, index + 1)}
+
+        # Drop all coordinates/variables that don't share a dimension with
+        # the region.  xarray's region write requires every variable in the
+        # dataset to have at least one dim in common with the region dims.
+        # Dimension coordinates (e.g. hrrr_x, hrrr_y, time) are 1-D and
+        # only indexed on themselves — drop those that lack the append dim.
+        region_dims = set(region.keys())
+        drop_vars = [
+            name
+            for name in list(ds.coords) + list(ds.data_vars)
+            if name != "data" and not region_dims.intersection(ds[name].dims)
+        ]
+        ds = ds.drop_vars(drop_vars)
+
+        ds.to_zarr(
+            store=str(group_path),
+            mode="r+",
+            region=region,
+        )
+
     def _append_to_zarr(self, da: xr.DataArray, group_path: pathlib.Path) -> None:
         """Append a DataArray to a Zarr group, creating it if needed.
+
+        This is the legacy write path used when the store is NOT
+        pre-allocated.  It is only safe for sequential execution.
 
         The coordinate from the DataArray along the append dimension
         determines where in the output store the data lands.

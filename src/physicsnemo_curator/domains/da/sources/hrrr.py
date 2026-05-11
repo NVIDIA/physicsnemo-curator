@@ -191,6 +191,7 @@ class HRRRSource(Source["xr.DataArray"]):
         self._variables = list(variables)
         self._source = source
         self._cache = cache
+        self._max_workers = max_workers
 
         # Validate variables against the HRRR lexicon.
         lexicon = _import_lexicon()
@@ -205,6 +206,32 @@ class HRRRSource(Source["xr.DataArray"]):
             cache=cache,
             verbose=False,
             max_workers=max_workers,
+        )
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Return picklable state, excluding the unpicklable backend.
+
+        The :class:`earth2studio.data.HRRR` backend contains local
+        functions that cannot be serialized with standard :mod:`pickle`.
+        We exclude it here and lazily re-create it on the worker side
+        via :meth:`__setstate__`.
+        """
+        state = self.__dict__.copy()
+        state.pop("_backend", None)
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore state and lazily re-create the backend.
+
+        Called when a worker process unpickles this source.  The backend
+        is reconstructed from the stored configuration parameters.
+        """
+        self.__dict__.update(state)
+        self._backend = _import_hrrr(
+            source=self._source,
+            cache=self._cache,
+            verbose=False,
+            max_workers=self._max_workers,
         )
 
     def __len__(self) -> int:
