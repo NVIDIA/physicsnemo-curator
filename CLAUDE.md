@@ -102,6 +102,7 @@ Claude tools in `.claude/tools/`:
 | `open-pr` | **Open a PR** from fork to NVIDIA/physicsnemo-curator using the repo PR template |
 | `greptile-review` | Fetch Greptile AI review comments from a PR, sorted by priority, ready to address |
 | `gh-run` | Fetch a GitHub Actions workflow run: lists recent runs or shows job details with failure logs |
+| `compress-images` | Compress JPEG/PNG images in a directory (configurable quality, optional resize, dry-run mode) |
 
 ## Commit Message Convention
 

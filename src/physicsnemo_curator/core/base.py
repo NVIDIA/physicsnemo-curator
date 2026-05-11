@@ -400,6 +400,16 @@ class Pipeline[T]:
         Ordered list of filters to apply.
     sink : Sink[T] | None
         Optional sink for writing output.
+    db_dir : pathlib.Path or None
+        Directory for the checkpoint database. When ``None``, defaults to
+        the platform cache directory (``~/.cache/psnc/``).
+    db_file : pathlib.Path or None
+        Exact path to the checkpoint database file. When set, overrides
+        both ``db_dir`` and the auto-generated filename. Useful for
+        specifying a custom database name or location.
+    resume : bool
+        If ``True``, reuse the checkpoint database across runs so that
+        completed indices are skipped on restart.
 
     Examples
     --------
@@ -420,6 +430,7 @@ class Pipeline[T]:
     track_memory: bool = True
     track_gpu: bool = False
     db_dir: pathlib.Path | None = None
+    db_file: pathlib.Path | None = None
     resume: bool = False
     _store: PipelineStore | None = field(default=None, init=False, repr=False, compare=False)
     _db_path: pathlib.Path | None = field(default=None, init=False, repr=False, compare=False)
@@ -708,6 +719,9 @@ class Pipeline[T]:
 
         Idempotent — if the store already exists, this is a no-op.
 
+        When :attr:`db_file` is set, it is used as the exact database path,
+        overriding both :attr:`db_dir` and the auto-generated filename.
+
         When :attr:`resume` is ``False`` (default), a new database file is
         created with a unique timestamp suffix so each pipeline run starts
         fresh.  When ``True``, the stable config-hash name is reused,
@@ -736,6 +750,9 @@ class Pipeline[T]:
             db_path = self._db_path
             self._store = PipelineStore(db_path=db_path, pipeline_config=config, config_hash=hash_, _worker=True)
             return
+        elif self.db_file is not None:
+            # User-specified exact database file path
+            db_path = pathlib.Path(self.db_file)
         elif self.resume:
             # Stable filename — reuses existing DB for checkpoint resumption
             from physicsnemo_curator.core.cache import default_cache_dir

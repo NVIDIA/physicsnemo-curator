@@ -497,6 +497,42 @@ class TestProvenance:
         assert db_path_1 == db_path_2
         assert run_id_1 == run_id_2
 
+    def test_db_file_specifies_exact_path(self, tmp_path: pathlib.Path) -> None:
+        """With db_file set, the database is created at the exact specified path."""
+        custom_db = tmp_path / "custom" / "my_pipeline.db"
+        pipeline = Pipeline(
+            source=_CountSource(count=5),
+            filters=[_DoubleFilter()],
+            sink=_PathSink(output_dir=str(tmp_path / "output")),
+            track_metrics=True,
+            db_file=custom_db,
+        )
+        pipeline[0]
+        actual_path = pipeline._get_store()._db_path  # noqa: SLF001
+
+        assert actual_path == custom_db
+        assert custom_db.exists()
+
+    def test_db_file_overrides_db_dir(self, tmp_path: pathlib.Path) -> None:
+        """db_file takes priority over db_dir when both are specified."""
+        db_dir = tmp_path / "dir_location"
+        custom_db = tmp_path / "file_location" / "exact.db"
+        pipeline = Pipeline(
+            source=_CountSource(count=5),
+            filters=[_DoubleFilter()],
+            sink=_PathSink(output_dir=str(tmp_path / "output")),
+            track_metrics=True,
+            db_dir=db_dir,
+            db_file=custom_db,
+        )
+        pipeline[0]
+        actual_path = pipeline._get_store()._db_path  # noqa: SLF001
+
+        assert actual_path == custom_db
+        assert custom_db.exists()
+        # db_dir should NOT have been used
+        assert not db_dir.exists()
+
     def test_config_stored_in_db(self, tmp_path: pathlib.Path) -> None:
         """Pipeline config JSON is stored in the pipeline_runs table."""
         pipeline = _make_pipeline(tmp_path)
