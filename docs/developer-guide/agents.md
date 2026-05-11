@@ -13,13 +13,15 @@ follows project conventions from the start.
 
 ## Available Skills
 
-Three component-authoring skills live in `.claude/skills/`:
+Five skills live in `.claude/skills/`:
 
 | Skill | Trigger | What it does |
 |-------|---------|--------------|
 | **add-source** | "Add a new data source" | Generates source class with params, tests, registry |
 | **add-filter** | "Add a new filter" | Generates filter with correct generator patterns and tests |
 | **add-sink** | "Add a new sink" | Generates sink with naming strategy, append logic, and tests |
+| **curator-reviewer** | "Review this PR" | Reviews PRs against project standards (8-pass checklist) |
+| **testing** | "Run tests" | Guides running Python/Rust tests with correct tooling |
 
 ## How to Use Them
 
@@ -59,6 +61,8 @@ even if you're not using an AI agent:
 cat .claude/skills/add-source/SKILL.md
 cat .claude/skills/add-filter/SKILL.md
 cat .claude/skills/add-sink/SKILL.md
+cat .claude/skills/curator-reviewer/SKILL.md
+cat .claude/skills/testing/SKILL.md
 ```
 
 They serve as detailed checklists for implementing components by hand.

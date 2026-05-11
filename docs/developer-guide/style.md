@@ -47,7 +47,7 @@ format:
 
 - **Types**: `feat`, `fix`, `refactor`, `test`, `docs`, `style`, `perf`, `ci`,
   `build`, `chore`
-- **Scopes** (optional): `mesh`, `da`, `core`, `run`, `cli`, `rust`
+- **Scopes** (optional): `mesh`, `da`, `atm`, `core`, `run`, `rust`
 - Summary in imperative mood, lowercase, no trailing period, max 72 chars.
 
 Pre-commit hooks enforce formatting and linting automatically.

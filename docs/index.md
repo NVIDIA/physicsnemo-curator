@@ -16,7 +16,6 @@ single data structure, and pipelines are executed lazily on a per-item basis.
 - **Built-in dataset sources** — DrivAerML, AhmedML, WindsorML, WindTunnel-20k from HuggingFace Hub
 - **Remote data support** — sources handle local dirs, S3, HuggingFace Hub via fsspec with transparent caching
 - **Pluggable submodules** — `mesh`, `da`, `atm` with independent dependency groups
-- **Interactive TUI** — full-screen pipeline wizard powered by Textual
 - **Component registry** — automatic discovery of sources, filters, and sinks
 
 ## Quick Install
@@ -31,8 +30,6 @@ pip install physicsnemo-curator[mesh]
 # With parallel backends (joblib, dask)
 pip install physicsnemo-curator[parallel]
 
-# Wizard is included by default (textual is a core dependency)
-psnc
 ```
 
 ## Minimal Example

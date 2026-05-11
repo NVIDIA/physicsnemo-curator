@@ -26,16 +26,6 @@ Interactive web dashboard for pipeline metrics inspection.
 /autoapi/physicsnemo_curator/dashboard/index
 ```
 
-## Wiz
-
-Interactive wizard for guided pipeline construction.
-
-```{toctree}
-:maxdepth: 2
-
-/autoapi/physicsnemo_curator/wiz/index
-```
-
 ## Run
 
 Execution backends for parallel and distributed pipeline processing.

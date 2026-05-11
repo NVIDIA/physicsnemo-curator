@@ -26,7 +26,6 @@ quickstart
 :maxdepth: 1
 
 architecture
-datasets
 ```
 
 ## Execution & Tooling
@@ -37,7 +36,6 @@ datasets
 parallel
 checkpointing
 dashboard
-cli
 ```
 
 ## Extending / Customization

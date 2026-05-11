@@ -58,7 +58,7 @@ All commits must follow
 
 - **Types**: `feat`, `fix`, `refactor`, `test`, `docs`, `style`, `perf`,
   `ci`, `build`, `chore`
-- **Scopes** (optional): `mesh`, `da`, `core`, `run`, `cli`, `rust`, `atm`
+- **Scopes** (optional): `mesh`, `da`, `atm`, `core`, `run`, `rust`
 
 ## License Headers
 

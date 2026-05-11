@@ -21,11 +21,11 @@ transformations, or output formats — no changes to the core library required.
 
 Every component shares the same skeleton:
 
-1. **`name`** and **`description`** class variables — used by the CLI and
-   registry for display.
+1. **`name`** and **`description`** class variables — used by the registry
+   for display and discovery.
 2. A **`params()`** classmethod returning a list of
-   {class}`~physicsnemo_curator.core.base.Param` — drives CLI prompts and
-   documents the constructor interface.
+   {class}`~physicsnemo_curator.core.base.Param` — documents the
+   constructor interface and enables automated discovery.
 3. An **`__init__`** accepting those parameters as keyword arguments.
 4. A core method implementing the component's logic (`__getitem__`,
    `__call__`, or `__call__` depending on the component type).
@@ -54,8 +54,8 @@ class MyComponent:
 
 ## Registering Components
 
-To make components discoverable by the CLI, register them in your submodule's
-`__init__.py`:
+To make components discoverable by the registry, register them in your
+submodule's `__init__.py`:
 
 ```python
 # src/physicsnemo_curator/mymodule/__init__.py

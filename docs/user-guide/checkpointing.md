@@ -5,24 +5,33 @@
 
 # Checkpointing Pipelines
 
-`Pipeline` includes built-in checkpointing that records completed indices
-in a SQLite database.  On restart, indices that already finished are
-skipped — their cached output paths are returned immediately without
-re-executing the source, filters, or sink.
+`Pipeline` includes built-in metrics tracking that records completed indices,
+timing, memory, and output paths in a SQLite database.
 
-Checkpointing is **enabled by default** via the `track_metrics` field
-(which also enables timing and memory profiling).
+By default, **each pipeline run creates a fresh database** — this captures
+metrics and provenance for every execution without automatically resuming
+from prior runs.  To enable checkpoint resumption (skipping previously
+completed indices), set `resume=True`.
 
 ## Quick Start
 
 ```python
 from physicsnemo_curator import Pipeline, run_pipeline
 
-# Pipeline with default checkpointing (track_metrics=True)
+# Default behavior — fresh database each run (metrics only, no resume)
 pipeline = (
     MySource(data_dir="/data/")
     .filter(MyFilter())
     .write(MySink(output_dir="/output/"))
+)
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
+
+# Enable checkpoint resumption with resume=True
+pipeline = Pipeline(
+    source=MySource(data_dir="/data/"),
+    filters=[MyFilter()],
+    sink=MySink(output_dir="/output/"),
+    resume=True,
 )
 
 # Run — works with all backends
@@ -45,11 +54,34 @@ When `track_metrics=True` (the default), each `pipeline[index]` call:
    output paths to SQLite.
 4. If the pipeline **raises an exception**, records the error and re-raises.
 
+The `resume` flag controls whether prior results can be found:
+
+### Default Behavior (``resume=False``)
+
+A fresh database is created with a unique timestamp in its filename
+(``{hash}_{timestamp}.db``).  Because the database is new, the checkpoint
+table is always empty — all indices are processed.  The database still
+provides metrics, provenance, and error tracking for the current run.
+
+### Resume Mode (``resume=True``)
+
+The database uses a stable filename (``{hash}.db``).  If a database for
+the same pipeline configuration already exists, the run picks up where it
+left off — completed indices return their cached output paths immediately
+without re-executing any stages.
+
 ## Controlling the Database Location
 
-By default, the database is stored at `~/.cache/psnc/{config_hash[:16]}.db`.
-Each unique pipeline configuration gets its own database file (based on its
-SHA-256 hash).  The cache directory follows XDG conventions and can be
+By default, the database is stored in `~/.cache/psnc/`.  The filename
+depends on the `resume` setting:
+
+- **Default** (`resume=False`): `{config_hash[:16]}_{timestamp}.db` — unique
+  per instantiation.
+- **Resume mode** (`resume=True`): `{config_hash[:16]}.db` — stable across
+  runs with the same pipeline configuration.
+
+Each unique pipeline configuration gets its own hash (SHA-256 of the
+pipeline config).  The cache directory follows XDG conventions and can be
 controlled with environment variables:
 
 | Priority | Method | Example |
@@ -71,9 +103,10 @@ pipeline = Pipeline(
 )
 ```
 
-## Disabling Checkpointing
+## Disabling Metrics Tracking
 
-Set `track_metrics=False` to disable all checkpointing and metrics:
+Set `track_metrics=False` to disable all database creation, checkpointing,
+and metrics recording:
 
 ```python
 pipeline = Pipeline(
@@ -94,9 +127,18 @@ pipelines never collide.
 ## Error Handling
 
 Failed indices are recorded with their error message but are **not**
-marked as completed.  On the next run they will be retried automatically:
+marked as completed.  When using `resume=True`, they will be retried
+automatically on the next run:
 
 ```python
+# Pipeline with resume=True to enable retry on restart
+pipeline = Pipeline(
+    source=MySource(data_dir="/data/"),
+    filters=[MyFilter()],
+    sink=MySink(output_dir="/output/"),
+    resume=True,
+)
+
 # First run — index 42 fails
 results = run_pipeline(pipeline, n_jobs=4)
 
@@ -140,7 +182,7 @@ per-index timing and memory metrics automatically.  See
 
 The checkpoint uses a SQLite database in WAL (Write-Ahead Logging)
 mode for safe concurrent writes from multiple threads or processes.  The
-database contains four tables:
+database contains seven tables:
 
 **`pipeline_runs`** — one row per unique pipeline configuration:
 
@@ -150,6 +192,8 @@ database contains four tables:
 | `config_hash` | TEXT | SHA-256 of the pipeline config JSON |
 | `config_json` | TEXT | Full pipeline configuration |
 | `started_at` | TEXT | ISO-8601 timestamp |
+| `run_dir` | TEXT | Working directory for the run |
+| `total_indices` | INTEGER | Total number of source indices |
 
 **`index_results`** — one row per processed index:
 
@@ -186,6 +230,41 @@ database contains four tables:
 | `started_at` | TEXT | ISO-8601 timestamp |
 | `last_heartbeat` | TEXT | ISO-8601 timestamp (updated on index start/finish) |
 | `current_index` | INTEGER | Index currently being processed (NULL if idle) |
+| `completed_count` | INTEGER | Number of indices completed by this worker |
+| `invocation_id` | TEXT | Groups workers from the same `run_pipeline` call |
+
+**`output_files`** — normalized reverse-lookup table for output paths:
+
+| Column | Type | Description |
+|---|---|---|
+| `path` | TEXT | Output file path |
+| `idx` | INTEGER | Source index that produced this file |
+| `run_id` | INTEGER | Foreign key |
+| `seq` | INTEGER | Ordering within the index's output list |
+
+**`filter_artifacts`** — files produced by filters (e.g. intermediate outputs):
+
+| Column | Type | Description |
+|---|---|---|
+| `path` | TEXT | Artifact file path |
+| `idx` | INTEGER | Source index |
+| `run_id` | INTEGER | Foreign key |
+| `filter_name` | TEXT | Name of the filter that produced the artifact |
+| `filter_order` | INTEGER | Position of the filter in the pipeline |
+
+**`logs`** — structured log entries captured during execution:
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | INTEGER | Auto-incrementing primary key |
+| `run_id` | INTEGER | Foreign key to `pipeline_runs` |
+| `timestamp` | TEXT | ISO-8601 timestamp |
+| `level` | INTEGER | Numeric log level |
+| `level_name` | TEXT | Log level name (DEBUG, INFO, etc.) |
+| `logger_name` | TEXT | Logger name |
+| `message` | TEXT | Log message |
+| `worker_id` | TEXT | Worker that emitted the log (nullable) |
+| `idx` | INTEGER | Index being processed (nullable) |
 
 ## Worker Progress Tracking
 
@@ -214,14 +293,13 @@ from pathlib import Path
 from physicsnemo_curator import Pipeline, run_pipeline
 from physicsnemo_curator.domains.atm import ASELMDBSource, AtomicDataZarrSink
 
-# Build pipeline — checkpointing is on by default
-pipeline = (
-    ASELMDBSource(data_dir="/data/val/")
-    .write(AtomicDataZarrSink(output_path="/output/dataset.zarr"))
+# Build pipeline with resume=True so it can be interrupted and restarted
+pipeline = Pipeline(
+    source=ASELMDBSource(data_dir="/data/val/"),
+    sink=AtomicDataZarrSink(output_path="/output/dataset.zarr"),
+    resume=True,
+    db_dir=Path("/output/checkpoints"),
 )
-
-# Optionally control DB location
-pipeline.db_dir = Path("/output/checkpoints")
 
 # Run — can be interrupted and resumed
 results = run_pipeline(pipeline, n_jobs=8, backend="process_pool")

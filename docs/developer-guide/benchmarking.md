@@ -36,16 +36,18 @@ make asv-preview
 ## pytest-benchmark (CI Benchmarks)
 
 pytest-benchmark runs inside the normal test suite and is designed for fast
-per-PR checks. Benchmark tests live in `test/` and use the `@pytest.mark.benchmark`
-marker.
+per-PR checks. Benchmark tests live in `test/` and use the `benchmark` fixture
+provided by pytest-benchmark.
 
 ```python
 import pytest
 
+
 @pytest.mark.benchmark
 def test_pipeline_throughput(benchmark):
     """Benchmark pipeline item processing."""
-    from curator.core.base import Pipeline
+    from physicsnemo_curator.core.base import Pipeline
+
     # ... setup ...
     benchmark(pipeline.__getitem__, 0)
 ```
@@ -68,8 +70,10 @@ Results are stored as JSON in `.benchmarks/`.
 ## ASV (Historical Benchmarks)
 
 [Airspeed Velocity](https://asv.readthedocs.io/) tracks performance across the
-project's git history. It checks out each commit, builds the package in an
-isolated environment, runs benchmarks, and produces an interactive web dashboard.
+project's git history and produces an interactive web dashboard. The project
+uses `environment_type: "existing"` — benchmarks run in the current
+environment rather than isolated virtualenvs, so you must build the extension
+first with `make develop`.
 
 ### Benchmark Files
 
@@ -158,10 +162,10 @@ make asv-preview   # Serve at http://localhost:8080
 
 ASV is configured in `asv.conf.json` at the project root. Key settings:
 
-- **`build_command`**: Uses `maturin develop --release` to build the Rust
-  extension in each isolated benchmark environment
+- **`environment_type`**: `existing` (uses the current Python environment —
+  run `make develop` before benchmarking)
 - **`benchmark_dir`**: Points to `benchmarks/`
-- **`environment_type`**: `virtualenv` (ASV manages its own venvs)
+- **`regressions_thresholds`**: 5 % regression triggers a warning
 - **All ASV artifacts** (envs, results, HTML) are stored under `.asv/` and
   gitignored
 

@@ -19,7 +19,8 @@ methods:
 |--------|-----------|---------|
 | `__len__` | `() -> int` | Number of items the source contains |
 | `__getitem__` | `(index: int) -> Generator[T]` | Yield one or more domain objects for the given index |
-| `params` | `classmethod() -> list[Param]` | Declare constructor parameters for CLI discovery |
+| `params` | `classmethod() -> list[Param]` | Declare constructor parameters for registry discovery |
+| `partition_indices` | `(indices: list[int]) -> list[list[int]] \| None` *(optional)* | Group indices that must be processed by the same worker |
 
 Key rules:
 
@@ -27,7 +28,12 @@ Key rules:
   `pathlib`, `fsspec`, or other appropriate libraries).
 - `__getitem__` is a **generator** (uses `yield`).  It can yield multiple
   items per index if a single file contains several samples.
-- `params()` drives the CLI prompts and documents the constructor interface.
+- `params()` documents the constructor interface and enables registry
+  discovery.
+- Override `partition_indices` when the source has constraints on concurrent
+  access (e.g. LMDB allows only one environment open per file per process).
+  Return a list of index groups — each group is guaranteed to be processed
+  sequentially by the same worker.
 
 ## Minimal Example
 
@@ -116,7 +122,8 @@ def __getitem__(self, index: int) -> Generator[Mesh]:
 
 ## Registration
 
-Register your source in the submodule's `__init__.py` so the CLI can discover it:
+Register your source in the submodule's `__init__.py` so the registry can
+discover it:
 
 ```python
 from physicsnemo_curator.core.registry import registry

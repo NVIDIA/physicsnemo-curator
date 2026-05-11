@@ -155,42 +155,6 @@ This installs the required dependencies:
 
 ## Launching the Dashboard
 
-### From the TUI (recommended)
-
-The easiest way to launch the dashboard is through the interactive wizard:
-
-```bash
-psnc
-```
-
-This opens the full-screen Textual TUI.  On the welcome screen, click
-**"Open dashboard"** to reach the dashboard launcher.  The launcher
-provides:
-
-- A **dropdown** of all cached pipeline databases (auto-discovered from
-  `~/.cache/psnc/`)
-- A **port** input (default 5006)
-- **Launch / Stop** controls
-
-The dashboard runs as a subprocess so the TUI remains responsive.  Press
-**Stop** or navigate back to terminate it.
-
-```text
-┌──────────────────────────────────────────────┐
-│  Open Dashboard                              │
-│  Select a pipeline database to visualize     │
-│                                              │
-│  [2025-05-01 14:30] VTKSource → MeshSink ▼  │
-│                                              │
-│  Port: [5006]                                │
-│                                              │
-│  Dashboard running at http://localhost:5006   │
-│                                              │
-│  [ Stop Dashboard ]                          │
-│  [ ← Back ]                                  │
-└──────────────────────────────────────────────┘
-```
-
 ### From Python
 
 ```python

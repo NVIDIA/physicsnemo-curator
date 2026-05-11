@@ -18,6 +18,8 @@ Subclass {class}`~physicsnemo_curator.core.base.Filter` and implement:
 | `__call__` | `(items: Generator[T]) -> Generator[T]` | Transform a stream of items |
 | `params` | `classmethod() -> list[Param]` | Declare constructor parameters |
 | `flush` | `() -> str \| None` *(optional)* | Write accumulated state after pipeline execution |
+| `artifacts` | `() -> list[str]` *(optional)* | Return paths of files produced since last call |
+| `merge` | `staticmethod(parquet_paths: list[str], output: str) -> str` *(optional)* | Merge per-worker shard files after parallel execution |
 
 Key rules:
 
@@ -107,13 +109,13 @@ def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:
 ## Stateful Filters
 
 If your filter accumulates data across the entire stream, add a `flush()`
-method.  The pipeline calls `flush()` automatically after all items have
-been processed:
+method.  The pipeline runner calls `flush()` automatically after all items
+have been processed (via {func}`~physicsnemo_curator.run.run_pipeline`):
 
 ```python
 class MeshStatsFilter(Filter["Mesh"]):
     def __init__(self, output: str) -> None:
-        self._output = output
+        self._output_path = pathlib.Path(output)
         self._rows: list[dict] = []
 
     def __call__(self, items: Generator[Mesh]) -> Generator[Mesh]:
@@ -125,11 +127,50 @@ class MeshStatsFilter(Filter["Mesh"]):
         """Write accumulated data. Called after pipeline execution."""
         if not self._rows:
             return None
-        self._write(self._rows, self._output)
-        return self._output
+        self._write(self._rows, self._output_path)
+        return str(self._output_path)
+
+    def artifacts(self) -> list[str]:
+        """Report produced files for pipeline store tracking."""
+        if self._output_path.exists():
+            return [str(self._output_path)]
+        return []
 ```
 
-The interactive CLI calls `flush()` automatically on any filter that has it.
+### Parallel execution and `merge`
+
+When running in parallel, each worker process gets its own copy of the
+filter.  The framework rewrites the filter's `_output_path` to a
+worker-specific shard (e.g. `stats_worker_0.parquet`).  After all workers
+finish, call {func}`~physicsnemo_curator.run.gather_pipeline` to merge
+the shards:
+
+```python
+from physicsnemo_curator import run_pipeline
+from physicsnemo_curator.run import gather_pipeline
+
+results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
+merged = gather_pipeline(pipeline)  # merges per-worker shards
+```
+
+To support this, stateful filters should also implement a `merge` static
+method:
+
+```python
+    @staticmethod
+    def merge(parquet_paths: list[str], output: str) -> str:
+        """Merge per-worker Parquet shards into a single output file."""
+        import pyarrow.parquet as pq
+
+        tables = [pq.read_table(p) for p in parquet_paths]
+        merged = pa.concat_tables(tables)
+        pq.write_table(merged, output)
+        return output
+```
+
+The framework detects stateful filters by checking for the presence of
+`flush`, `_output_path`, and `merge` attributes via `hasattr()`.  No
+base-class registration is needed — just implement the methods.
 
 ## Registration
 

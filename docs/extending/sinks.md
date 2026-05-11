@@ -14,16 +14,20 @@ Subclass {class}`~physicsnemo_curator.core.base.Sink` and implement:
 
 | Method | Signature | Purpose |
 |--------|-----------|---------|
-| `__call__` | `(items: Generator[T], index: int) -> list[str]` | Consume items and write them; return paths |
+| `__call__` | `(items: Iterator[T], index: int) -> list[str]` | Consume items and write them; return paths |
 | `params` | `classmethod() -> list[Param]` | Declare constructor parameters |
+| `partition_indices` | `(indices: list[int]) -> list[list[int]] \| None` *(optional)* | Group indices that must be processed by the same worker |
 
 Key rules:
 
-- `__call__` receives a generator of items and the pipeline **index** for that
+- `__call__` receives an **Iterator** of items and the pipeline **index** for that
   batch.  It must return a `list[str]` of every file path written.
 - The sink is responsible for creating any necessary output directories.
 - Naming conventions should be deterministic so that re-runs produce the same
   file names (enabling checkpointing and append logic).
+- Override `partition_indices` when the sink has constraints on concurrent
+  writes (e.g. multiple indices writing to the same Zarr chunk must go
+  through the same worker).
 
 ## Minimal Example
 
@@ -33,7 +37,7 @@ from typing import ClassVar, TYPE_CHECKING
 from physicsnemo_curator.core.base import Sink, Param
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Iterator
     from physicsnemo.mesh import Mesh
 
 class VTKSink(Sink["Mesh"]):
@@ -49,7 +53,7 @@ class VTKSink(Sink["Mesh"]):
     def __init__(self, output_dir: str) -> None:
         self._output_dir = output_dir
 
-    def __call__(self, items: Generator[Mesh], index: int) -> list[str]:
+    def __call__(self, items: Iterator[Mesh], index: int) -> list[str]:
         paths: list[str] = []
         for seq, mesh in enumerate(items):
             path = f"{self._output_dir}/mesh_{index:04d}_{seq}.vtu"
@@ -65,7 +69,7 @@ class VTKSink(Sink["Mesh"]):
 The simplest pattern — use the pipeline index to name output files:
 
 ```python
-def __call__(self, items: Generator[Mesh], index: int) -> list[str]:
+def __call__(self, items: Iterator[Mesh], index: int) -> list[str]:
     paths: list[str] = []
     for seq, mesh in enumerate(items):
         path = f"{self._output_dir}/item_{index:04d}_{seq}.vtu"
@@ -80,7 +84,7 @@ Use metadata from the domain object to name files (e.g. simulation ID,
 timestamp):
 
 ```python
-def __call__(self, items: Generator[Mesh], index: int) -> list[str]:
+def __call__(self, items: Iterator[Mesh], index: int) -> list[str]:
     paths: list[str] = []
     for mesh in items:
         sim_id = mesh.metadata["simulation_id"]
@@ -95,7 +99,7 @@ def __call__(self, items: Generator[Mesh], index: int) -> list[str]:
 Support appending to existing files (useful for incremental pipelines):
 
 ```python
-def __call__(self, items: Generator[Mesh], index: int) -> list[str]:
+def __call__(self, items: Iterator[Mesh], index: int) -> list[str]:
     path = f"{self._output_dir}/data_{index:04d}.h5"
     if os.path.exists(path):
         self._append(items, path)
