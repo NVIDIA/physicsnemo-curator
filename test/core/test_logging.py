@@ -283,8 +283,11 @@ class TestDatabaseLogHandler:
 
     def test_flush_interval_triggers_flush(self, store) -> None:
         """Exceeding flush_interval triggers automatic flush on next emit."""
-        handler = DatabaseLogHandler(store, worker_id="Worker-1", buffer_size=100, flush_interval=0.01)
+        handler = DatabaseLogHandler(store, worker_id="Worker-1", buffer_size=100, flush_interval=0.05)
         handler.setFormatter(logging.Formatter("%(message)s"))
+
+        # Reset last_flush so the interval hasn't elapsed yet
+        handler._last_flush = time.monotonic()
 
         record = logging.LogRecord(
             name="test",
@@ -297,11 +300,11 @@ class TestDatabaseLogHandler:
         )
         handler.emit(record)
 
-        # Initially buffered
+        # Initially buffered (interval has not elapsed)
         assert len(handler._buffer) == 1
 
         # Wait for interval to pass
-        time.sleep(0.02)
+        time.sleep(0.1)
 
         # Next emit should trigger flush due to elapsed time
         record2 = logging.LogRecord(
