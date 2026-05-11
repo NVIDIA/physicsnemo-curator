@@ -34,17 +34,19 @@ When `resume=False` (default), each pipeline run gets a unique database and ther
 skipping of completed indices.
 
 ```python
+from pathlib import Path
+
 from physicsnemo_curator import Pipeline
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
-from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.domains.mesh.sources.random import RandomMeshSource
 
 resumable = Pipeline(
-    source=NavierStokesCylinderSource(),
+    source=RandomMeshSource(n_samples=10, n_points=100, n_cells=50),
     filters=[PrecisionFilter(target_dtype="float32")],
     sink=MeshSink(output_dir="output/checkpoint/meshes/"),
     resume=True,
-    db_dir="output/checkpoint/",
+    db_dir=Path("output/checkpoint/"),
 )
 ```
 
@@ -69,6 +71,8 @@ results = run_pipeline(
 
 If you run the same pipeline again with overlapping indices, completed indices are skipped. Their
 cached output paths are returned from the database without re-executing the pipeline.
+After this second run, there is still only one checkpoint database cache; the
+existing cache is updated in place rather than creating a new database.
 
 ```python
 results_resumed = run_pipeline(
@@ -90,6 +94,15 @@ resumable.failed_indices      # Set of indices that raised an error
 resumable.remaining_indices() # Indices not yet completed
 resumable.summary()           # Human-readable status string
 ```
+
+You can also open the checkpoint database in the web dashboard:
+
+```bash
+psnc dashboard output/checkpoint/<database name>.db
+```
+
+Or, if you want to avoid hardcoding the filename, use `resumable.db_path` from
+Python and pass that path to `psnc dashboard`.
 
 ### 5. Individual Index Lookup
 
@@ -117,6 +130,7 @@ resumable.reset_index(3)    # Only re-processes index 3 next time
 | **Config hash** | Deterministic hash of pipeline configuration; identifies the SQLite DB |
 | **resume=True** | Enables stable DB reuse across runs |
 | **db_dir** | Custom location for the checkpoint database |
+| **db_file** | Overrides the checkpoint database filename (within `db_dir`) |
 | **Completed indices** | Skipped on subsequent runs; cached output paths returned instantly |
 | **Failed indices** | Recorded but not skipped; will be retried on next run |
 | **reset()** | Clears all checkpoint state so indices are re-processed |
