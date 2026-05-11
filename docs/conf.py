@@ -51,6 +51,7 @@ autoapi_options = [
 autoapi_python_class_content = "both"
 autoapi_member_order = "groupwise"
 autoapi_add_toctree_entry = False  # We manage API toctrees manually in api/index.md
+autoapi_ignore = ["**/wiz/**"]  # Wizard module excluded from public API docs
 
 # ---------------------------------------------------------------------------
 # Napoleon (NumPy-style docstrings)
