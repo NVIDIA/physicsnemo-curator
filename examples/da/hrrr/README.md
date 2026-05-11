@@ -32,9 +32,10 @@ NOMADS) via earth2studio. **No manual download is required** -- the source
 streams data directly from cloud storage.
 
 > **Note:** The AWS backend requires no authentication for HRRR archive
-> data. Downloaded chunks are cached locally at
-> `~/.cache/earth2studio/hrrr/` by default. Set the
-> `EARTH2STUDIO_CACHE` environment variable to override the cache location.
+> data. By default caching is disabled and temporary files are cleaned up
+> after each fetch. Enable caching with `cache=True` in the source
+> constructor to persist data at `~/.cache/earth2studio/hrrr/` (override
+> with the `EARTH2STUDIO_CACHE` environment variable).
 
 Available variables used in this example:
 
