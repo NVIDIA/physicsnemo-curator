@@ -95,11 +95,11 @@ class WelcomeScreen(Screen[None]):
             yield Static("PhysicsNeMo Curator", id="banner")
             yield Static("Interactive ETL Pipeline Wizard", id="subtitle")
             with Horizontal(classes="btn-row"):
-                yield Button("Build pipeline", id="build-btn", classes="welcome-btn")
-                yield Button("Load pipeline", id="load-btn", classes="welcome-btn")
-            with Horizontal(classes="btn-row"):
                 yield Button("Open dashboard", id="dashboard-btn", classes="welcome-btn")
                 yield Button("Manage cache", id="cache-btn", classes="welcome-btn")
+            with Horizontal(classes="btn-row"):
+                yield Button("Build pipeline", id="build-btn", classes="welcome-btn")
+                yield Button("Load pipeline", id="load-btn", classes="welcome-btn")
             yield Input(placeholder="Path to pipeline file (YAML / JSON)", id="load-input")
             with Horizontal(id="quit-row"):
                 yield Button("Quit", id="quit-btn", variant="error")
