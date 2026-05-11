@@ -19,7 +19,7 @@ Subclass {class}`~physicsnemo_curator.core.base.Filter` and implement:
 | `params` | `classmethod() -> list[Param]` | Declare constructor parameters |
 | `flush` | `() -> str \| None` *(optional)* | Write accumulated state after pipeline execution |
 | `artifacts` | `() -> list[str]` *(optional)* | Return paths of files produced since last call |
-| `merge` | `staticmethod(parquet_paths: list[str], output: str) -> str` *(optional)* | Merge per-worker shard files after parallel execution |
+| `merge` | `staticmethod(paths, output) -> str` *(optional)* | Merge per-worker shard files after parallel execution |
 
 Key rules:
 

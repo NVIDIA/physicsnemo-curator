@@ -134,4 +134,3 @@ outputs/era5/
   for crash simulation, external aerodynamics, and more.
 - Read the {doc}`parallel` guide for details on execution backends and
   stateful filter handling.
-

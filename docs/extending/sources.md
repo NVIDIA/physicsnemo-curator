@@ -20,7 +20,7 @@ methods:
 | `__len__` | `() -> int` | Number of items the source contains |
 | `__getitem__` | `(index: int) -> Generator[T]` | Yield one or more domain objects for the given index |
 | `params` | `classmethod() -> list[Param]` | Declare constructor parameters for registry discovery |
-| `partition_indices` | `(indices: list[int]) -> list[list[int]] \| None` *(optional)* | Group indices that must be processed by the same worker |
+| `partition_indices` | `(indices) -> list[list[int]] \| None` *(optional)* | Group indices for same-worker processing |
 
 Key rules:
 

@@ -16,7 +16,7 @@ Subclass {class}`~physicsnemo_curator.core.base.Sink` and implement:
 |--------|-----------|---------|
 | `__call__` | `(items: Iterator[T], index: int) -> list[str]` | Consume items and write them; return paths |
 | `params` | `classmethod() -> list[Param]` | Declare constructor parameters |
-| `partition_indices` | `(indices: list[int]) -> list[list[int]] \| None` *(optional)* | Group indices that must be processed by the same worker |
+| `partition_indices` | `(indices) -> list[list[int]] \| None` *(optional)* | Group indices for same-worker processing |
 
 Key rules:
 
