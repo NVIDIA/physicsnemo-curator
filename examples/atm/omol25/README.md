@@ -1,6 +1,6 @@
 # OMol25 Atomic Data ETL
 
-Process [OMol25][omol25] atomic/molecular DFT data through a complete
+Process [OMol25](https://huggingface.co/facebook/OMol25) atomic/molecular DFT data through a complete
 Source → Filter → Sink pipeline.
 
 The pipeline:
@@ -23,7 +23,7 @@ pip install physicsnemo-curator[atm]
 
 ## Download the Dataset
 
-OMol25 is hosted on HuggingFace at [facebook/OMol25][omol25-data].
+OMol25 is hosted on HuggingFace at [facebook/OMol25](https://huggingface.co/facebook/OMol25/blob/main/DATASET.md).
 The repository is **gated** — you must accept the license terms on the
 HuggingFace page before downloading.
 
@@ -77,6 +77,3 @@ output/omol25/
 ├── 0001.zarr/
 └── ...
 ```
-
-[omol25]: https://huggingface.co/facebook/OMol25
-[omol25-data]: https://huggingface.co/facebook/OMol25/blob/main/DATASET.md

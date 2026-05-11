@@ -1,6 +1,6 @@
 # NOAA High-Resolution Rapid Refresh (HRRR) Analysis Data ETL
 
-Curate [HRRR][hrrr] 3 km hourly analysis data through a Source -> Filter -> Sink
+Curate [HRRR](https://www.nco.ncep.noaa.gov/pmb/products/hrrr/) 3 km hourly analysis data through a Source -> Filter -> Sink
 pipeline, fetching 3 days of data from AWS cloud storage.
 
 ![HRRR surface variables sample](sample.jpg)
@@ -26,7 +26,8 @@ Required packages: `xarray`, `earth2studio`, `zarr>=3.0`.
 
 ## Data Access
 
-HRRR data is fetched on-the-fly from cloud object stores ([AWS][aws], Google, or
+HRRR data is fetched on-the-fly from cloud object stores
+([AWS](https://aws.amazon.com/marketplace/pp/prodview-yd5ydptv3vuz2), Google, or
 NOMADS) via earth2studio. **No manual download is required** -- the source
 streams data directly from cloud storage.
 
@@ -99,5 +100,6 @@ colormaps for each variable.
 
 ## References
 
-[hrrr]: https://www.nco.ncep.noaa.gov/pmb/products/hrrr/
-[aws]: https://aws.amazon.com/marketplace/pp/prodview-yd5ydptv3vuz2
+- [NOAA HRRR](https://www.nco.ncep.noaa.gov/pmb/products/hrrr/)
+- [HRRR on AWS](https://aws.amazon.com/marketplace/pp/prodview-yd5ydptv3vuz2)
+- [NVIDIA Earth2Studio](https://nvidia.github.io/earth2studio/)

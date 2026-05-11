@@ -1,6 +1,7 @@
 # ERA5 Surface Data ETL
 
-Curate [ERA5][era5] surface reanalysis data through a Source -> Filter -> Sink
+Curate [ERA5](https://www.ecmwf.int/en/forecasts/dataset/ecmwf-reanalysis-v5)
+surface reanalysis data through a Source -> Filter -> Sink
 pipeline, fetching one month of hourly data from Google's Analysis-Ready,
 Cloud-Optimized (ARCO) store.
 
@@ -27,7 +28,8 @@ Required packages: `xarray`, `earth2studio`, `zarr>=3.0`, `gcsfs`.
 
 ## Data Access
 
-ERA5 data is fetched on-the-fly from [Google's ARCO ERA5 Zarr store][arco]
+ERA5 data is fetched on-the-fly from
+[Google's ARCO ERA5 Zarr store](https://cloud.google.com/storage/docs/public-datasets/era5)
 via earth2studio. **No manual download is required** -- the source
 streams data directly from Google Cloud Storage.
 
@@ -102,5 +104,6 @@ colormap.
 
 ## References
 
-[era5]: https://www.ecmwf.int/en/forecasts/dataset/ecmwf-reanalysis-v5
-[arco]: https://cloud.google.com/storage/docs/public-datasets/era5
+- [ECMWF ERA5](https://www.ecmwf.int/en/forecasts/dataset/ecmwf-reanalysis-v5)
+- [Google ARCO ERA5](https://cloud.google.com/storage/docs/public-datasets/era5)
+- [NVIDIA Earth2Studio](https://nvidia.github.io/earth2studio/)
