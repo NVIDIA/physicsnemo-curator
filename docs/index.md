@@ -13,7 +13,7 @@ single data structure, and pipelines are executed lazily on a per-item basis.
 - **Lazy evaluation** — `pipeline[i]` processes only the *i*-th item
 - **Parallel execution** — `run_pipeline(pipeline, n_jobs=-1)` processes all items across multiple backends
 - **Generator semantics** — sources and filters can yield zero, one, or many items
-- **Built-in dataset sources** — DrivAerML, AhmedML, WindsorML, WindTunnel-20k from HuggingFace Hub
+- **Built-in dataset sources** — DrivAerML, AhmedML, NavierStokesCylinder, ERA5, HRRR, OMol25
 - **Remote data support** — sources handle local dirs, S3, HuggingFace Hub via fsspec with transparent caching
 - **Pluggable submodules** — `mesh`, `da`, `atm` with independent dependency groups
 - **Component registry** — automatic discovery of sources, filters, and sinks
@@ -27,9 +27,15 @@ pip install physicsnemo-curator
 # With mesh support (physicsnemo, pyvista, pyarrow, torch)
 pip install physicsnemo-curator[mesh]
 
-# With parallel backends (joblib, dask)
-pip install physicsnemo-curator[parallel]
+# With data-array support (xarray, earth2studio, zarr)
+pip install physicsnemo-curator[da]
 
+# With atomistic/molecular support (ase, lmdb, torch)
+pip install physicsnemo-curator[atm]
+
+# With parallel backends
+pip install physicsnemo-curator[loky]   # joblib-based multiprocessing
+pip install physicsnemo-curator[dask]   # dask distributed
 ```
 
 ## Minimal Example
