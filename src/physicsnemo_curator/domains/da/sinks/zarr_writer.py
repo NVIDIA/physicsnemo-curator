@@ -117,7 +117,7 @@ class ZarrSink(Sink["xr.DataArray"]):
 
     >>> sink = ZarrSink(
     ...     output_path="output.zarr",
-    ...     chunks={"time": 1, "hrrr_x": 1799, "hrrr_y": 1059},
+    ...     chunks={"time": 1, "hrrr_y": 1059, "hrrr_x": 1799},
     ...     n_indices=72,
     ...     variables=["t2m", "q2m", "tcwv"],
     ...     overwrite=True,

@@ -128,7 +128,7 @@ def main() -> None:
     stats_path = f"{args.output}/stats.zarr"
     stats_filter = DataArrayStatsFilter(output=stats_path, dims=("time",))
     zarr_path = f"{args.output}/dataset.zarr"
-    chunks = {"time": 1, "hrrr_x": 1799, "hrrr_y": 1059}
+    chunks = {"time": 1, "hrrr_y": 1059, "hrrr_x": 1799}
     pipeline = source.filter(stats_filter).write(
         ZarrSink(
             output_path=zarr_path,

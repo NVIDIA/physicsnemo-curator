@@ -50,7 +50,7 @@ def plot_hrrr(output_dir: Path, step_hours: int = 12, out_file: str = "hrrr.jpg"
     epoch = datetime.fromisoformat(parts[1].strip()) if len(parts) == 2 else datetime(1970, 1, 1)
     scale = "days" if "days" in parts[0] else "hours"
 
-    # Load data arrays (time, hrrr_x, hrrr_y)
+    # Load data arrays (time, hrrr_y, hrrr_x)
     t2m = zarr.open_array(str(zarr_path / "t2m" / "data"), mode="r")
     q2m = zarr.open_array(str(zarr_path / "q2m" / "data"), mode="r")
     tcwv = zarr.open_array(str(zarr_path / "tcwv" / "data"), mode="r")
@@ -74,9 +74,11 @@ def plot_hrrr(output_dir: Path, step_hours: int = 12, out_file: str = "hrrr.jpg"
             title = f"t+{t}h"
 
         # t2m row (2-metre temperature in K)
+        # Data shape after indexing: (hrrr_y, hrrr_x) which maps to (rows, cols).
+        # origin="lower" puts hrrr_y index 0 at the bottom of the plot.
         ax_t = axes[0, col]
-        data_t = np.asarray(t2m[t]).T[::-1]
-        im_t = ax_t.pcolormesh(data_t, cmap="RdYlBu_r", shading="auto")
+        data_t = np.asarray(t2m[t])
+        im_t = ax_t.imshow(data_t, cmap="RdYlBu_r", origin="lower", aspect="auto")
         ax_t.set_xticks([])
         ax_t.set_yticks([])
         ax_t.set_title(title, fontsize=8)
@@ -85,8 +87,8 @@ def plot_hrrr(output_dir: Path, step_hours: int = 12, out_file: str = "hrrr.jpg"
 
         # q2m row (2-metre specific humidity in kg/kg)
         ax_q = axes[1, col]
-        data_q = np.asarray(q2m[t]).T[::-1]
-        im_q = ax_q.pcolormesh(data_q, cmap="YlGnBu", shading="auto")
+        data_q = np.asarray(q2m[t])
+        im_q = ax_q.imshow(data_q, cmap="YlGnBu", origin="lower", aspect="auto")
         ax_q.set_xticks([])
         ax_q.set_yticks([])
         if col == 0:
@@ -94,8 +96,8 @@ def plot_hrrr(output_dir: Path, step_hours: int = 12, out_file: str = "hrrr.jpg"
 
         # tcwv row (total column water vapour in kg/m^2)
         ax_w = axes[2, col]
-        data_w = np.asarray(tcwv[t]).T[::-1]
-        im_w = ax_w.pcolormesh(data_w, cmap="Blues", shading="auto")
+        data_w = np.asarray(tcwv[t])
+        im_w = ax_w.imshow(data_w, cmap="Blues", origin="lower", aspect="auto")
         ax_w.set_xticks([])
         ax_w.set_yticks([])
         if col == 0:

@@ -1,7 +1,9 @@
-# HRRR Analysis Data ETL
+# NOAA High-Resolution Rapid Refresh (HRRR) Analysis Data ETL
 
 Curate [HRRR][hrrr] 3 km hourly analysis data through a Source -> Filter -> Sink
 pipeline, fetching 3 days of data from AWS cloud storage.
+
+![HRRR surface variables sample](sample.jpg)
 
 The pipeline:
 
@@ -9,7 +11,7 @@ The pipeline:
    skewness, min, max) per spatial grid point using Welford's online
    algorithm.
 2. **ZarrSink** -- writes each timestep to a Zarr v3 store with one
-   group per variable and dimensions `(time, hrrr_x, hrrr_y)`.
+   group per variable and dimensions `(time, hrrr_y, hrrr_x)`.
 
 ## Prerequisites
 
@@ -68,14 +70,14 @@ output/hrrr_analysis/
 │   ├── t2m/
 │   ├── q2m/
 │   └── tcwv/
-└── dataset.zarr/        # Full dataset (time, hrrr_x, hrrr_y) per variable
+└── dataset.zarr/        # Full dataset (time, hrrr_y, hrrr_x) per variable
     ├── t2m/
     ├── q2m/
     └── tcwv/
 ```
 
 Each variable group in `dataset.zarr` contains a 3-D array with
-dimensions `(time=n, hrrr_x=1799, hrrr_y=1059)` at 3 km resolution on
+dimensions `(time=n, hrrr_y=1059, hrrr_x=1799)` at 3 km resolution on
 a Lambert conformal grid.
 
 ## Plotting

@@ -140,10 +140,10 @@ def _make_hrrr_dataarray(
     hrrr_y = np.arange(n_hrrr_y, dtype=float)
     rng = np.random.default_rng(seed)
 
-    data = rng.standard_normal((len(times), len(variables), n_hrrr_x, n_hrrr_y))
+    data = rng.standard_normal((len(times), len(variables), n_hrrr_y, n_hrrr_x))
     return xr.DataArray(
         data=data,
-        dims=["time", "variable", "hrrr_x", "hrrr_y"],
+        dims=["time", "variable", "hrrr_y", "hrrr_x"],
         coords={
             "time": [np.datetime64(t) for t in times],
             "variable": variables,
@@ -1930,7 +1930,7 @@ class TestHRRREndToEnd:
         )
         sink = ZarrSink(
             output_path=str(tmp_path / "output.zarr"),
-            chunks={"time": 1, "hrrr_x": 1799, "hrrr_y": 1059},
+            chunks={"time": 1, "hrrr_y": 1059, "hrrr_x": 1799},
         )
 
         pipeline = source.write(sink)

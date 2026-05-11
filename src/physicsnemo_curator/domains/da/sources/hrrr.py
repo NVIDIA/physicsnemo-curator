@@ -20,11 +20,12 @@ Fetches `High-Resolution Rapid Refresh (HRRR)
 <https://www.nco.ncep.noaa.gov/pmb/products/hrrr/>`_ hourly analysis data
 from cloud object stores (AWS, Google, or NOMADS) using
 :class:`earth2studio.data.HRRR`.  HRRR provides 3 km North-American weather
-analysis on a Lambert conformal grid with spatial shape ``(1799, 1059)``.
+analysis on a Lambert conformal grid with spatial shape ``(1059, 1799)``
+(hrrr_y, hrrr_x).
 
 Each pipeline index corresponds to a single timestamp, and the returned
 :class:`xarray.DataArray` has dimensions
-``(time, variable, hrrr_x, hrrr_y)`` with a single time step.
+``(time, variable, hrrr_y, hrrr_x)`` with a single time step.
 """
 
 from __future__ import annotations
@@ -114,7 +115,7 @@ class HRRRSource(Source["xr.DataArray"]):
     1
     >>> da = next(source[0])  # doctest: +SKIP
     >>> da.dims  # doctest: +SKIP
-    ('time', 'variable', 'hrrr_x', 'hrrr_y')
+    ('time', 'variable', 'hrrr_y', 'hrrr_x')
 
     Note
     ----
@@ -249,7 +250,7 @@ class HRRRSource(Source["xr.DataArray"]):
         Yields
         ------
         xr.DataArray
-            A single DataArray with dims ``(time, variable, hrrr_x, hrrr_y)``
+            A single DataArray with dims ``(time, variable, hrrr_y, hrrr_x)``
             where ``time`` is length-1.
 
         Raises
