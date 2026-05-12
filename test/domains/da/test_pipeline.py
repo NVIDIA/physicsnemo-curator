@@ -1523,6 +1523,243 @@ class TestMomentsFilterMerge:
 
 
 # ===================================================================
+# GFSSource tests
+# ===================================================================
+
+_GFS_LATS_N = 9  # small GFS grid for tests
+_GFS_LONS_N = 8
+_GFS_VARS = ["t2m", "u10m"]
+_GFS_TIMES = [datetime(2024, 1, 1, 0), datetime(2024, 1, 1, 6)]
+
+
+def _make_gfs_dataarray(
+    times: list[datetime] | None = None,
+    variables: list[str] | None = None,
+    n_lat: int = _GFS_LATS_N,
+    n_lon: int = _GFS_LONS_N,
+    seed: int = 42,
+) -> object:
+    """Create a synthetic DataArray mimicking GFS output.
+
+    Returns an xr.DataArray but typed as ``object`` to avoid
+    top-level numpy/xarray imports.
+    """
+    import numpy as np
+    import xarray as xr
+
+    times = times or _GFS_TIMES[:1]
+    variables = variables or _GFS_VARS
+    lats = np.linspace(90, -90, n_lat)
+    lons = np.linspace(0, 359.75, n_lon)
+    rng = np.random.default_rng(seed)
+
+    data = rng.standard_normal((len(times), len(variables), n_lat, n_lon))
+    return xr.DataArray(
+        data=data,
+        dims=["time", "variable", "lat", "lon"],
+        coords={
+            "time": [np.datetime64(t) for t in times],
+            "variable": variables,
+            "lat": lats,
+            "lon": lons,
+        },
+    )
+
+
+class TestGFSSource:
+    """Unit tests for GFSSource."""
+
+    def test_params(self) -> None:
+        """GFSSource.params() returns descriptors for times, variables, source, cache."""
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        params = GFSSource.params()
+        names = {p.name for p in params}
+        assert {"times", "variables", "source", "cache"} == names
+
+    def test_name_and_description(self) -> None:
+        """GFSSource has correct name and description."""
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        assert GFSSource.name == "GFS"
+        assert "GFS" in GFSSource.description
+
+    def test_len(self) -> None:
+        """Length equals number of timestamps."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_gfs", return_value=MagicMock()),
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = GFSSource(times=_GFS_TIMES, variables=_GFS_VARS)
+        assert len(source) == 2
+
+    def test_getitem(self) -> None:
+        """__getitem__ yields a DataArray from the GFS backend."""
+        from unittest.mock import MagicMock, patch
+
+        import xarray as xr
+
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        mock_backend = MagicMock()
+        mock_backend.return_value = _make_gfs_dataarray(times=[_GFS_TIMES[0]])
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_gfs", return_value=mock_backend),
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = GFSSource(times=_GFS_TIMES, variables=_GFS_VARS)
+        results = list(source[0])
+        assert len(results) == 1
+        assert isinstance(results[0], xr.DataArray)
+        assert "lat" in results[0].dims
+        assert "lon" in results[0].dims
+
+    def test_getitem_negative_index(self) -> None:
+        """Negative indexing works."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        mock_backend = MagicMock()
+        mock_backend.return_value = _make_gfs_dataarray(times=[_GFS_TIMES[-1]])
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_gfs", return_value=mock_backend),
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = GFSSource(times=_GFS_TIMES, variables=_GFS_VARS)
+        results = list(source[-1])
+        assert len(results) == 1
+
+    def test_getitem_out_of_range(self) -> None:
+        """Out-of-range index raises IndexError."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_gfs", return_value=MagicMock()),
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = GFSSource(times=_GFS_TIMES, variables=_GFS_VARS)
+        with pytest.raises(IndexError):
+            list(source[999])
+
+    def test_empty_times_raises(self) -> None:
+        """Empty times list raises ValueError."""
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        with pytest.raises(ValueError, match="non-empty"):
+            GFSSource(times=[], variables=_GFS_VARS)
+
+    def test_empty_variables_raises(self) -> None:
+        """Empty variables list raises ValueError."""
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        with pytest.raises(ValueError, match="non-empty"):
+            GFSSource(times=_GFS_TIMES, variables=[])
+
+    def test_invalid_source_raises(self) -> None:
+        """Invalid source name raises ValueError."""
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        with pytest.raises(ValueError, match="Unknown source"):
+            GFSSource(times=_GFS_TIMES, variables=_GFS_VARS, source="invalid")
+
+    def test_unknown_variable_raises(self) -> None:
+        """Variable not in GFSLexicon raises ValueError."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: v in {"t2m"}
+
+        with (
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_lexicon", return_value=mock_lexicon),
+            pytest.raises(ValueError, match="not found in GFSLexicon"),
+        ):
+            GFSSource(times=_GFS_TIMES, variables=["t2m", "nonexistent_var"])
+
+    def test_properties(self) -> None:
+        """Properties return copies of the constructor inputs."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_gfs", return_value=MagicMock()),
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = GFSSource(times=_GFS_TIMES, variables=_GFS_VARS, cache=True)
+        assert source.times == _GFS_TIMES
+        assert source.variables == _GFS_VARS
+        assert source.source == "aws"
+        assert source.cache is True
+
+    def test_cache_default_false(self) -> None:
+        """Cache defaults to False."""
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_gfs", return_value=MagicMock()),
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = GFSSource(times=_GFS_TIMES, variables=_GFS_VARS)
+        assert source.cache is False
+
+    def test_pickle_roundtrip(self) -> None:
+        """Source can be pickled and unpickled (for multiprocessing)."""
+        import pickle
+        from unittest.mock import MagicMock, patch
+
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        mock_lexicon = MagicMock()
+        mock_lexicon.__contains__ = lambda self, v: True
+
+        with (
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_gfs", return_value=MagicMock()),
+            patch("physicsnemo_curator.domains.da.sources.gfs._import_lexicon", return_value=mock_lexicon),
+        ):
+            source = GFSSource(times=_GFS_TIMES, variables=_GFS_VARS)
+
+        with patch("physicsnemo_curator.domains.da.sources.gfs._import_gfs", return_value=MagicMock()):
+            restored = pickle.loads(pickle.dumps(source))
+
+        assert len(restored) == len(source)
+        assert restored.times == source.times
+        assert restored.variables == source.variables
+        assert restored.source == source.source
+        assert restored.cache == source.cache
+
+
+# ===================================================================
 # Registration tests
 # ===================================================================
 
@@ -1537,6 +1774,14 @@ class TestRegistration:
 
         sources = registry.sources("da")
         assert "ERA5" in sources
+
+    def test_gfs_registered(self) -> None:
+        """GFSSource is discoverable via the registry."""
+        import physicsnemo_curator.domains.da  # noqa: F401
+        from physicsnemo_curator.core.registry import registry
+
+        sources = registry.sources("da")
+        assert "GFS" in sources
 
     def test_hrrr_registered(self) -> None:
         """HRRRSource is discoverable via the registry."""
@@ -1941,3 +2186,66 @@ class TestHRRREndToEnd:
         assert ds["data"].sizes["time"] == 1
         assert ds["data"].sizes["hrrr_x"] == 1799
         assert ds["data"].sizes["hrrr_y"] == 1059
+
+
+# ===================================================================
+# GFS end-to-end tests (hit real AWS)
+# ===================================================================
+
+
+@pytest.mark.e2e
+@pytest.mark.slow
+class TestGFSEndToEnd:
+    """End-to-end tests against the live GFS archive on AWS.
+
+    These tests download real data and are slow.  Run with
+    ``pytest -m 'e2e and slow'``.
+    """
+
+    def test_gfs_fetch_single_timestep(self) -> None:
+        """Fetch a single GFS timestep with two variables."""
+        import xarray as xr
+
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        source = GFSSource(
+            times=[datetime(2024, 1, 1, 0)],
+            variables=["t2m", "u10m"],
+            cache=True,
+        )
+        assert len(source) == 1
+        results = list(source[0])
+        assert len(results) == 1
+
+        da = results[0]
+        assert isinstance(da, xr.DataArray)
+        assert da.sizes["time"] == 1
+        assert da.sizes["variable"] == 2
+        assert da.sizes["lat"] == 721
+        assert da.sizes["lon"] == 1440
+
+    def test_gfs_zarr_pipeline(self, tmp_path: Path) -> None:
+        """Full pipeline: GFS -> ZarrSink."""
+        import xarray as xr
+
+        from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
+        from physicsnemo_curator.domains.da.sources.gfs import GFSSource
+
+        source = GFSSource(
+            times=[datetime(2024, 1, 1, 0)],
+            variables=["t2m"],
+            cache=True,
+        )
+        sink = ZarrSink(
+            output_path=str(tmp_path / "output.zarr"),
+            chunks={"time": 1, "lat": 721, "lon": 1440},
+        )
+
+        pipeline = source.write(sink)
+        paths = pipeline[0]
+        assert len(paths) > 0
+
+        ds = xr.open_zarr(str(tmp_path / "output.zarr" / "t2m"))
+        assert ds["data"].sizes["time"] == 1
+        assert ds["data"].sizes["lat"] == 721
+        assert ds["data"].sizes["lon"] == 1440

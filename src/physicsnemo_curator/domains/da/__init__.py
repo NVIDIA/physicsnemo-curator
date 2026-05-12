@@ -31,11 +31,13 @@ from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 from physicsnemo_curator.domains.da.sinks.netcdf_writer import NetCDF4Sink
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.domains.da.sources.era5 import ERA5Source
+from physicsnemo_curator.domains.da.sources.gfs import GFSSource
 from physicsnemo_curator.domains.da.sources.hrrr import HRRRSource
 
 # Register submodule and components with the global registry.
 registry.register_submodule("da", "DataArray data curation (xarray.DataArray)", "xarray")
 registry.register_source("da", ERA5Source)
+registry.register_source("da", GFSSource)
 registry.register_source("da", HRRRSource)
 registry.register_filter("da", DataArrayStatsFilter)
 registry.register_sink("da", ZarrSink)
@@ -44,6 +46,7 @@ registry.register_sink("da", NetCDF4Sink)
 __all__ = [
     "DataArrayStatsFilter",
     "ERA5Source",
+    "GFSSource",
     "HRRRSource",
     "NetCDF4Sink",
     "ZarrSink",
