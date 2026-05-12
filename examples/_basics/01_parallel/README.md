@@ -8,7 +8,7 @@ per-worker statistics using `gather_pipeline`.
 ## Prerequisites
 
 ```bash
-uv sync --group mesh
+uv sync --extra mesh
 uv run maturin develop
 ```
 

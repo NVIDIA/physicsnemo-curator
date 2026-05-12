@@ -7,9 +7,8 @@ separate dataset.
 ## Prerequisites
 
 ```bash
-uv sync --group da
-uv run maturin develop
-pip install h5py
+uv sync --extra da
+uv pip install h5py
 ```
 
 ## Usage

@@ -1,14 +1,14 @@
 # Creating a Custom Source
 
-This example shows how to implement and register a custom Source. We create a `CylinderFlowSource`
-that reads the Navier-Stokes Cylinder dataset from HuggingFace Hub using Parquet files. This
-demonstrates the core source contract: indexed access with generator semantics, lazy loading, and
-shared geometry caching.
+This example shows how to implement and register a custom Source. We create a `SineFlowSource`
+that generates synthetic 2D flow fields with sinusoidal velocity patterns on a triangular mesh.
+This demonstrates the core source contract: indexed access with generator semantics, mesh
+construction, and registration.
 
 ## Prerequisites
 
 ```bash
-uv sync --group mesh
+uv sync --extra mesh
 uv run maturin develop
 ```
 
@@ -32,35 +32,34 @@ A source inherits from `Source` and implements four things:
 ```python
 from physicsnemo_curator.core.base import Param, Source
 
-class CylinderFlowSource(Source["Mesh"]):
-    name: ClassVar[str] = "Cylinder Flow (Custom)"
-    description: ClassVar[str] = "Read NS cylinder flow from HF Parquet files"
+class SineFlowSource(Source["Mesh"]):
+    name: ClassVar[str] = "Sine Flow (Custom)"
+    description: ClassVar[str] = "Generate synthetic sinusoidal flow on a 2D mesh"
 
     @classmethod
     def params(cls) -> list[Param]:
         return [
-            Param(name="url", description="HuggingFace dataset URL", type=str, default=_DEFAULT_URL),
-            Param(name="cache_storage", description="Local cache directory", type=str, default=""),
+            Param(name="n_samples", description="Number of flow snapshots", type=int, default=10),
+            Param(name="n_points", description="Number of mesh vertices", type=int, default=100),
+            Param(name="seed", description="Random seed for geometry", type=int, default=42),
         ]
 
-    def __init__(self, url: str = _DEFAULT_URL, cache_storage: str = "") -> None:
-        # Eagerly load lightweight metadata
+    def __init__(self, n_samples: int = 10, n_points: int = 100, seed: int = 42) -> None:
+        # Build a 2D triangular grid with jitter
         ...
 
     def __len__(self) -> int:
-        return self._count
+        return self._n_samples
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
-        # Lazily load geometry, read snapshot, yield Mesh
+        # Generate sinusoidal flow with phase offset per index
         ...
         yield Mesh(points=self._points, cells=self._cells, point_data=point_data, global_data=global_data)
 ```
 
 Key design patterns:
 
-- **Eager metadata** — `__init__` reads the lightweight parameter table to determine `__len__`
-- **Lazy heavy data** — geometry is loaded on first `__getitem__` call
-- **Shared caching** — geometry is cached across indices (shared mesh topology)
+- **Eager geometry** — `__init__` builds the mesh grid upfront (lightweight for synthetic data)
 - **Generator semantics** — `__getitem__` must `yield` (not `return`)
 - **Negative indexing** — support `source[-1]` by converting to positive index
 - **IndexError** — raise for out-of-bounds access
@@ -72,7 +71,7 @@ Registration makes the source discoverable via the global registry and the inter
 ```python
 from physicsnemo_curator.core.registry import registry
 
-registry.register_source("mesh", CylinderFlowSource)
+registry.register_source("mesh", SineFlowSource)
 ```
 
 ### Step 3 — Use in a Pipeline
@@ -80,12 +79,12 @@ registry.register_source("mesh", CylinderFlowSource)
 The custom source works with any compatible filter and sink:
 
 ```python
-source = CylinderFlowSource()
+source = SineFlowSource(n_samples=5, n_points=64)
 
 pipeline = source.filter(
-    MeanFilter(output="output/extending/cylinder_stats.parquet")
+    MeanFilter(output="output/extending/sine_stats.parquet")
 ).write(
-    MeshSink(output_dir="output/extending/cylinder_meshes/")
+    MeshSink(output_dir="output/extending/sine_meshes/")
 )
 
 results = run_pipeline(pipeline, n_jobs=1, backend="sequential", indices=range(3), use_tui=True)
@@ -103,34 +102,6 @@ print(f"Point fields: {list(mesh.point_data.keys())}")
 print(f"Global fields: {list(mesh.global_data.keys())}")
 ```
 
-## Extended API: `partition_indices()`
-
-If your source has concurrency constraints (e.g. indices from the same LMDB file must be processed
-by the same worker), override `partition_indices()`.
-
-The method receives the list of indices to be processed and returns groups of indices that MUST stay
-on the same worker. Return `None` if no grouping is needed.
-
-Example: a multi-file LMDB source where each file can only have one reader open at a time per
-process:
-
-```python
-def partition_indices(self, indices: list[int]) -> list[list[int]] | None:
-    file_groups = defaultdict(list)
-    for idx in indices:
-        for file_idx in range(len(self._file_boundaries) - 1):
-            if self._file_boundaries[file_idx] <= idx < self._file_boundaries[file_idx + 1]:
-                file_groups[file_idx].append(idx)
-                break
-    if len(file_groups) <= 1:
-        return None
-    return [sorted(group) for group in file_groups.values()]
-```
-
-When `run_pipeline` receives a source with `partition_indices`, it ensures that indices in the same
-group are never split across workers. The framework calls `intersect_partitions()` internally to
-merge source and sink constraints, then `batch_groups()` to assign groups to workers.
-
 ## Summary
 
 To create a custom source:
@@ -144,8 +115,3 @@ To create a custom source:
 7. Lazily load heavy data (geometry, fields) in `__getitem__`
 8. Cache shared data (like geometry) across indices
 9. Optionally register with `registry.register_source()`
-
-Extended API:
-
-- Override `partition_indices(indices)` to group indices that must share a worker (e.g. same LMDB
-  file, same S3 prefix for locality)

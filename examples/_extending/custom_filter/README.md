@@ -7,7 +7,7 @@ preprocessing step for ERA5 total precipitation, which has a highly skewed distr
 ## Prerequisites
 
 ```bash
-uv sync --group da
+uv sync --extra da
 uv run maturin develop
 ```
 

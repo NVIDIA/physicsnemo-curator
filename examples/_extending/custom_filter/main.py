@@ -289,3 +289,38 @@ class RunningVarianceFilter(Filter["xr.DataArray"]):
         pathlib.Path(output).parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(merged, output)
         return output
+
+
+# Step 4 — Run the stateful filter in a pipeline
+
+from physicsnemo_curator.run import gather_pipeline
+
+variance_filter = RunningVarianceFilter(
+    output="output/extending/variance_stats.parquet",
+    variable="tp",
+)
+
+variance_pipeline = source.filter(variance_filter).write(ZarrSink(output_path="output/extending/variance_tp.zarr"))
+
+print("\n--- Running RunningVarianceFilter pipeline ---")
+print(f"Source items: {len(variance_pipeline)}")
+
+variance_results = run_pipeline(
+    variance_pipeline,
+    n_jobs=1,
+    backend="sequential",
+    indices=range(len(variance_pipeline)),
+    use_tui=True,
+)
+
+print(f"Processed {len(variance_results)} items")
+for i, paths in enumerate(variance_results):
+    print(f"  Index {i}: {paths}")
+
+# Merge per-worker shards into the final output file
+merged_artifacts = gather_pipeline(variance_pipeline)
+print(f"\nMerged artifacts: {merged_artifacts}")
+
+import pathlib
+
+print(f"Output file exists: {pathlib.Path('output/extending/variance_stats.parquet').exists()}")

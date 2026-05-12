@@ -9,7 +9,7 @@ crash resilience without re-processing.
 ## Prerequisites
 
 ```bash
-uv sync --group mesh
+uv sync --extra mesh
 uv run maturin develop
 ```
 

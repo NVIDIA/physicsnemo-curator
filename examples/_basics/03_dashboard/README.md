@@ -8,7 +8,7 @@ progress, per-index timing, stage breakdowns, and artifact inspection.
 ## Prerequisites
 
 ```bash
-uv sync --group mesh --extra dashboard
+uv sync --extra mesh --extra dashboard
 uv run maturin develop
 ```
 
