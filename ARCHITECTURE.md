@@ -9,13 +9,14 @@ parallel execution, caching, and metrics visualization.
 
 ```text
 src/physicsnemo_curator/
-├── __init__.py           # Public API: Source, Filter, Sink, Pipeline, Param, run_pipeline
+├── __init__.py           # Public API: Source, Filter, Sink, Pipeline, Param, run_pipeline, etc.
 ├── _lib.pyi              # Type stubs for Rust extension
 ├── core/                 # Pipeline framework
 │   ├── base.py           # Abstract base classes (Source, Filter, Sink, Pipeline, Param)
 │   ├── pipeline_store.py # SQLite metrics store and checkpointing
 │   ├── registry.py       # Component discovery and registration
 │   ├── cache.py          # Cache directory management (XDG-compliant)
+│   ├── logging.py        # DatabaseLogHandler, worker logging setup
 │   └── serialization.py  # YAML/JSON pipeline round-trip
 ├── run/                  # Execution backends
 │   ├── base.py           # RunBackend ABC + RunConfig
@@ -23,13 +24,15 @@ src/physicsnemo_curator/
 │   ├── process_pool.py   # ProcessPoolExecutor (CPU-bound)
 │   ├── loky.py           # joblib/loky (robust multiprocessing)
 │   ├── dask.py           # Distributed execution via dask.bag
-│   └── prefect.py        # Workflow orchestration with Prefect
+│   ├── progress_monitor.py  # Progress tracking utilities
+│   └── progress_app.py     # Textual TUI progress display
 ├── domains/              # Domain-specific sources, filters, and sinks
 ├── dashboard/            # Metrics visualization (Panel web app)
+│   ├── _cli.py           # DB path resolution + launch helpers
 │   ├── app.py            # DashboardApp server
 │   ├── data.py           # DashboardStore (SQLite query layer)
 │   ├── views/            # Tab views (overview, pipeline, performance)
-│   └── widgets/          # Per-filter visualization widgets
+│   └── widgets/          # WidgetRegistry + per-filter visualization
 └── wiz/                  # Interactive TUI wizard (Textual)
     ├── app.py            # CuratorApp + WizardState
     └── screens/          # Step-by-step pipeline builder screens
@@ -114,7 +117,6 @@ results = run_pipeline(pipeline, n_jobs=4, backend="process_pool")
 | `process_pool` | CPU-bound (GIL-free parallelism) |
 | `loky` | Like process_pool but handles complex pickling |
 | `dask` | Distributed clusters |
-| `prefect` | Workflow orchestration + observability |
 
 Backend selection:
 
@@ -270,10 +272,11 @@ Filters can provide custom dashboard widgets by overriding `dashboard_panel()` a
 `dashboard_layout_hints()`. These are rendered in the Pipeline tab alongside the
 standard metrics.
 
-Launch:
+Launch via the wizard's "Open dashboard" button, or programmatically:
 
-```bash
-curator dashboard /path/to/pipeline.db
+```python
+from physicsnemo_curator.dashboard import launch
+launch("/path/to/pipeline.db", port=5006)
 ```
 
 ---
@@ -287,8 +290,8 @@ guides users through pipeline construction without writing code.
 
 ```text
 Welcome → Submodule → Source → Filters → Sink → Summary → Execute → Results
-                                                    ↕
-                                              Cache Manager
+   ↓                                                ↕
+Dashboard                                     Cache Manager
 ```
 
 The wizard queries the registry to populate selection lists and dynamically generates
@@ -334,9 +337,17 @@ domain_name/
 └── sinks/          # Sink implementations
 ```
 
+Currently three domains are implemented:
+
+| Domain | Purpose | Import Gate |
+|--------|---------|-------------|
+| `mesh` | Computational mesh processing (VTK, LS-DYNA, ANSYS, DrivAer) | `physicsnemo.mesh` |
+| `da` | Data assimilation (ERA5, GFS, HRRR reanalysis data) | `xarray` |
+| `atm` | Atomic/molecular chemistry (ASE LMDB, molecular properties) | `nvalchemi.data` |
+
 Domains are **isolated** — they only depend on `core` and their own external
 libraries. A domain's availability is gated by whether its `import_check` module
-can be imported (e.g., `physicsnemo.mesh` for the mesh domain).
+can be imported.
 
 ---
 
