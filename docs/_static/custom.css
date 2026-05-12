@@ -2,3 +2,8 @@
 .navbar-nav a.nav-link.nav-external[href*="benchmarks"]::after {
     display: none !important;
 }
+
+/* Widen the primary sidebar for better readability. */
+.bd-sidebar-primary {
+    flex-basis: 30%;
+}

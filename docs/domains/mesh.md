@@ -208,33 +208,13 @@ sink = MeshSink(
 paths = pipeline[0]  # ['./output/boundary_0.vtp.pmsh']
 ```
 
-## Full Pipeline Example
+## Dependencies
 
-```python
-from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
-from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
-from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
+The `mesh` domain depends on:
 
-# Local data
-pipeline = (
-    VTKSource("./cfd_results/", manifold_dim=2)
-    .filter(MeanFilter(output="stats.parquet"))
-    .write(MeshSink(output_dir="./output/"))
-)
-
-# Remote data from HuggingFace (DrivAerML dataset)
-pipeline = (
-    DrivAerMLSource(mesh_type="boundary")
-    .filter(MeanFilter(output="stats.parquet"))
-    .write(MeshSink(output_dir="./output/"))
-)
-
-# Execute
-for i in range(len(pipeline)):
-    paths = pipeline[i]
-    print(f"Item {i}: {paths}")
-
-# Finalize statistics
-pipeline.filters[0].flush()
-```
+| Package | Purpose |
+|---------|---------|
+| [physicsnemo](https://github.com/NVIDIA/PhysicsNeMo) | `Mesh` tensorclass and I/O utilities |
+| [pyvista](https://docs.pyvista.org/) | VTK file reading and mesh manipulation |
+| [pyarrow](https://arrow.apache.org/docs/python/) | Parquet I/O for statistics and metadata |
+| [torch](https://pytorch.org/) | Tensor operations (required by physicsnemo) |
