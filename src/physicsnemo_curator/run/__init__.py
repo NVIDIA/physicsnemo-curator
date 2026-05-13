@@ -58,6 +58,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from physicsnemo_curator.core.logging import _ensure_logging_configured
 from physicsnemo_curator.run.base import RunBackend, RunConfig
 from physicsnemo_curator.run.dask import DaskBackend
 from physicsnemo_curator.run.loky import LokyBackend
@@ -235,6 +236,10 @@ def run_pipeline(
 
     >>> results = run_pipeline(pipeline, indices=[0, 5, 10])
     """
+    # Ensure console logging is configured so users see output even if they
+    # never called configure_logging() explicitly.
+    _ensure_logging_configured()
+
     # Validate backend
     if backend not in _BACKENDS:
         available = ", ".join(sorted(_BACKENDS.keys()))

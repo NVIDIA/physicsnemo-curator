@@ -229,6 +229,26 @@ class DatabaseLogHandler(logging.Handler):
         super().close()
 
 
+def _ensure_logging_configured() -> None:
+    """Auto-configure console logging if no handlers are set up.
+
+    Called internally by :func:`get_logger` so that log messages are always
+    visible, even when the user does not explicitly call
+    :func:`configure_logging`.  This is a no-op once any handler (console or
+    database) has been added to the root ``physicsnemo_curator`` logger.
+
+    In worker processes (spawned by parallel backends), console logging is
+    intentionally skipped — workers write to the database handler instead.
+    """
+    root_logger = logging.getLogger("physicsnemo_curator")
+    if not root_logger.handlers:
+        # Skip in worker processes to avoid garbled console output.
+        # Workers get their logging configured by setup_worker_logging().
+        if multiprocessing.current_process().name != "MainProcess":
+            return
+        configure_logging()
+
+
 def get_logger(component: Source | Filter | Sink | str) -> _ComponentLogger:
     """Get a logger for a pipeline component.
 
@@ -250,6 +270,11 @@ def get_logger(component: Source | Filter | Sink | str) -> _ComponentLogger:
     [MainProcess:12345] MySource: Processing index 42
     """
     component_name = component if isinstance(component, str) else type(component).__name__
+
+    # Auto-configure console logging if no handlers exist yet.
+    # This ensures logs are visible even if the user never called
+    # configure_logging() explicitly.
+    _ensure_logging_configured()
 
     # Get logger for the curator namespace
     logger = logging.getLogger(f"physicsnemo_curator.{component_name}")
