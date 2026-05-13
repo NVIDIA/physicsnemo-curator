@@ -24,7 +24,6 @@ uv sync --extra mesh --extra loky
 
 # or with pip
 pip install physicsnemo-curator[mesh,loky]
-pip install huggingface_hub[cli]
 ```
 
 ## Download the Dataset
@@ -41,10 +40,12 @@ relying on streaming.
 > downloading.
 
 ```bash
+uv pip install huggingface_hub[cli]
+
 # Download specific runs (adjust --include for your needs)
-hf download neashton/drivaerml \
+uv run hf download neashton/drivaerml \
     --repo-type dataset \
-    --include "run_1/*" "run_2/*" \
+    --include "run_1/*" --include "run_2/*" \
     --local-dir input/drivaerml
 ```
 

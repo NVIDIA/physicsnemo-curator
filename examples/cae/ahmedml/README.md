@@ -27,7 +27,6 @@ uv sync --extra mesh --extra loky
 
 # or with pip
 pip install physicsnemo-curator[mesh]
-pip install huggingface_hub[cli]
 ```
 
 ## Download the Dataset
@@ -38,9 +37,11 @@ The vtp files are large, so it is recommended to explicitly manage the download 
 the HuggingFace CLI rather than relying on streaming while the pipeline is running.
 
 ```bash
-hf download neashton/ahmedml \
+uv pip install huggingface_hub[cli]
+
+uv run hf download neashton/ahmedml \
     --repo-type dataset \
-    --include "run_1/*" "run_2/*" "run_3/*" \
+    --include "run_1/*" --include "run_2/*" --include "run_3/*" \
     --local-dir input/ahmedml
 ```
 
