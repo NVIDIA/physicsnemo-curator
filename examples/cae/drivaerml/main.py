@@ -20,10 +20,9 @@ import argparse
 from pathlib import Path
 
 from physicsnemo_curator.domains.mesh.filters.random_permutation import RandomPermutationFilter
-from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
-from physicsnemo_curator.run import gather_pipeline, run_pipeline
+from physicsnemo_curator.run import run_pipeline
 
 
 def main() -> None:
@@ -71,19 +70,14 @@ def main() -> None:
     print(f"Output: {output_dir}")
 
     # Build the pipeline:
-    # 1. MeshStatsFilter — per-field statistics with Welford accumulators
-    # 2. RandomPermutationFilter — shuffle point/cell order
-    # 3. MeshSink — write to per-run subdirectories
+    # 1. RandomPermutationFilter — shuffle point/cell order
+    # 2. MeshSink — write to per-run subdirectories
     # Note: PrecisionFilter is not needed since DrivAerMLSource already
     # downcasts to float32 internally.
-    pipeline = (
-        source.filter(MeshStatsFilter(output=str(output_dir / "stats.parquet")))
-        .filter(RandomPermutationFilter(seed=42))
-        .write(
-            MeshSink(
-                output_dir=str(output_dir),
-                naming_template="run_{run_id}/{mesh_name}",
-            )
+    pipeline = source.filter(RandomPermutationFilter(seed=42)).write(
+        MeshSink(
+            output_dir=str(output_dir),
+            naming_template="run_{run_id}/{mesh_name}",
         )
     )
 
@@ -93,11 +87,6 @@ def main() -> None:
     print(f"\nProcessed {len(results)} runs")
     for i, paths in enumerate(results):
         print(f"  Run {i}: {paths}")
-
-    # Merge per-worker statistics shards into a single Parquet file
-    merged = gather_pipeline(pipeline)
-    for path in merged:
-        print(f"Merged statistics: {path}")
 
 
 if __name__ == "__main__":

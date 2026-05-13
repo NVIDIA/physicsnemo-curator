@@ -952,10 +952,11 @@ class DrivAerMLSource(Source[Mesh]):
 
         * **interior** — volume VTU converted to a point-cloud via
           ``cell_centroids`` (no connectivity, cells shape ``[0, 1]``).
-        * **boundaries["surface"]** — boundary VTP with cell connectivity
+        * **boundaries["vehicle"]** — boundary VTP with cell connectivity
           and cell data fields only (point data on surface meshes is not
           extracted; cell data is computed from vertex data if needed).
-        * **global_data** — ``U_inf = [30, 0, 0]`` and ``rho_inf = 1.225``.
+        * **global_data** — ``U_inf = [30, 0, 0]``, ``rho_inf = 1.225``,
+          ``p_inf = 0.0``, ``nu = 1.0``, and ``L_ref = 5.0``.
 
         All floating-point data is downcast to float32.
 
@@ -994,6 +995,7 @@ class DrivAerMLSource(Source[Mesh]):
         boundary_remote = f"{self._root_path}/run_{run_id}/boundary_{run_id}.vtp"
         boundary_path = self._ensure_local(boundary_remote)
         surface = self._read_surface(boundary_path)
+        time_value = self._read_time_value(boundary_path)
         self._cleanup_local(boundary_path)
         surface = self._downcast_fp32(surface)
         self._log.info(
@@ -1007,13 +1009,23 @@ class DrivAerMLSource(Source[Mesh]):
         global_data = {
             "U_inf": torch.tensor([30.0, 0.0, 0.0], dtype=torch.float32),
             "rho_inf": torch.tensor(1.225, dtype=torch.float32),
+            "p_inf": torch.tensor(0.0, dtype=torch.float32),
+            "nu": torch.tensor(1.0, dtype=torch.float32),
+            "L_ref": torch.tensor(5.0, dtype=torch.float32),
         }
+
+        # --- Sub-mesh global data (TimeValue from VTK field_data) ---
+        from tensordict import TensorDict
+
+        tv_tensor = torch.tensor([time_value], dtype=torch.float32)
+        interior.global_data = TensorDict({"TimeValue": tv_tensor}, batch_size=[])
+        surface.global_data = TensorDict({"TimeValue": tv_tensor}, batch_size=[])
 
         # --- Assemble DomainMesh ---
         self._log.debug("run_%d: Assembling DomainMesh", run_id)
         domain_mesh = DomainMesh(
             interior=interior,
-            boundaries={"surface": surface},
+            boundaries={"vehicle": surface},
             global_data=global_data,
         )
         self._log.info("run_%d: Domain read complete (%.2fs total)", run_id, time.perf_counter() - t_total)
@@ -1068,7 +1080,10 @@ class DrivAerMLSource(Source[Mesh]):
                     )
 
             # PyVista backend (or Rust fallback)
-            return self._read_with_pyvista(volume_path, manifold_dim=0, point_source="cell_centroids")
+            mesh = self._read_with_pyvista(volume_path, manifold_dim=0, point_source="cell_centroids")
+            # Filter to target interior fields only
+            mesh = self._filter_interior_fields(mesh)
+            return mesh
         finally:
             if temp_concat:
                 pathlib.Path(volume_path).unlink(missing_ok=True)
@@ -1096,7 +1111,11 @@ class DrivAerMLSource(Source[Mesh]):
         """
         from physicsnemo_curator._lib import vtk
 
-        return vtk.read_vtk(volume_path, skip_point_data=True)
+        return vtk.read_vtk(
+            volume_path,
+            skip_point_data=True,
+            include_arrays=["CpMeanTrim", "nutMeanTrim", "pMeanTrim", "UMeanTrim"],
+        )
 
     def _build_centroid_mesh(self, rust_mesh: object) -> Mesh:
         """Convert a Rust VtkMeshData into a centroid point-cloud Mesh.
@@ -1163,15 +1182,102 @@ class DrivAerMLSource(Source[Mesh]):
             centroids = points_raw
 
         # Cell data becomes point_data for the centroid point-cloud
+        # Filter to target interior fields only
+        target_fields = {"CpMeanTrim", "nutMeanTrim", "pMeanTrim", "UMeanTrim"}
         point_data_dict: dict[str, torch.Tensor] = {}
         for name, data in rust_mesh.cell_data.items():  # ty: ignore[unresolved-attribute]
-            arr = torch.from_numpy(data)
-            point_data_dict[name] = arr
+            if name in target_fields:
+                arr = torch.from_numpy(data)
+                point_data_dict[name] = arr
 
         n_pts = centroids.shape[0]
         point_data = TensorDict(point_data_dict, batch_size=[n_pts]) if point_data_dict else None
 
         return Mesh(points=centroids, cells=None, point_data=point_data)
+
+    @staticmethod
+    def _filter_interior_fields(mesh: Mesh) -> Mesh:
+        """Filter interior mesh point_data to target fields only.
+
+        Parameters
+        ----------
+        mesh : Mesh
+            Interior point-cloud mesh (from PyVista fallback path).
+
+        Returns
+        -------
+        Mesh
+            Mesh with only the target interior fields retained.
+        """
+        from tensordict import TensorDict
+
+        target_fields = {"CpMeanTrim", "nutMeanTrim", "pMeanTrim", "UMeanTrim"}
+        if mesh.point_data is not None:
+            filtered = {k: mesh.point_data[k] for k in mesh.point_data.keys() if k in target_fields}  # noqa: SIM118
+            n_pts = mesh.n_points
+            mesh.point_data = (
+                TensorDict(filtered, batch_size=[n_pts]) if filtered else TensorDict({}, batch_size=[n_pts])
+            )
+        return mesh
+
+    def _read_time_value(self, path: str) -> float:
+        """Extract TimeValue from VTK file field_data.
+
+        VTK files in the DrivAerML dataset store a ``TimeValue`` scalar in
+        their ``<FieldData>`` section representing the simulation time of
+        the time-averaged result.
+
+        Uses a lightweight header scan to avoid loading the entire VTK file.
+        Supports both ASCII and binary-encoded VTK XML field data.
+
+        Parameters
+        ----------
+        path : str
+            Local path to a VTK file (VTP or VTU).
+
+        Returns
+        -------
+        float
+            The TimeValue, or 0.0 if not present.
+        """
+        import base64
+        import re
+        import struct
+
+        try:
+            # FieldData is always near the top of VTK XML files.
+            # Read a generous header chunk to find it.
+            with pathlib.Path(path).open("rb") as f:
+                header = f.read(16384).decode("utf-8", errors="ignore")
+
+            # Try ASCII format first: <DataArray ... format='ascii'>3.6</DataArray>
+            match = re.search(
+                r"<DataArray[^>]*Name=[\"']TimeValue[\"'][^>]*format=[\"']ascii[\"'][^>]*>"
+                r"\s*([\d.eE+\-]+)",
+                header,
+            )
+            if match:
+                return float(match.group(1))
+
+            # Try binary format: <DataArray ... format='binary'>BASE64DATA</DataArray>
+            match = re.search(
+                r"<DataArray[^>]*Name=[\"']TimeValue[\"'][^>]*format=[\"']binary[\"'][^>]*>"
+                r"\s*([A-Za-z0-9+/=]+)\s*</DataArray>",
+                header,
+            )
+            if match:
+                raw = base64.b64decode(match.group(1))
+                # VTK binary: UInt64 header (8 bytes) + Float32/Float64 value
+                if len(raw) >= 12:
+                    return float(struct.unpack("<f", raw[8:12])[0])
+
+            # Fallback: check XML comment <!-- time='3.6' -->
+            match = re.search(r"<!--\s*time=['\"]?([\d.eE+\-]+)", header)
+            if match:
+                return float(match.group(1))
+        except Exception:  # noqa: BLE001
+            self._log.debug("Could not read TimeValue from %s", path)
+        return 0.0
 
     def _read_surface(self, path: str) -> Mesh:
         """Read a boundary VTP file as a surface mesh with cell data only.

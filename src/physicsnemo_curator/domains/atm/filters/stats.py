@@ -491,7 +491,7 @@ class AtomicStatsFilter(Filter["AtomicData"]):
         import panel_material_ui as pmui
         from bokeh.models import HoverTool
 
-        hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
+        hv.extension("bokeh")
         stat_columns: list[str] = [
             "index",
             "mean",
