@@ -212,8 +212,10 @@ def _remap_mixed_connectivity(
     new_cell_types = cell_types[cell_valid]
 
     # Build updated global_data
+    # Use .keys() to avoid StopIteration leaking from TensorDict.__iter__
+    # into a generator context (PEP 479 converts it to RuntimeError).
     gd_dict: dict[str, torch.Tensor] = {}
-    for key in global_data:
+    for key in global_data.keys():  # noqa: SIM118
         if key not in ("mixed_connectivity", "mixed_offsets", "mixed_cell_types"):
             gd_dict[str(key)] = global_data[key]  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
     gd_dict["mixed_connectivity"] = torch.from_numpy(new_connectivity)

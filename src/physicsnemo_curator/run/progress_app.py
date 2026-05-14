@@ -186,6 +186,7 @@ class PipelineProgressApp(App[None]):
         self._log_handler: _TUILogHandler | None = None
         self._db_log_handler: DatabaseLogHandler | None = None
         self._loguru_sink_id: int | None = None
+        self._saved_console_handlers: list[logging.Handler] = []
         self._page = 0
         self._workers_data: list[dict] = []
         self._last_log_id = 0  # Track last seen database log entry
@@ -218,6 +219,16 @@ class PipelineProgressApp(App[None]):
 
         # Capture print() calls (stdout + stderr) into Print events
         self.begin_capture_print(self, stdout=True, stderr=True)
+
+        # Remove any existing console StreamHandlers from the curator logger
+        # to prevent log messages from writing directly to stdout/stderr
+        # (which would corrupt the TUI's alternate screen buffer).
+        # Save them so they can be restored when the TUI exits.
+        curator_logger = logging.getLogger("physicsnemo_curator")
+        for handler in curator_logger.handlers[:]:
+            if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+                self._saved_console_handlers.append(handler)
+                curator_logger.removeHandler(handler)
 
         # Attach a logging handler to the root logger so library log
         # messages appear in the TUI log panel instead of corrupting
@@ -393,6 +404,14 @@ class PipelineProgressApp(App[None]):
             except Exception:  # noqa: BLE001
                 pass
             self._loguru_sink_id = None
+
+        # Restore console handlers that were removed when the TUI started
+        # so that post-TUI logging (e.g. summary output) still appears.
+        if self._saved_console_handlers:
+            curator_logger = logging.getLogger("physicsnemo_curator")
+            for handler in self._saved_console_handlers:
+                curator_logger.addHandler(handler)
+            self._saved_console_handlers.clear()
 
     def _setup_loguru_sink(self) -> None:
         """Add a loguru sink that routes messages to the TUI log panel.
