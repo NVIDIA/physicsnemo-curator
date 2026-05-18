@@ -17,6 +17,7 @@ The pipeline:
 
 ```bash
 uv sync --extra da
+uv pip install matplotlib
 
 # or with pip
 pip install physicsnemo-curator[da]
