@@ -35,6 +35,22 @@ When executed with a parallel backend (``process_pool``), the sink
 partitions pipeline indices into chunk-aligned groups so that no two
 workers write to the same Zarr chunk concurrently.  The partitioning
 dimension defaults to the ``append_dim`` (``"time"``).
+
+Remote Storage Support
+----------------------
+The sink supports writing to remote storage (S3, GCS, Azure) via fsspec.
+Pass an fsspec-compatible URL as the *output_path* (e.g.,
+``s3://bucket/path/dataset.zarr``) and provide authentication via
+*storage_options*::
+
+    sink = ZarrSink(
+        output_path="s3://my-bucket/weather/gfs.zarr",
+        storage_options={"key": "...", "secret": "..."},
+        ...
+    )
+
+For AWS S3, you can also rely on ambient credentials from environment
+variables or ``~/.aws/credentials``.
 """
 
 from __future__ import annotations
@@ -44,9 +60,11 @@ import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, ClassVar
 
+import fsspec
 import numpy as np
 import xarray as xr
 import zarr
+from fsspec.core import split_protocol
 
 from physicsnemo_curator.core.base import Param, Sink
 from physicsnemo_curator.core.logging import get_logger
@@ -77,7 +95,8 @@ class ZarrSink(Sink["xr.DataArray"]):
     Parameters
     ----------
     output_path : str
-        Path to the output Zarr store directory.
+        Path to the output Zarr store directory.  Supports local paths
+        and remote fsspec URLs (e.g., ``s3://bucket/path/store.zarr``).
     chunks : dict[str, int] | None
         Chunk sizes per dimension for the Zarr arrays.  Defaults to
         ``{"time": 1, "lat": 721, "lon": 1440}`` (one time-step per
@@ -103,6 +122,10 @@ class ZarrSink(Sink["xr.DataArray"]):
         overwritten during pre-allocation.  If *False* (default) and
         the store already exists, a :class:`FileExistsError` is raised
         to prevent accidental data loss.
+    storage_options : dict[str, Any] | None
+        Extra keyword arguments for the fsspec filesystem.  Use this
+        to provide credentials for remote stores (e.g., S3 keys).
+        If *None*, uses ambient credentials from environment or config.
 
     Examples
     --------
@@ -121,6 +144,16 @@ class ZarrSink(Sink["xr.DataArray"]):
     ...     n_indices=72,
     ...     variables=["t2m", "q2m", "tcwv"],
     ...     overwrite=True,
+    ... )
+
+    Remote S3 storage:
+
+    >>> sink = ZarrSink(
+    ...     output_path="s3://my-bucket/weather/gfs.zarr",
+    ...     chunks={"time": 1, "lat": 721, "lon": 1440},
+    ...     n_indices=28,
+    ...     variables=["t2m", "u10m"],
+    ...     storage_options={"anon": False},  # Use ambient AWS credentials
     ... )
     """
 
@@ -163,9 +196,11 @@ class ZarrSink(Sink["xr.DataArray"]):
         n_indices: int | None = None,
         variables: list[str] | None = None,
         overwrite: bool = False,
+        storage_options: dict[str, Any] | None = None,
     ) -> None:
         self._log = get_logger(self)
-        self._output_path = pathlib.Path(output_path)
+        self._output_path = output_path
+        self._storage_options = storage_options or {}
         self._chunks = chunks if chunks is not None else dict(self._DEFAULT_CHUNKS)
         self._shards = shards
         self._append_dim = append_dim
@@ -173,6 +208,16 @@ class ZarrSink(Sink["xr.DataArray"]):
         self._variables = variables
         self._overwrite = overwrite
         self._preallocated = False
+
+        # Determine if using remote storage based on URL scheme.
+        self._is_remote = "://" in output_path
+
+        # Build filesystem for path operations.
+        if self._is_remote:
+            protocol, _ = split_protocol(output_path)
+            self._fs = fsspec.filesystem(protocol, **self._storage_options)
+        else:
+            self._fs = fsspec.filesystem("file")
 
         # Validate: n_indices and variables must both be set or both be None.
         if (n_indices is None) != (variables is None):
@@ -224,19 +269,25 @@ class ZarrSink(Sink["xr.DataArray"]):
             coords[dim_name] = np.arange(dim_size)
 
         # Check for existing store and respect overwrite flag.
-        if self._output_path.exists() and any((self._output_path / v).exists() for v in variables):
-            if not self._overwrite:
+        # Use fsspec for path existence checks to support remote stores.
+        store_exists = self._fs.exists(self._output_path)
+        if store_exists:
+            var_paths_exist = any(self._fs.exists(f"{self._output_path}/{v}") for v in variables)
+            if var_paths_exist and not self._overwrite:
                 msg = (
                     f"Zarr store already exists at '{self._output_path}'. "
                     f"Set overwrite=True to replace it, or remove the directory manually."
                 )
                 raise FileExistsError(msg)
-            self._log.warning("Overwriting existing Zarr store at: %s", self._output_path)
+            if var_paths_exist:
+                self._log.warning("Overwriting existing Zarr store at: %s", self._output_path)
 
-        self._output_path.mkdir(parents=True, exist_ok=True)
+        # Create parent directory (local only; remote stores handle this automatically).
+        if not self._is_remote:
+            pathlib.Path(self._output_path).mkdir(parents=True, exist_ok=True)
 
         for var_name in variables:
-            group_path = self._output_path / var_name
+            group_path = f"{self._output_path}/{var_name}"
 
             # Create empty NaN-filled DataArray with correct shape
             data = np.full(shape, np.nan, dtype=np.float32)
@@ -355,9 +406,9 @@ class ZarrSink(Sink["xr.DataArray"]):
 
         # If no 'variable' dim, write directly
         if "variable" not in da.dims:
-            group_path = self._output_path / "data"
+            group_path = f"{self._output_path}/data"
             self._write_to_zarr(da, group_path, index)
-            paths.append(str(group_path))
+            paths.append(group_path)
             return paths
 
         # Split along the variable dimension and write each separately.
@@ -365,13 +416,13 @@ class ZarrSink(Sink["xr.DataArray"]):
         for var_name in variables:
             var_da = da.sel(variable=var_name).drop_vars("variable")
             var_str = str(var_name)
-            group_path = self._output_path / var_str
+            group_path = f"{self._output_path}/{var_str}"
             self._write_to_zarr(var_da, group_path, index)
-            paths.append(str(group_path))
+            paths.append(group_path)
 
         return paths
 
-    def _write_to_zarr(self, da: xr.DataArray, group_path: pathlib.Path, index: int) -> None:
+    def _write_to_zarr(self, da: xr.DataArray, group_path: str, index: int) -> None:
         """Write a DataArray to a Zarr group using the appropriate strategy.
 
         When the store is pre-allocated, uses region writes
@@ -382,8 +433,8 @@ class ZarrSink(Sink["xr.DataArray"]):
         ----------
         da : xr.DataArray
             Data to write (should have the append dim as the first dim).
-        group_path : pathlib.Path
-            Path to the Zarr group directory.
+        group_path : str
+            Path to the Zarr group directory (local or remote URL).
         index : int
             Pipeline index — used as the position along the append
             dimension for region writes.
@@ -393,7 +444,7 @@ class ZarrSink(Sink["xr.DataArray"]):
         else:
             self._append_to_zarr(da, group_path)
 
-    def _region_write(self, da: xr.DataArray, group_path: pathlib.Path, index: int) -> None:
+    def _region_write(self, da: xr.DataArray, group_path: str, index: int) -> None:
         """Write a DataArray to a pre-allocated Zarr group using region indexing.
 
         Each call writes to a specific slice along the append dimension,
@@ -406,8 +457,8 @@ class ZarrSink(Sink["xr.DataArray"]):
         da : xr.DataArray
             Data to write.  Must have exactly one element along the
             append dimension.
-        group_path : pathlib.Path
-            Path to the pre-allocated Zarr group.
+        group_path : str
+            Path to the pre-allocated Zarr group (local or remote URL).
         index : int
             Position along the append dimension to write to.
         """
@@ -430,12 +481,13 @@ class ZarrSink(Sink["xr.DataArray"]):
         ds = ds.drop_vars(drop_vars)
 
         ds.to_zarr(
-            store=str(group_path),
+            store=group_path,
             mode="r+",
             region=region,
+            storage_options=self._storage_options if self._is_remote else None,
         )
 
-    def _append_to_zarr(self, da: xr.DataArray, group_path: pathlib.Path) -> None:
+    def _append_to_zarr(self, da: xr.DataArray, group_path: str) -> None:
         """Append a DataArray to a Zarr group, creating it if needed.
 
         This is the legacy write path used when the store is NOT
@@ -448,8 +500,8 @@ class ZarrSink(Sink["xr.DataArray"]):
         ----------
         da : xr.DataArray
             Data to write (should have the append dim as the first dim).
-        group_path : pathlib.Path
-            Path to the Zarr group directory.
+        group_path : str
+            Path to the Zarr group directory (local or remote URL).
         """
         # Convert to Dataset for xarray's Zarr writer
         ds = da.to_dataset(name="data")
@@ -472,25 +524,29 @@ class ZarrSink(Sink["xr.DataArray"]):
             shard_tuple = tuple(self._shards.get(str(d), chunk_tuple[i]) for i, d in enumerate(da.dims))
             encoding["data"]["shards"] = shard_tuple
 
-        if group_path.exists():
+        if self._fs.exists(group_path):
             # Append along the configured dimension
             ds.to_zarr(
-                store=str(group_path),
+                store=group_path,
                 mode="a",
                 append_dim=self._append_dim,
                 zarr_format=3,
+                storage_options=self._storage_options if self._is_remote else None,
             )
         else:
-            group_path.parent.mkdir(parents=True, exist_ok=True)
+            # Create parent directory (local only; remote stores handle this automatically).
+            if not self._is_remote:
+                pathlib.Path(group_path).parent.mkdir(parents=True, exist_ok=True)
             ds.to_zarr(
-                store=str(group_path),
+                store=group_path,
                 mode="w",
                 encoding=encoding,
                 zarr_format=3,
+                storage_options=self._storage_options if self._is_remote else None,
             )
 
     @property
-    def output_path(self) -> pathlib.Path:
+    def output_path(self) -> str:
         """Return the output Zarr store path."""
         return self._output_path
 

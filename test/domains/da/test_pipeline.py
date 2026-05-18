@@ -972,7 +972,7 @@ class TestZarrSink:
         from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
-        assert sink.output_path == tmp_path / "output.zarr"
+        assert sink.output_path == str(tmp_path / "output.zarr")
 
 
 # ===================================================================
