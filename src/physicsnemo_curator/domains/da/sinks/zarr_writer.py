@@ -62,9 +62,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import fsspec
 import numpy as np
-import xarray as xr
+import xarray as xr  # noqa: TC002 - used at runtime in __call__, _write_dataarray, etc.
 import zarr
-from fsspec.core import split_protocol
+from zarr.storage import FsspecStore, LocalStore
 
 from physicsnemo_curator.core.base import Param, Sink
 from physicsnemo_curator.core.logging import get_logger
@@ -222,11 +222,20 @@ class ZarrSink(Sink["xr.DataArray"]):
         # Determine if using remote storage based on URL scheme.
         self._is_remote = "://" in output_path
 
-        # Build filesystem for path operations.
+        # Build zarr store and fsspec filesystem for path operations.
+        # For remote stores, use FsspecStore per Zarr v3 best practices.
+        # For local stores, use LocalStore with a separate fsspec filesystem.
+        # Note: We keep a separate sync filesystem for exists() checks since
+        # FsspecStore uses an async filesystem internally.
         if self._is_remote:
+            from fsspec.core import split_protocol
+
             protocol, _ = split_protocol(output_path)
+            self._store = FsspecStore.from_url(output_path, storage_options=self._storage_options)
+            # Create a sync filesystem for path existence checks
             self._fs = fsspec.filesystem(protocol, **self._storage_options)
         else:
+            self._store = LocalStore(output_path)
             self._fs = fsspec.filesystem("file")
 
         # Validate: n_indices and variables must both be set or both be None.
@@ -311,8 +320,16 @@ class ZarrSink(Sink["xr.DataArray"]):
         if not self._is_remote:
             pathlib.Path(self._output_path).mkdir(parents=True, exist_ok=True)
 
-        for var_name in vars_to_create:
+        for i, var_name in enumerate(vars_to_create, 1):
             group_path = f"{self._output_path}/{var_name}"
+            self._log.info(
+                "Creating variable %d/%d: %s (shape=%s, chunks=%s)",
+                i,
+                len(vars_to_create),
+                var_name,
+                shape,
+                chunk_sizes,
+            )
 
             # If overwrite is set, remove existing group first.
             if self._overwrite and self._fs.exists(group_path):
@@ -323,18 +340,36 @@ class ZarrSink(Sink["xr.DataArray"]):
 
                     shutil.rmtree(group_path, ignore_errors=True)
 
-            # Create empty NaN-filled DataArray with correct shape
-            data = np.full(shape, np.nan, dtype=np.float32)
-            da = xr.DataArray(data, dims=dim_names, coords=coords)
-            ds = da.to_dataset(name="data")
+            # Create empty Zarr array using zarr-python directly (no data upload).
+            # This only writes metadata, not actual chunk data.
+            if self._is_remote:
+                var_store = FsspecStore.from_url(group_path, storage_options=self._storage_options)
+            else:
+                var_store = LocalStore(group_path)
 
-            ds.to_zarr(
-                store=str(group_path),
-                mode="w",
-                encoding=encoding,
-                zarr_format=3,
+            # Create the zarr group with an empty array
+            root = zarr.open_group(var_store, mode="w", zarr_format=3)
+
+            # Build shards tuple if sharding is enabled
+            shard_tuple = None
+            if self._shards is not None:
+                shard_tuple = tuple(self._shards.get(d, c) for d, c in zip(dim_names, chunk_sizes, strict=True))
+
+            # Create empty array with fill_value=NaN
+            # write_data=False means no chunk files are written (metadata only)
+            # dimension_names enables xarray compatibility for reading
+            root.create_array(
+                "data",
+                shape=shape,
+                chunks=chunk_sizes,
+                shards=shard_tuple,
+                dtype=np.float32,
+                fill_value=np.nan,
+                dimension_names=dim_names,
+                write_data=False,
             )
-            self._log.debug("Pre-allocated Zarr group: %s (shape=%s)", group_path, shape)
+
+            self._log.debug("Pre-allocated Zarr group: %s (metadata only)", group_path)
 
         self._preallocated = True
         if vars_to_create:
@@ -497,30 +532,22 @@ class ZarrSink(Sink["xr.DataArray"]):
         index : int
             Position along the append dimension to write to.
         """
-        ds = da.to_dataset(name="data")
+        # Open the array directly (not the group) - much faster
+        array_path = f"{group_path}/data"
+        if self._is_remote:
+            arr_store = FsspecStore.from_url(array_path, storage_options=self._storage_options)
+        else:
+            arr_store = LocalStore(array_path)
 
-        # Build region spec: slice the append dim at the index position.
-        region: dict[str, slice] = {self._append_dim: slice(index, index + 1)}
+        arr = zarr.open_array(arr_store, mode="r+")
 
-        # Drop all coordinates/variables that don't share a dimension with
-        # the region.  xarray's region write requires every variable in the
-        # dataset to have at least one dim in common with the region dims.
-        # Dimension coordinates (e.g. hrrr_x, hrrr_y, time) are 1-D and
-        # only indexed on themselves — drop those that lack the append dim.
-        region_dims = set(region.keys())
-        drop_vars = [
-            name
-            for name in list(ds.coords) + list(ds.data_vars)
-            if name != "data" and not region_dims.intersection(ds[name].dims)
-        ]
-        ds = ds.drop_vars(drop_vars)
+        # Get the numpy data and squeeze out the time dimension if needed
+        data = da.values
+        if data.ndim == len(arr.shape) and data.shape[0] == 1:
+            data = data[0]  # Remove leading singleton time dim
 
-        ds.to_zarr(
-            store=group_path,
-            mode="r+",
-            region=region,
-            storage_options=self._storage_options if self._is_remote else None,
-        )
+        # Write to the specific index along the append dimension (first dim)
+        arr[index] = data
 
     def _append_to_zarr(self, da: xr.DataArray, group_path: str) -> None:
         """Append a DataArray to a Zarr group, creating it if needed.
@@ -584,6 +611,15 @@ class ZarrSink(Sink["xr.DataArray"]):
     def output_path(self) -> str:
         """Return the output Zarr store path."""
         return self._output_path
+
+    @property
+    def store(self) -> LocalStore | FsspecStore:
+        """Return the underlying Zarr store.
+
+        For local paths, returns a :class:`zarr.storage.LocalStore`.
+        For remote URLs, returns a :class:`zarr.storage.FsspecStore`.
+        """
+        return self._store
 
     @property
     def append_dim(self) -> str:

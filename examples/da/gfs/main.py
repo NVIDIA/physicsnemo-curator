@@ -51,13 +51,15 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.domains.da.sources.gfs import GFSSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
 
 # Load .env from this directory (does not overwrite existing env vars)
-# load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(Path(__file__).parent / ".env")
 
 os.environ["LOGURU_LEVEL"] = "ERROR"
 
@@ -137,7 +139,7 @@ def _build_s3_storage_options(anon: bool = False) -> dict[str, object]:
     if anon:
         return {"anon": True}
 
-    options: dict[str, object] = {"anon": False}
+    options: dict[str, object] = {}
 
     # Read credentials from ZARR_S3_* environment variables
     # (using custom prefix to avoid conflict with GFS anonymous S3 access)
@@ -146,19 +148,17 @@ def _build_s3_storage_options(anon: bool = False) -> dict[str, object]:
     region = os.environ.get("ZARR_S3_REGION")
     endpoint_url = os.environ.get("ZARR_S3_ENDPOINT_URL")
 
-    if access_key and secret_key:
+    # s3fs expects these as top-level kwargs
+    if access_key:
         options["key"] = access_key
+    if secret_key:
         options["secret"] = secret_key
-
-    # Build client_kwargs for region and endpoint
-    client_kwargs: dict[str, str] = {}
-    if region:
-        client_kwargs["region_name"] = region
     if endpoint_url:
-        client_kwargs["endpoint_url"] = endpoint_url
+        options["endpoint_url"] = endpoint_url
 
-    if client_kwargs:
-        options["client_kwargs"] = client_kwargs
+    # Region goes in client_kwargs for boto3
+    if region:
+        options["client_kwargs"] = {"region_name": region}
 
     return options
 
@@ -210,10 +210,13 @@ def main() -> None:
     # Parse time range
     start_time = datetime.fromisoformat(args.start)
     end_time = datetime.fromisoformat(args.end)
-    times = generate_6hourly_times(start_time, end_time)
+    all_times = generate_6hourly_times(start_time, end_time)
 
+    # Optionally limit indices to process (but store is sized for all times)
     if args.n_indices is not None:
-        times = times[: args.n_indices]
+        indices_to_process = list(range(min(args.n_indices, len(all_times))))
+    else:
+        indices_to_process = list(range(len(all_times)))
 
     # Build variable list
     variables = build_variable_list()
@@ -231,7 +234,8 @@ def main() -> None:
     print("GFS Global Weather Analysis ETL Pipeline")
     print("=" * 50)
     print(f"  Time range: {start_time} to {end_time}")
-    print(f"  Timestamps: {len(times)} (6-hourly)")
+    print(f"  Total timestamps: {len(all_times)} (6-hourly)")
+    print(f"  Processing: {len(indices_to_process)} indices")
     print(f"  Variables: {len(variables)} total")
     print(f"    - Pressure levels: {PRESSURE_LEVELS}")
     print(f"    - Level vars: {PRESSURE_LEVEL_VARS}")
@@ -242,12 +246,12 @@ def main() -> None:
         print(f"  Storage: remote ({args.output.split(':')[0]})")
     print()
 
-    # Configure the GFS source
+    # Configure the GFS source with all times
     source = GFSSource(
-        times=times,
+        times=all_times,
         variables=variables,
         source="aws",
-        cache=True,
+        cache=False,
     )
 
     # Build the pipeline:
@@ -255,27 +259,28 @@ def main() -> None:
     # 2. ZarrSink — write to Zarr store (local or remote)
     #
     # GFS grid is 721 x 1440 (0.25 degree global)
+    # n_indices is the full time range so store is properly sized
     stats_path = "outputs/stats.zarr"
     stats_filter = DataArrayStatsFilter(output=stats_path, dims=("time",), keep_shards=True)
     pipeline = source.filter(stats_filter).write(
         ZarrSink(
-            output_path="outputs/data.zarr",
+            output_path=f"{args.output}/data.zarr",
             chunks={"time": 1, "lat": 721, "lon": 1440},
-            n_indices=len(times),
+            n_indices=len(all_times),
             variables=variables,
             overwrite=False,
             storage_options=storage_options,
         )
     )
 
-    # Run the pipeline with parallel workers
-    print(f"Processing {len(times)} timestamps with {args.workers} workers...")
+    # Run the pipeline with parallel workers (only process selected indices)
+    print(f"Processing {len(indices_to_process)} timestamps with {args.workers} workers...")
     results = run_pipeline(
         pipeline,
         n_jobs=args.workers,
         backend="process_pool",
         resume=True,
-        indices=range(len(times)),
+        indices=indices_to_process,
         db_dir=Path("outputs/checkpoint/"),
         use_tui=False,
     )
