@@ -22,11 +22,26 @@ plus surface variables (u10m, v10m, u100m, v100m, t2m, sp, msl, tcwv).
 
 GFS data is available from AWS at 6-hour intervals starting from 2021-01-01.
 
+The full time range is fixed (2021-01-01 to 2027-01-01), and you specify
+which indices to process via ``--start-index`` and ``--end-index``. This
+allows incremental processing with checkpoint resumption.
+
+Example usage::
+
+    # Process first 100 indices (0-99)
+    python main.py --start-index 0 --end-index 100
+
+    # Process next 100 indices (100-199)
+    python main.py --start-index 100 --end-index 200
+
+    # Process all indices
+    python main.py --start-index 0 --end-index -1
+
 Remote Zarr Output
 ------------------
 To write to a remote Zarr store (e.g., S3), pass an S3 URL as the output path::
 
-    python main.py --output s3://my-bucket/gfs/dataset.zarr
+    python main.py --output s3://my-bucket/gfs/dataset.zarr --start-index 0 --end-index 100
 
 S3 credentials can be configured via a ``.env`` file in this directory::
 
@@ -63,6 +78,10 @@ load_dotenv(Path(__file__).parent / ".env")
 
 os.environ["LOGURU_LEVEL"] = "ERROR"
 
+# Fixed time range for the full dataset (2021-01-01 to 2027-01-01)
+# This is ~8760 6-hourly timestamps (6 years)
+DATASET_START = datetime(2021, 1, 1, 0, 0)
+DATASET_END = datetime(2027, 1, 1, 0, 0)
 
 PRESSURE_LEVELS = [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]
 PRESSURE_LEVEL_VARS = ["t", "u", "v", "z", "q"]
@@ -165,6 +184,10 @@ def _build_s3_storage_options(anon: bool = False) -> dict[str, object]:
 
 def main() -> None:
     """Run the GFS global weather data ETL pipeline."""
+    # Generate full time range (fixed for the dataset)
+    all_times = generate_6hourly_times(DATASET_START, DATASET_END)
+    total_indices = len(all_times)
+
     parser = argparse.ArgumentParser(
         description="GFS Global Weather Analysis ETL Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -183,22 +206,16 @@ def main() -> None:
         help="Number of parallel workers (default: 4)",
     )
     parser.add_argument(
-        "--start",
-        type=str,
-        default="2021-01-01T00:00",
-        help="Start datetime in ISO format (default: 2021-01-01T00:00)",
-    )
-    parser.add_argument(
-        "--end",
-        type=str,
-        default="2027-01-01T00:00",
-        help="End datetime in ISO format, exclusive (default: 2027-01-08T00:00)",
-    )
-    parser.add_argument(
-        "--n-indices",
+        "--start-index",
         type=int,
-        default=None,
-        help="Limit to first N timestamps (default: all)",
+        default=0,
+        help=f"Start index (inclusive, default: 0). Total indices: {total_indices}",
+    )
+    parser.add_argument(
+        "--end-index",
+        type=int,
+        default=-1,
+        help=f"End index (exclusive, default: -1 = all). Total indices: {total_indices}",
     )
     parser.add_argument(
         "--s3-anon",
@@ -207,16 +224,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Parse time range
-    start_time = datetime.fromisoformat(args.start)
-    end_time = datetime.fromisoformat(args.end)
-    all_times = generate_6hourly_times(start_time, end_time)
+    # Determine indices to process
+    start_idx = max(0, args.start_index)
+    end_idx = total_indices if args.end_index == -1 else min(args.end_index, total_indices)
+    indices_to_process = list(range(start_idx, end_idx))
 
-    # Optionally limit indices to process (but store is sized for all times)
-    if args.n_indices is not None:
-        indices_to_process = list(range(min(args.n_indices, len(all_times))))
-    else:
-        indices_to_process = list(range(len(all_times)))
+    if not indices_to_process:
+        print(f"No indices to process (start={start_idx}, end={end_idx}, total={total_indices})")
+        return
 
     # Build variable list
     variables = build_variable_list()
@@ -233,9 +248,10 @@ def main() -> None:
 
     print("GFS Global Weather Analysis ETL Pipeline")
     print("=" * 50)
-    print(f"  Time range: {start_time} to {end_time}")
-    print(f"  Total timestamps: {len(all_times)} (6-hourly)")
-    print(f"  Processing: {len(indices_to_process)} indices")
+    print(f"  Dataset time range: {DATASET_START} to {DATASET_END}")
+    print(f"  Total timestamps: {total_indices} (6-hourly)")
+    print(f"  Processing indices: {start_idx} to {end_idx} ({len(indices_to_process)} indices)")
+    print(f"  Time range for this run: {all_times[start_idx]} to {all_times[end_idx - 1]}")
     print(f"  Variables: {len(variables)} total")
     print(f"    - Pressure levels: {PRESSURE_LEVELS}")
     print(f"    - Level vars: {PRESSURE_LEVEL_VARS}")
@@ -246,7 +262,7 @@ def main() -> None:
         print(f"  Storage: remote ({args.output.split(':')[0]})")
     print()
 
-    # Configure the GFS source with all times
+    # Configure the GFS source with all times (full dataset)
     source = GFSSource(
         times=all_times,
         variables=variables,
@@ -266,7 +282,7 @@ def main() -> None:
         ZarrSink(
             output_path=f"{args.output}/data.zarr",
             chunks={"time": 1, "lat": 721, "lon": 1440},
-            n_indices=len(all_times),
+            n_indices=total_indices,
             variables=variables,
             overwrite=False,
             storage_options=storage_options,
@@ -279,9 +295,9 @@ def main() -> None:
         pipeline,
         n_jobs=args.workers,
         backend="process_pool",
-        resume=True,
         indices=indices_to_process,
-        db_dir=Path("outputs/checkpoint/"),
+        db_dir="outputs/checkpoint/",
+        resume=True,
         use_tui=False,
     )
 
@@ -292,7 +308,7 @@ def main() -> None:
     if gathered:
         print(f"Merged {len(gathered)} statistic shards")
     print(f"Statistics written to: {stats_path}")
-    print(f"Dataset written to: {args.output}/dataset.zarr")
+    print(f"Dataset written to: {args.output}/data.zarr")
 
 
 if __name__ == "__main__":

@@ -357,7 +357,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         import holoviews as hv
         import panel as pn
 
-        hv.extension("bokeh")
+        hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
 
         if not artifact_paths:
             return pn.pane.Markdown("*No DataArray Statistics artifacts found.*")
@@ -654,8 +654,8 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
         min_val = ds["min"].values.astype(np.float64)
         max_val = ds["max"].values.astype(np.float64)
 
-        # Prefer exact Welford state if available
-        if "welford_mean" in ds:
+        # Prefer exact Welford state if all three variables available
+        if "welford_mean" in ds and "welford_m2" in ds and "welford_m3" in ds:
             mean = ds["welford_mean"].values.astype(np.float64)
             m2 = ds["welford_m2"].values.astype(np.float64)
             m3 = ds["welford_m3"].values.astype(np.float64)
