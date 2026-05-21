@@ -344,7 +344,7 @@ class PipelineProgressApp(App[None]):
 
         # Overall bar
         bar = self.query_one("#overall-bar", ProgressBar)
-        bar.update(progress=summary["completed"])
+        bar.update(total=total, progress=summary["completed"])
 
         elapsed = time.monotonic() - self._start_time
         label = self.query_one("#overall-label", Static)
