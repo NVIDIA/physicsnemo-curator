@@ -30,12 +30,17 @@ To write to a remote Zarr store (e.g., S3), pass an S3 URL as the output path::
 
 S3 credentials can be configured via a ``.env`` file in this directory::
 
-    AWS_ACCESS_KEY_ID=your-access-key
-    AWS_SECRET_ACCESS_KEY=your-secret-key
-    AWS_REGION=us-east-1
-    AWS_ENDPOINT_URL=https://s3.amazonaws.com
+    ZARR_S3_ACCESS_KEY_ID=your-access-key
+    ZARR_S3_SECRET_ACCESS_KEY=your-secret-key
+    ZARR_S3_REGION=us-east-1
+    ZARR_S3_ENDPOINT_URL=https://s3.amazonaws.com
 
 Or via environment variables directly.
+
+.. note::
+   These use ``ZARR_S3_*`` prefixes to avoid conflicting with the GFS source,
+   which uses anonymous S3 access to the public ``noaa-gfs-bdp-pds`` bucket.
+   Standard ``AWS_*`` environment variables would interfere with that access.
 
 For other cloud providers (GCS, Azure), use the appropriate URL scheme
 (gs://, az://) and install the corresponding fsspec backend.
@@ -111,11 +116,13 @@ def generate_6hourly_times(start: datetime, end: datetime) -> list[datetime]:
 def _build_s3_storage_options(anon: bool = False) -> dict[str, object]:
     """Build S3 storage options from environment variables.
 
-    Reads credentials from standard AWS environment variables:
-    - AWS_ACCESS_KEY_ID: Access key ID
-    - AWS_SECRET_ACCESS_KEY: Secret access key
-    - AWS_REGION: AWS region (e.g., us-east-1)
-    - AWS_ENDPOINT_URL: Custom endpoint URL (for S3-compatible stores)
+    Reads credentials from ZARR_S3_* environment variables to avoid
+    conflicting with GFS source (which uses anonymous S3 access):
+
+    - ZARR_S3_ACCESS_KEY_ID: Access key ID
+    - ZARR_S3_SECRET_ACCESS_KEY: Secret access key
+    - ZARR_S3_REGION: AWS region (e.g., us-east-1)
+    - ZARR_S3_ENDPOINT_URL: Custom endpoint URL (for S3-compatible stores)
 
     Parameters
     ----------
@@ -132,11 +139,12 @@ def _build_s3_storage_options(anon: bool = False) -> dict[str, object]:
 
     options: dict[str, object] = {"anon": False}
 
-    # Read credentials from environment
-    access_key = os.environ.get("AWS_ACCESS_KEY_ID")
-    secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
-    region = os.environ.get("AWS_REGION")
-    endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
+    # Read credentials from ZARR_S3_* environment variables
+    # (using custom prefix to avoid conflict with GFS anonymous S3 access)
+    access_key = os.environ.get("ZARR_S3_ACCESS_KEY_ID")
+    secret_key = os.environ.get("ZARR_S3_SECRET_ACCESS_KEY")
+    region = os.environ.get("ZARR_S3_REGION")
+    endpoint_url = os.environ.get("ZARR_S3_ENDPOINT_URL")
 
     if access_key and secret_key:
         options["key"] = access_key
