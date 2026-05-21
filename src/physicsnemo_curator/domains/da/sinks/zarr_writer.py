@@ -118,10 +118,10 @@ class ZarrSink(Sink["xr.DataArray"]):
         Variable names for pre-allocation.  Each variable becomes a
         separate Zarr group.  Required when *n_indices* is set.
     overwrite : bool
-        If *True*, an existing store at *output_path* will be
-        overwritten during pre-allocation.  If *False* (default) and
-        the store already exists, a :class:`FileExistsError` is raised
-        to prevent accidental data loss.
+        If *True*, existing variable groups at *output_path* will be
+        overwritten during pre-allocation.  If *False* (default), existing
+        variable groups are preserved and only missing variables are
+        created, allowing pipelines to resume from partial runs.
     storage_options : dict[str, Any] | None
         Extra keyword arguments for the fsspec filesystem.  Use this
         to provide credentials for remote stores (e.g., S3 keys).
@@ -144,6 +144,16 @@ class ZarrSink(Sink["xr.DataArray"]):
     ...     n_indices=72,
     ...     variables=["t2m", "q2m", "tcwv"],
     ...     overwrite=True,
+    ... )
+
+    Resume from existing store (append missing data):
+
+    >>> sink = ZarrSink(
+    ...     output_path="output.zarr",  # Existing store with partial data
+    ...     chunks={"time": 1, "lat": 721, "lon": 1440},
+    ...     n_indices=72,
+    ...     variables=["t2m", "q2m", "tcwv"],
+    ...     overwrite=False,  # Preserve existing variable groups
     ... )
 
     Remote S3 storage:
@@ -229,13 +239,17 @@ class ZarrSink(Sink["xr.DataArray"]):
             self._preallocate_store(n_indices, variables)
 
     def _preallocate_store(self, n_indices: int, variables: list[str]) -> None:
-        """Create the Zarr store with pre-allocated arrays for region writes.
+        """Create or extend the Zarr store with pre-allocated arrays for region writes.
 
         Each variable gets its own Zarr group at
         ``<output_path>/<variable_name>/`` with a ``data`` array of
         shape ``(n_indices, *spatial_dims)``.  Spatial dimension sizes
         are taken from :attr:`_chunks` (all dimensions except the
         append dimension).
+
+        If the store already exists, only missing variables are created.
+        Existing variables are left untouched to allow resuming interrupted
+        pipelines.
 
         Parameters
         ----------
@@ -268,26 +282,46 @@ class ZarrSink(Sink["xr.DataArray"]):
         for dim_name, dim_size in spatial_dims.items():
             coords[dim_name] = np.arange(dim_size)
 
-        # Check for existing store and respect overwrite flag.
-        # Use fsspec for path existence checks to support remote stores.
+        # Check for existing store.
         store_exists = self._fs.exists(self._output_path)
+
+        # Determine which variables already exist.
+        existing_vars: set[str] = set()
         if store_exists:
-            var_paths_exist = any(self._fs.exists(f"{self._output_path}/{v}") for v in variables)
-            if var_paths_exist and not self._overwrite:
-                msg = (
-                    f"Zarr store already exists at '{self._output_path}'. "
-                    f"Set overwrite=True to replace it, or remove the directory manually."
-                )
-                raise FileExistsError(msg)
-            if var_paths_exist:
-                self._log.warning("Overwriting existing Zarr store at: %s", self._output_path)
+            for v in variables:
+                if self._fs.exists(f"{self._output_path}/{v}"):
+                    existing_vars.add(v)
+
+        # If overwrite is True and store exists, remove existing variable groups.
+        if store_exists and self._overwrite and existing_vars:
+            self._log.warning("Overwriting existing Zarr store at: %s", self._output_path)
+            existing_vars.clear()  # Force re-creation of all variables
+
+        # Variables to create (those not already existing).
+        vars_to_create = [v for v in variables if v not in existing_vars]
+
+        if existing_vars:
+            self._log.info(
+                "Resuming existing Zarr store: %d variables exist, %d to create",
+                len(existing_vars),
+                len(vars_to_create),
+            )
 
         # Create parent directory (local only; remote stores handle this automatically).
         if not self._is_remote:
             pathlib.Path(self._output_path).mkdir(parents=True, exist_ok=True)
 
-        for var_name in variables:
+        for var_name in vars_to_create:
             group_path = f"{self._output_path}/{var_name}"
+
+            # If overwrite is set, remove existing group first.
+            if self._overwrite and self._fs.exists(group_path):
+                if self._is_remote:
+                    self._fs.rm(group_path, recursive=True)
+                else:
+                    import shutil
+
+                    shutil.rmtree(group_path, ignore_errors=True)
 
             # Create empty NaN-filled DataArray with correct shape
             data = np.full(shape, np.nan, dtype=np.float32)
@@ -303,12 +337,13 @@ class ZarrSink(Sink["xr.DataArray"]):
             self._log.debug("Pre-allocated Zarr group: %s (shape=%s)", group_path, shape)
 
         self._preallocated = True
-        self._log.info(
-            "Pre-allocated Zarr store: %d variables, %d time steps, shape=%s",
-            len(variables),
-            n_indices,
-            shape,
-        )
+        if vars_to_create:
+            self._log.info(
+                "Pre-allocated Zarr store: %d variables, %d time steps, shape=%s",
+                len(vars_to_create),
+                n_indices,
+                shape,
+            )
 
     def __call__(self, items: Iterator[xr.DataArray], index: int) -> list[str]:
         """Consume DataArrays and write each variable to the Zarr store.

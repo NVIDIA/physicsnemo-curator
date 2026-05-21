@@ -28,12 +28,14 @@ To write to a remote Zarr store (e.g., S3), pass an S3 URL as the output path::
 
     python main.py --output s3://my-bucket/gfs/dataset.zarr
 
-S3 credentials can be configured via environment variables::
+S3 credentials can be configured via a ``.env`` file in this directory::
 
-    export AWS_ACCESS_KEY_ID="your-access-key"
-    export AWS_SECRET_ACCESS_KEY="your-secret-key"
-    export AWS_REGION="us-east-1"  # Optional
-    export AWS_ENDPOINT_URL="https://s3.amazonaws.com"  # Optional, for S3-compatible stores
+    AWS_ACCESS_KEY_ID=your-access-key
+    AWS_SECRET_ACCESS_KEY=your-secret-key
+    AWS_REGION=us-east-1
+    AWS_ENDPOINT_URL=https://s3.amazonaws.com
+
+Or via environment variables directly.
 
 For other cloud providers (GCS, Azure), use the appropriate URL scheme
 (gs://, az://) and install the corresponding fsspec backend.
@@ -42,11 +44,15 @@ For other cloud providers (GCS, Azure), use the appropriate URL scheme
 import argparse
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter
 from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 from physicsnemo_curator.domains.da.sources.gfs import GFSSource
 from physicsnemo_curator.run import gather_pipeline, run_pipeline
+
+# Load .env from this directory (does not overwrite existing env vars)
+# load_dotenv(Path(__file__).parent / ".env")
 
 os.environ["LOGURU_LEVEL"] = "ERROR"
 
@@ -159,7 +165,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=str,
-        default="output/gfs_global",
+        default="s3://gfs",
         help="Output directory for Zarr store. Supports S3 URLs (e.g., s3://bucket/path)",
     )
     parser.add_argument(
@@ -241,15 +247,15 @@ def main() -> None:
     # 2. ZarrSink — write to Zarr store (local or remote)
     #
     # GFS grid is 721 x 1440 (0.25 degree global)
-    stats_path = f"{args.output}/stats.zarr"
-    stats_filter = DataArrayStatsFilter(output=stats_path, dims=("time",))
+    stats_path = "outputs/stats.zarr"
+    stats_filter = DataArrayStatsFilter(output=stats_path, dims=("time",), keep_shards=True)
     pipeline = source.filter(stats_filter).write(
         ZarrSink(
-            output_path=f"{args.output}/dataset.zarr",
+            output_path="outputs/data.zarr",
             chunks={"time": 1, "lat": 721, "lon": 1440},
             n_indices=len(times),
             variables=variables,
-            overwrite=True,
+            overwrite=False,
             storage_options=storage_options,
         )
     )
@@ -260,7 +266,10 @@ def main() -> None:
         pipeline,
         n_jobs=args.workers,
         backend="process_pool",
+        resume=True,
         indices=range(len(times)),
+        db_dir=Path("outputs/checkpoint/"),
+        use_tui=False,
     )
 
     print(f"\nProcessed {len(results)} timestamps")

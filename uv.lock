@@ -1182,8 +1182,8 @@ wheels = [
 
 [[package]]
 name = "earth2studio"
-version = "0.13.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.15.0a0"
+source = { git = "https://github.com/NVIDIA/earth2studio.git?rev=main#c3d1625fefcfdacd94a48a114f106bafde41f94f" }
 dependencies = [
     { name = "cftime" },
     { name = "fsspec" },
@@ -1192,7 +1192,6 @@ dependencies = [
     { name = "h5py" },
     { name = "huggingface-hub" },
     { name = "loguru" },
-    { name = "nest-asyncio" },
     { name = "netcdf4" },
     { name = "pandas" },
     { name = "pyarrow" },
@@ -1204,10 +1203,6 @@ dependencies = [
     { name = "tqdm" },
     { name = "xarray", extra = ["parallel"] },
     { name = "zarr" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/75/77/9739a9f31d025075d13be90af0aeadc894e1c38eef43093c622ba74b527e/earth2studio-0.13.0.tar.gz", hash = "sha256:e1c81a075efe872d50d21d8c3e89b95813a6c61ea06c4c8baef6c1067de56ca6", size = 437699, upload-time = "2026-03-23T16:52:44.061Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/86/b0930357c3b93a9d918275afef1ec1257471b4c8be5eaa4237ebc194234b/earth2studio-0.13.0-py3-none-any.whl", hash = "sha256:930f88bc45c7e02ae41900858182183ae564d4a359e9b54d79ad1ab0e4fa5985", size = 624147, upload-time = "2026-03-23T16:52:23.523Z" },
 ]
 
 [[package]]
@@ -2578,15 +2573,6 @@ wheels = [
 ]
 
 [[package]]
-name = "nest-asyncio"
-version = "1.6.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/83/f8/51569ac65d696c8ecbee95938f89d4abf00f47d58d48f6fbabfe8f0baefe/nest_asyncio-1.6.0.tar.gz", hash = "sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe", size = 7418, upload-time = "2024-01-21T14:25:19.227Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/c4/c2971a3ba4c6103a3d10c4b0f24f461ddc027f0f09763220cf35ca1401b3/nest_asyncio-1.6.0-py3-none-any.whl", hash = "sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c", size = 5195, upload-time = "2024-01-21T14:25:17.223Z" },
-]
-
-[[package]]
 name = "netcdf4"
 version = "1.7.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3268,7 +3254,7 @@ requires-dist = [
     { name = "ase", marker = "extra == 'atm'", specifier = ">=3.26.0" },
     { name = "bokeh", marker = "extra == 'dashboard'", specifier = ">=3.3" },
     { name = "dask", marker = "extra == 'dask'", specifier = ">=2024.1" },
-    { name = "earth2studio", marker = "extra == 'da'", specifier = ">=0.10" },
+    { name = "earth2studio", marker = "extra == 'da'", git = "https://github.com/NVIDIA/earth2studio.git?rev=main" },
     { name = "fsspec", specifier = ">=2023.1.0" },
     { name = "gcsfs", marker = "extra == 'da'", specifier = ">=2024.1" },
     { name = "holoviews", marker = "extra == 'dashboard'", specifier = ">=1.18" },

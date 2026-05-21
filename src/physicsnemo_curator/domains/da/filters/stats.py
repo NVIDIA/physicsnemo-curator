@@ -68,6 +68,11 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
     dims : tuple[str, ...]
         Dimension names along which to reduce (e.g. ``("time",)`` to
         compute per-spatial-point statistics across time).
+    keep_shards : bool
+        If ``True``, per-worker shard Zarr stores are retained after
+        merging via :func:`~physicsnemo_curator.run.gather_pipeline`.
+        Useful for debugging or inspecting intermediate results.
+        Default is ``False``.
 
     Examples
     --------
@@ -86,7 +91,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         Returns
         -------
         list[Param]
-            Descriptors for *output* and *dims*.
+            Descriptors for *output*, *dims*, and *keep_shards*.
         """
         return [
             Param(name="output", description="Output Zarr store path for statistics", type=str),
@@ -96,12 +101,24 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
                 type=str,
                 default="time",
             ),
+            Param(
+                name="keep_shards",
+                description="Keep per-worker shard Zarr stores after merging (default: False)",
+                type=bool,
+                default=False,
+            ),
         ]
 
-    def __init__(self, output: str, dims: tuple[str, ...] = ("time",)) -> None:
+    def __init__(
+        self,
+        output: str,
+        dims: tuple[str, ...] = ("time",),
+        keep_shards: bool = False,
+    ) -> None:
         self._log = get_logger(self)
         self._output_path = pathlib.Path(output)
         self._dims = dims
+        self._keep_shards = keep_shards
         self._accumulators: dict[str, _MomentAccumulator] = {}
         self._last_artifacts: list[str] = []
 
@@ -239,6 +256,11 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
     def dims(self) -> tuple[str, ...]:
         """Return the reduction dimensions."""
         return self._dims
+
+    @property
+    def keep_shards(self) -> bool:
+        """Return whether to keep per-worker shard files after merging."""
+        return self._keep_shards
 
     @staticmethod
     def merge(zarr_paths: list[str], output: str) -> str:

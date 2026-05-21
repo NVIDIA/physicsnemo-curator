@@ -356,15 +356,17 @@ def gather_pipeline(pipeline: Pipeline[Any]) -> list[str]:
             filter_name = type(f).name
             store.replace_filter_artifacts(filter_name, i_f, shard_files, merged)
 
-        # Clean up shard files/directories
-        for shard in shard_files:
-            shard_path = pathlib.Path(shard)
-            if shard_path.is_dir():
-                import shutil
+        # Clean up shard files/directories unless keep_shards is True
+        keep_shards = getattr(f, "keep_shards", False)
+        if not keep_shards:
+            for shard in shard_files:
+                shard_path = pathlib.Path(shard)
+                if shard_path.is_dir():
+                    import shutil
 
-                shutil.rmtree(shard_path, ignore_errors=True)
-            else:
-                shard_path.unlink(missing_ok=True)
+                    shutil.rmtree(shard_path, ignore_errors=True)
+                else:
+                    shard_path.unlink(missing_ok=True)
 
     return merged_paths
 
