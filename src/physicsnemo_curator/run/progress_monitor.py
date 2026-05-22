@@ -63,7 +63,8 @@ class LogProgressMonitor:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._start_time: float = 0.0
-        self._last_log_id: int = 0  # Track last seen database log entry
+        # Start from max existing log ID to skip logs from previous invocations
+        self._last_log_id: int = store.max_log_id() if hasattr(store, "max_log_id") else 0
         self._db_log_handler: DatabaseLogHandler | None = None
         self._setup_db_logging()
 

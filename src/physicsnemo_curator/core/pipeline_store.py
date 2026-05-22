@@ -1432,6 +1432,26 @@ class PipelineStore:
         finally:
             conn.close()
 
+    def max_log_id(self) -> int:
+        """Return the maximum log ID for this run.
+
+        Used to initialize log polling to skip logs from previous invocations.
+
+        Returns
+        -------
+        int
+            The highest log ID for this run, or 0 if no logs exist.
+        """
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM logs WHERE run_id = ?",
+                (self._run_id,),
+            ).fetchone()
+            return row[0] if row else 0
+        finally:
+            conn.close()
+
     def reset(self) -> None:
         """Clear all records for this run and re-register.
 

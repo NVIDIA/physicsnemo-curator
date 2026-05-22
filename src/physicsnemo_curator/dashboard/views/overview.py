@@ -111,6 +111,10 @@ def _worker_panel(store: DashboardStore) -> pn.Column:
             pn.pane.Markdown("*No workers registered.*"),
         )
 
+    # Sort by started_at descending so most recent workers are at the top
+    if "started_at" in df.columns:
+        df = df.sort_values("started_at", ascending=False).reset_index(drop=True)
+
     # Use Tabulator for selectable rows
     max_visible = 20
     table_height = min(len(df), max_visible) * 30 + 40  # ~30px per row + header

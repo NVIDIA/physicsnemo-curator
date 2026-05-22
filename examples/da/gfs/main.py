@@ -250,6 +250,7 @@ def main() -> None:
 
     # Run the pipeline with parallel workers (only process selected indices)
     print(f"Processing {len(indices_to_process)} timestamps with {args.workers} workers...")
+    print(f"  Indices range: {indices_to_process[0]} to {indices_to_process[-1]}")
     results = run_pipeline(
         pipeline,
         n_jobs=args.workers,

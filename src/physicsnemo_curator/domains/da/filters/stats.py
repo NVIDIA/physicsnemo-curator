@@ -650,24 +650,54 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
 
     def _extract_state(ds: xr.Dataset) -> tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Extract (count, mean, m2, m3, min, max) from a dataset."""
-        n = int(ds.attrs["count"])
-        min_val = ds["min"].values.astype(np.float64)
-        max_val = ds["max"].values.astype(np.float64)
+        n = int(ds.attrs.get("count", 0))
+        if n == 0:
+            # Empty dataset - return zeros
+            ref_var = next(iter(ds.data_vars.values()), None)
+            shape = ref_var.shape if ref_var is not None else ()
+            zeros = np.zeros(shape, dtype=np.float64)
+            return 0, zeros, zeros.copy(), zeros.copy(), zeros.copy(), zeros.copy()
+
+        # Get a reference shape from any available variable
+        ref_var = next(iter(ds.data_vars.values()))
+        shape = ref_var.shape
+
+        # Extract min/max with fallback to inf/-inf
+        min_val = ds["min"].values.astype(np.float64) if "min" in ds else np.full(shape, np.inf, dtype=np.float64)
+        max_val = ds["max"].values.astype(np.float64) if "max" in ds else np.full(shape, -np.inf, dtype=np.float64)
 
         # Prefer exact Welford state if all three variables available
         if "welford_mean" in ds and "welford_m2" in ds and "welford_m3" in ds:
             mean = ds["welford_mean"].values.astype(np.float64)
             m2 = ds["welford_m2"].values.astype(np.float64)
             m3 = ds["welford_m3"].values.astype(np.float64)
-        else:
+        elif "welford_mean" in ds and "welford_m2" in ds:
+            # Partial Welford state (missing m3) - use what we have, set m3 to 0
+            mean = ds["welford_mean"].values.astype(np.float64)
+            m2 = ds["welford_m2"].values.astype(np.float64)
+            m3 = np.zeros(shape, dtype=np.float64)
+        elif "mean" in ds and "variance" in ds:
             # Recover from derived statistics (legacy stores)
             mean = ds["mean"].values.astype(np.float64)
             var = ds["variance"].values.astype(np.float64)
             m2 = var * n
-            skew = ds["skewness"].values.astype(np.float64)
-            with np.errstate(divide="ignore", invalid="ignore"):
-                m2_safe = np.where(m2 > 0, m2, np.nan)
-                m3 = np.where(m2 > 0, skew * np.power(m2_safe, 1.5) / np.sqrt(n), 0.0)
+            if "skewness" in ds:
+                skew = ds["skewness"].values.astype(np.float64)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    m2_safe = np.where(m2 > 0, m2, np.nan)
+                    m3 = np.where(m2 > 0, skew * np.power(m2_safe, 1.5) / np.sqrt(n), 0.0)
+            else:
+                m3 = np.zeros(shape, dtype=np.float64)
+        else:
+            # Minimal data - extract what we can
+            if "welford_mean" in ds:
+                mean = ds["welford_mean"].values.astype(np.float64)
+            elif "mean" in ds:
+                mean = ds["mean"].values.astype(np.float64)
+            else:
+                mean = np.zeros(shape, dtype=np.float64)
+            m2 = np.zeros(shape, dtype=np.float64)
+            m3 = np.zeros(shape, dtype=np.float64)
 
         return n, mean, m2, m3, min_val, max_val
 
@@ -677,6 +707,12 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
     # Merge remaining datasets one at a time.
     for ds_b in datasets[1:]:
         n_b, mean_b, m2_b, m3_b, min_b, max_b = _extract_state(ds_b)
+
+        if n_b == 0:
+            continue  # Skip empty datasets
+        if n_a == 0:
+            n_a, mean_a, m2_a, m3_a, min_a, max_a = n_b, mean_b, m2_b, m3_b, min_b, max_b
+            continue
 
         n_ab = n_a + n_b
         delta = mean_b - mean_a
@@ -708,7 +744,7 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
 
     # Reconstruct the Dataset with the same structure as the inputs.
     ref = datasets[0]
-    dims: list[str] = [str(d) for d in ref["mean"].dims]
+    dims: list[str] = [str(d) for d in next(iter(ref.data_vars.values())).dims]
     coords = dict(ref.coords.items())
 
     data_vars = {

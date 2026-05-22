@@ -189,7 +189,8 @@ class PipelineProgressApp(App[None]):
         self._saved_console_handlers: list[logging.Handler] = []
         self._page = 0
         self._workers_data: list[dict] = []
-        self._last_log_id = 0  # Track last seen database log entry
+        # Start from max existing log ID to skip logs from previous invocations
+        self._last_log_id = store.max_log_id() if hasattr(store, "max_log_id") else 0
         self._last_terminal_size: tuple[int, int] = shutil.get_terminal_size()
 
     def _get_total(self) -> int:
