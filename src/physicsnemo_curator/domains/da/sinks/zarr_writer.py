@@ -219,23 +219,20 @@ class ZarrSink(Sink["xr.DataArray"]):
         self._overwrite = overwrite
         self._preallocated = False
 
+        # Lazy-initialized in workers (can't pickle stores with async resources)
+        self._store: FsspecStore | LocalStore | None = None
+        self._root_group: zarr.Group | None = None
+
         # Determine if using remote storage based on URL scheme.
         self._is_remote = "://" in output_path
 
-        # Build zarr store and fsspec filesystem for path operations.
-        # For remote stores, use FsspecStore per Zarr v3 best practices.
-        # For local stores, use LocalStore with a separate fsspec filesystem.
-        # Note: We keep a separate sync filesystem for exists() checks since
-        # FsspecStore uses an async filesystem internally.
+        # Sync filesystem for path existence checks during preallocation
         if self._is_remote:
             from fsspec.core import split_protocol
 
             protocol, _ = split_protocol(output_path)
-            self._store = FsspecStore.from_url(output_path, storage_options=self._storage_options)
-            # Create a sync filesystem for path existence checks
             self._fs = fsspec.filesystem(protocol, **self._storage_options)
         else:
-            self._store = LocalStore(output_path)
             self._fs = fsspec.filesystem("file")
 
         # Validate: n_indices and variables must both be set or both be None.
@@ -246,6 +243,15 @@ class ZarrSink(Sink["xr.DataArray"]):
         # Pre-allocate the store if schema is provided.
         if n_indices is not None and variables is not None:
             self._preallocate_store(n_indices, variables)
+
+    def _get_store(self) -> FsspecStore | LocalStore:
+        """Get or create the zarr store (lazy init for worker processes)."""
+        if self._store is None:
+            if self._is_remote:
+                self._store = FsspecStore.from_url(self._output_path, storage_options=self._storage_options)
+            else:
+                self._store = LocalStore(self._output_path)
+        return self._store
 
     def _preallocate_store(self, n_indices: int, variables: list[str]) -> None:
         """Create or extend the Zarr store with pre-allocated arrays for region writes.
@@ -295,11 +301,20 @@ class ZarrSink(Sink["xr.DataArray"]):
         store_exists = self._fs.exists(self._output_path)
 
         # Determine which variables already exist.
+        # Use a single ls() call instead of N exists() calls to avoid N network round-trips.
         existing_vars: set[str] = set()
         if store_exists:
-            for v in variables:
-                if self._fs.exists(f"{self._output_path}/{v}"):
-                    existing_vars.add(v)
+            try:
+                # List contents of the store directory once
+                contents = self._fs.ls(self._output_path, detail=False)
+                # Extract basenames and check against requested variables
+                for path in contents:
+                    basename = path.rstrip("/").rsplit("/", 1)[-1]
+                    if basename in variables:
+                        existing_vars.add(basename)
+            except FileNotFoundError:
+                # Store path doesn't exist yet
+                pass
 
         # If overwrite is True and store exists, remove existing variable groups.
         if store_exists and self._overwrite and existing_vars:
@@ -318,11 +333,12 @@ class ZarrSink(Sink["xr.DataArray"]):
 
         # Open or create root group at the output path.
         # All variable arrays are created directly under this root group.
+        store = self._get_store()
         if store_exists:
-            root = zarr.open_group(self._store, mode="r+")
+            root = zarr.open_group(store, mode="r+")
             self._log.debug("Opened existing root Zarr group at: %s", self._output_path)
         else:
-            root = zarr.open_group(self._store, mode="w", zarr_format=3)
+            root = zarr.open_group(store, mode="w", zarr_format=3)
             self._log.debug("Created root Zarr group at: %s", self._output_path)
 
         # Build shards tuple if sharding is enabled (same for all variables)
@@ -368,6 +384,9 @@ class ZarrSink(Sink["xr.DataArray"]):
                 n_indices,
                 shape,
             )
+
+        # Reset store so workers create their own (FsspecStore can't be pickled)
+        self._store = None
 
     def __call__(self, items: Iterator[xr.DataArray], index: int) -> list[str]:
         """Consume DataArrays and write each variable to the Zarr store.
@@ -511,6 +530,8 @@ class ZarrSink(Sink["xr.DataArray"]):
         worker writes to disjoint chunk regions without modifying shared
         array metadata.
 
+        Uses a cached root group to avoid repeated store/connection setup.
+
         Parameters
         ----------
         da : xr.DataArray
@@ -522,13 +543,15 @@ class ZarrSink(Sink["xr.DataArray"]):
         index : int
             Position along the append dimension to write to.
         """
-        # Open the array directly at the group_path (arrays are stored directly under root)
-        if self._is_remote:
-            arr_store = FsspecStore.from_url(group_path, storage_options=self._storage_options)
-        else:
-            arr_store = LocalStore(group_path)
+        # Extract variable name from group_path (last component)
+        var_name = group_path.rsplit("/", 1)[-1]
 
-        arr = zarr.open_array(arr_store, mode="r+")
+        # Open root group lazily (cached per worker)
+        if self._root_group is None:
+            self._root_group = zarr.open_group(self._get_store(), mode="r+")
+
+        arr = self._root_group[var_name]
+        assert isinstance(arr, zarr.Array), f"Expected Array, got {type(arr)}"
 
         # Get the numpy data and squeeze out the time dimension if needed
         data = da.values
@@ -608,7 +631,7 @@ class ZarrSink(Sink["xr.DataArray"]):
         For local paths, returns a :class:`zarr.storage.LocalStore`.
         For remote URLs, returns a :class:`zarr.storage.FsspecStore`.
         """
-        return self._store
+        return self._get_store()
 
     @property
     def append_dim(self) -> str:
