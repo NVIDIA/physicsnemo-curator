@@ -16,49 +16,7 @@
 
 """GFS Global Weather Analysis ETL Pipeline.
 
-Curate GFS 0.25-degree global weather analysis data into a Zarr store,
-fetching pressure-level variables (t, u, v, z, q) at multiple levels
-plus surface variables (u10m, v10m, u100m, v100m, t2m, sp, msl, tcwv).
-
-GFS data is available from AWS at 6-hour intervals starting from 2021-01-01.
-
-The full time range is fixed (2021-01-01 to 2027-01-01), and you specify
-which indices to process via ``--start-index`` and ``--end-index``. This
-allows incremental processing with checkpoint resumption.
-
-Example usage::
-
-    # Process first 100 indices (0-99)
-    python main.py --start-index 0 --end-index 100
-
-    # Process next 100 indices (100-199)
-    python main.py --start-index 100 --end-index 200
-
-    # Process all indices
-    python main.py --start-index 0 --end-index -1
-
-Remote Zarr Output
-------------------
-To write to a remote Zarr store (e.g., S3), pass an S3 URL as the output path::
-
-    python main.py --output s3://my-bucket/gfs/dataset.zarr --start-index 0 --end-index 100
-
-S3 credentials can be configured via a ``.env`` file in this directory::
-
-    ZARR_S3_ACCESS_KEY_ID=your-access-key
-    ZARR_S3_SECRET_ACCESS_KEY=your-secret-key
-    ZARR_S3_REGION=us-east-1
-    ZARR_S3_ENDPOINT_URL=https://s3.amazonaws.com
-
-Or via environment variables directly.
-
-.. note::
-   These use ``ZARR_S3_*`` prefixes to avoid conflicting with the GFS source,
-   which uses anonymous S3 access to the public ``noaa-gfs-bdp-pds`` bucket.
-   Standard ``AWS_*`` environment variables would interfere with that access.
-
-For other cloud providers (GCS, Azure), use the appropriate URL scheme
-(gs://, az://) and install the corresponding fsspec backend.
+See README.md for detailed usage instructions.
 """
 
 import argparse
@@ -82,6 +40,8 @@ os.environ["LOGURU_LEVEL"] = "ERROR"
 # This is ~8760 6-hourly timestamps (6 years)
 DATASET_START = datetime(2021, 1, 1, 0, 0)
 DATASET_END = datetime(2027, 1, 1, 0, 0)
+STATS_OUTPUT_PATH = Path("outputs/stats.zarr")
+CHECKPOINT_DB_DIR = Path("outputs/checkpoint/")
 
 PRESSURE_LEVELS = [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]
 PRESSURE_LEVEL_VARS = ["t", "u", "v", "z", "q"]
@@ -194,10 +154,10 @@ def main() -> None:
         epilog=__doc__,
     )
     parser.add_argument(
-        "--output",
+        "--zarr-path",
         type=str,
         default="s3://gfs",
-        help="Output directory for Zarr store. Supports S3 URLs (e.g., s3://bucket/path)",
+        help="Zarr output directory. Supports S3 URLs (e.g., s3://bucket/path)",
     )
     parser.add_argument(
         "--workers",
@@ -214,8 +174,8 @@ def main() -> None:
     parser.add_argument(
         "--end-index",
         type=int,
-        default=-1,
-        help=f"End index (exclusive, default: -1 = all). Total indices: {total_indices}",
+        default=10,
+        help=f"End index (exclusive, -1 = all, default: 10). Total indices: {total_indices}",
     )
     parser.add_argument(
         "--s3-anon",
@@ -237,9 +197,9 @@ def main() -> None:
     variables = build_variable_list()
 
     # Determine if output is remote (S3/GCS/Azure)
-    is_remote = "://" in args.output
+    is_remote = "://" in args.zarr_path
     storage_options: dict[str, object] | None = None
-    if is_remote and args.output.startswith("s3://"):
+    if is_remote and args.zarr_path.startswith("s3://"):
         # Build S3 storage options from environment variables
         storage_options = _build_s3_storage_options(anon=args.s3_anon)
     elif is_remote:
@@ -257,9 +217,9 @@ def main() -> None:
     print(f"    - Level vars: {PRESSURE_LEVEL_VARS}")
     print(f"    - Surface vars: {SURFACE_VARS}")
     print(f"  Workers: {args.workers}")
-    print(f"  Output: {args.output}")
+    print(f"  Zarr path: {args.zarr_path}")
     if is_remote:
-        print(f"  Storage: remote ({args.output.split(':')[0]})")
+        print(f"  Storage: remote ({args.zarr_path.split(':')[0]})")
     print()
 
     # Configure the GFS source with all times (full dataset)
@@ -276,11 +236,10 @@ def main() -> None:
     #
     # GFS grid is 721 x 1440 (0.25 degree global)
     # n_indices is the full time range so store is properly sized
-    stats_path = "outputs/stats.zarr"
-    stats_filter = DataArrayStatsFilter(output=stats_path, dims=("time",), keep_shards=True)
+    stats_filter = DataArrayStatsFilter(output=STATS_OUTPUT_PATH, dims=("time",), keep_shards=True)
     pipeline = source.filter(stats_filter).write(
         ZarrSink(
-            output_path=f"{args.output}/data.zarr",
+            output_path=f"{args.zarr_path}/data.zarr",
             chunks={"time": 1, "lat": 721, "lon": 1440},
             n_indices=total_indices,
             variables=variables,
@@ -296,7 +255,7 @@ def main() -> None:
         n_jobs=args.workers,
         backend="process_pool",
         indices=indices_to_process,
-        db_dir="outputs/checkpoint/",
+        db_dir=CHECKPOINT_DB_DIR,
         resume=True,
         use_tui=False,
     )
@@ -307,8 +266,8 @@ def main() -> None:
     gathered = gather_pipeline(pipeline)
     if gathered:
         print(f"Merged {len(gathered)} statistic shards")
-    print(f"Statistics written to: {stats_path}")
-    print(f"Dataset written to: {args.output}/data.zarr")
+    print(f"Statistics written to: {STATS_OUTPUT_PATH}")
+    print(f"Dataset written to: {args.zarr_path}/data.zarr")
 
 
 if __name__ == "__main__":
