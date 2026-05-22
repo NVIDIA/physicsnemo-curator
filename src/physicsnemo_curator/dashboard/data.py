@@ -213,6 +213,22 @@ class DashboardStore(param.Parameterized):
             self._cache["workers_df"] = df
         return self._cache["workers_df"]
 
+    def worker_indices(self, worker_id: str) -> dict[str, list[int]]:
+        """Return indices processed by a specific worker.
+
+        Parameters
+        ----------
+        worker_id : str
+            The worker ID to query.
+
+        Returns
+        -------
+        dict[str, list[int]]
+            Dictionary with keys 'completed' and 'failed', each containing
+            a sorted list of indices processed by this worker.
+        """
+        return self._store.indices_by_worker(worker_id)
+
     def output_paths(self, index: int) -> list[str]:
         """Return output file paths for a given index.
 

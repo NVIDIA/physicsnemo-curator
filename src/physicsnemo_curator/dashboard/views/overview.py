@@ -91,8 +91,8 @@ def _summary_cards(store: DashboardStore) -> pn.Row:
     return pn.Row(progress_card, failed_card, remaining_card, elapsed_card, sizing_mode="stretch_width")
 
 
-def _worker_table(store: DashboardStore) -> pn.Column:
-    """Build the worker status table.
+def _worker_panel(store: DashboardStore) -> pn.Column:
+    """Build the worker status table with selectable detail view.
 
     Parameters
     ----------
@@ -102,7 +102,7 @@ def _worker_table(store: DashboardStore) -> pn.Column:
     Returns
     -------
     pn.Column
-        Column with header and worker table.
+        Column with worker table and detail panel.
     """
     df = store.workers_df
     if df.empty:
@@ -110,9 +110,77 @@ def _worker_table(store: DashboardStore) -> pn.Column:
             pn.pane.Markdown("### Workers"),
             pn.pane.Markdown("*No workers registered.*"),
         )
+
+    # Use Tabulator for selectable rows
+    max_visible = 20
+    table_height = min(len(df), max_visible) * 30 + 40  # ~30px per row + header
+
+    table = pn.widgets.Tabulator(
+        df,
+        sizing_mode="stretch_width",
+        height=table_height,
+        show_index=False,
+        selectable=1,  # Single row selection
+        configuration={"headerSort": False},
+    )
+
+    # Details pane that updates when selection changes
+    details_pane = pn.pane.Markdown("*Click a row above to see worker details.*")
+
+    def update_details(event: object) -> None:
+        """Update details when table selection changes."""
+        selection = table.selection
+        if not selection:
+            details_pane.object = "*Click a row above to see worker details.*"
+            return
+
+        row_idx = selection[0]
+        worker_info = df.iloc[row_idx]
+        selected_worker_id = worker_info["worker_id"]
+
+        # Get indices processed by this worker
+        indices_data = store.worker_indices(selected_worker_id)
+        completed = indices_data.get("completed", [])
+        failed = indices_data.get("failed", [])
+
+        # Format indices for display (compact ranges where possible)
+        def format_indices(indices: list[int]) -> str:
+            if not indices:
+                return "None"
+            if len(indices) <= 20:
+                return ", ".join(str(i) for i in indices)
+            # Show first 10, ..., last 5
+            return ", ".join(str(i) for i in indices[:10]) + f", ... ({len(indices)} total)"
+
+        current_idx = worker_info.get("current_index")
+        current_str = str(current_idx) if current_idx is not None else "Idle"
+
+        details_md = f"""
+**Worker ID:** `{selected_worker_id}`
+
+**Host:** {worker_info.get("hostname", "N/A")} | **PID:** {worker_info.get("pid", "N/A")}
+
+**Started:** {worker_info.get("started_at", "N/A")}
+
+**Current Index:** {current_str}
+
+---
+
+**Completed ({len(completed)}):** {format_indices(completed)}
+
+**Failed ({len(failed)}):** {format_indices(failed)}
+"""
+        details_pane.object = details_md
+
+    table.param.watch(update_details, "selection")
+
     return pn.Column(
         pn.pane.Markdown(f"### Workers ({len(df)})"),
-        pn.pane.DataFrame(df, index=False, sizing_mode="stretch_width"),
+        table,
+        pn.layout.Divider(),
+        pn.pane.Markdown("### Worker Details"),
+        details_pane,
+        sizing_mode="stretch_width",
     )
 
 
@@ -306,7 +374,7 @@ def overview_tab(store: DashboardStore) -> pn.Column:
         content_area.extend(
             [
                 pmui.Paper(_summary_cards(store), elevation=2),
-                pmui.Paper(_worker_table(store), elevation=2),
+                pmui.Paper(_worker_panel(store), elevation=2),
                 pmui.Paper(
                     pn.Column(_pipeline_info(store), _recent_files(store)),
                     elevation=2,

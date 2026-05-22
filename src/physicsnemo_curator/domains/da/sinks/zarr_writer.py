@@ -316,12 +316,21 @@ class ZarrSink(Sink["xr.DataArray"]):
                 len(vars_to_create),
             )
 
-        # Create parent directory (local only; remote stores handle this automatically).
-        if not self._is_remote:
-            pathlib.Path(self._output_path).mkdir(parents=True, exist_ok=True)
+        # Open or create root group at the output path.
+        # All variable arrays are created directly under this root group.
+        if store_exists:
+            root = zarr.open_group(self._store, mode="r+")
+            self._log.debug("Opened existing root Zarr group at: %s", self._output_path)
+        else:
+            root = zarr.open_group(self._store, mode="w", zarr_format=3)
+            self._log.debug("Created root Zarr group at: %s", self._output_path)
+
+        # Build shards tuple if sharding is enabled (same for all variables)
+        shard_tuple = None
+        if self._shards is not None:
+            shard_tuple = tuple(self._shards.get(d, c) for d, c in zip(dim_names, chunk_sizes, strict=True))
 
         for i, var_name in enumerate(vars_to_create, 1):
-            group_path = f"{self._output_path}/{var_name}"
             self._log.info(
                 "Creating variable %d/%d: %s (shape=%s, chunks=%s)",
                 i,
@@ -331,35 +340,15 @@ class ZarrSink(Sink["xr.DataArray"]):
                 chunk_sizes,
             )
 
-            # If overwrite is set, remove existing group first.
-            if self._overwrite and self._fs.exists(group_path):
-                if self._is_remote:
-                    self._fs.rm(group_path, recursive=True)
-                else:
-                    import shutil
+            # If overwrite is set, remove existing array first.
+            if self._overwrite and var_name in root:
+                del root[var_name]
 
-                    shutil.rmtree(group_path, ignore_errors=True)
-
-            # Create empty Zarr array using zarr-python directly (no data upload).
-            # This only writes metadata, not actual chunk data.
-            if self._is_remote:
-                var_store = FsspecStore.from_url(group_path, storage_options=self._storage_options)
-            else:
-                var_store = LocalStore(group_path)
-
-            # Create the zarr group with an empty array
-            root = zarr.open_group(var_store, mode="w", zarr_format=3)
-
-            # Build shards tuple if sharding is enabled
-            shard_tuple = None
-            if self._shards is not None:
-                shard_tuple = tuple(self._shards.get(d, c) for d, c in zip(dim_names, chunk_sizes, strict=True))
-
-            # Create empty array with fill_value=NaN
-            # write_data=False means no chunk files are written (metadata only)
-            # dimension_names enables xarray compatibility for reading
+            # Create empty array directly under root group.
+            # write_data=False means no chunk files are written (metadata only).
+            # dimension_names enables xarray compatibility for reading.
             root.create_array(
-                "data",
+                var_name,
                 shape=shape,
                 chunks=chunk_sizes,
                 shards=shard_tuple,
@@ -369,7 +358,7 @@ class ZarrSink(Sink["xr.DataArray"]):
                 write_data=False,
             )
 
-            self._log.debug("Pre-allocated Zarr group: %s (metadata only)", group_path)
+            self._log.debug("Pre-allocated Zarr array: %s/%s (metadata only)", self._output_path, var_name)
 
         self._preallocated = True
         if vars_to_create:
@@ -515,7 +504,7 @@ class ZarrSink(Sink["xr.DataArray"]):
             self._append_to_zarr(da, group_path)
 
     def _region_write(self, da: xr.DataArray, group_path: str, index: int) -> None:
-        """Write a DataArray to a pre-allocated Zarr group using region indexing.
+        """Write a DataArray to a pre-allocated Zarr array using region indexing.
 
         Each call writes to a specific slice along the append dimension,
         determined by *index*.  This is concurrent-safe because each
@@ -528,16 +517,16 @@ class ZarrSink(Sink["xr.DataArray"]):
             Data to write.  Must have exactly one element along the
             append dimension.
         group_path : str
-            Path to the pre-allocated Zarr group (local or remote URL).
+            Path to the pre-allocated Zarr array (local or remote URL).
+            This is an array directly under the root group, not a nested group.
         index : int
             Position along the append dimension to write to.
         """
-        # Open the array directly (not the group) - much faster
-        array_path = f"{group_path}/data"
+        # Open the array directly at the group_path (arrays are stored directly under root)
         if self._is_remote:
-            arr_store = FsspecStore.from_url(array_path, storage_options=self._storage_options)
+            arr_store = FsspecStore.from_url(group_path, storage_options=self._storage_options)
         else:
-            arr_store = LocalStore(array_path)
+            arr_store = LocalStore(group_path)
 
         arr = zarr.open_array(arr_store, mode="r+")
 

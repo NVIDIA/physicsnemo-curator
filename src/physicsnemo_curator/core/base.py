@@ -673,13 +673,14 @@ class Pipeline[T]:
                 peak_memory,
                 gpu_delta,
                 stage_metrics,
+                worker_id,
             )
 
             return result
 
         except Exception as exc:
             elapsed = time.perf_counter_ns() - overall_start
-            store._resilient_write("record_error", store.record_error, index, str(exc), elapsed)
+            store._resilient_write("record_error", store.record_error, index, str(exc), elapsed, worker_id)
             raise
 
         finally:

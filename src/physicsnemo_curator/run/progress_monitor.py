@@ -285,13 +285,12 @@ def start_progress_monitor(
     indices = config.indices if config.indices is not None else list(range(len(pipeline)))
     n_workers = config.resolved_n_jobs
 
-    # Compute total as the union of all indices across runs:
-    # - Previously completed/failed indices from the DB
-    # - New indices being processed in this run
-    # This handles sparse index ranges like [4-8] then [10-14] correctly.
-    existing_indices = store.completed_indices() | set(store.failed_indices().keys())
-    all_indices = existing_indices | set(indices)
-    total = len(all_indices)
+    # Total is the union of all unique indices: new + previously failed + previously completed.
+    # - New indices overlapping with completed are skipped (already done)
+    # - New indices overlapping with failed are re-attempted
+    completed = store.completed_indices()
+    failed = set(store.failed_indices().keys())
+    total = len(completed | failed | set(indices))
     store.set_total_indices(total)
 
     # Log mode when TUI is disabled or terminal is non-interactive
