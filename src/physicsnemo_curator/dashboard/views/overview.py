@@ -293,10 +293,10 @@ def _error_log(store: DashboardStore) -> pn.Column:
     if errors.empty:
         return pn.Column()
 
-    display = errors[["index", "error"]].tail(10)
+    display = errors[["index", "error"]]
     return pn.Column(
         pn.pane.Markdown(f"### Errors ({len(errors)} total)"),
-        pn.pane.DataFrame(display, index=False, sizing_mode="stretch_width"),
+        pn.pane.DataFrame(display, index=False, sizing_mode="stretch_width", max_height=200),
     )
 
 
