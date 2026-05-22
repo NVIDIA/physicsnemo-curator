@@ -121,6 +121,7 @@ def _worker_panel(store: DashboardStore) -> pn.Column:
         height=table_height,
         show_index=False,
         selectable=1,  # Single row selection
+        disabled=True,  # Prevent editing cells
         configuration={"headerSort": False},
     )
 

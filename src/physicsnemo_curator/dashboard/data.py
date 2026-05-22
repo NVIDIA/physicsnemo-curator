@@ -194,7 +194,7 @@ class DashboardStore(param.Parameterized):
         """DataFrame of registered workers.
 
         Columns: ``worker_id``, ``pid``, ``hostname``, ``started_at``,
-        ``last_heartbeat``, ``current_index``.
+        ``last_heartbeat``, ``current_index``, ``completed``, ``failed``.
 
         Returns
         -------
@@ -203,13 +203,28 @@ class DashboardStore(param.Parameterized):
         """
         if "workers_df" not in self._cache:
             workers = self._store.active_workers()
-            df = (
-                pd.DataFrame(workers)
-                if workers
-                else pd.DataFrame(
-                    columns=["worker_id", "pid", "hostname", "started_at", "last_heartbeat", "current_index"]
+            if workers:
+                # Compute completed/failed counts from actual index_results
+                for w in workers:
+                    indices_data = self._store.indices_by_worker(w["worker_id"])
+                    w["completed"] = len(indices_data.get("completed", []))
+                    w["failed"] = len(indices_data.get("failed", []))
+                    # Remove the stale completed_count from workers table
+                    w.pop("completed_count", None)
+                df = pd.DataFrame(workers)
+            else:
+                df = pd.DataFrame(
+                    columns=[
+                        "worker_id",
+                        "pid",
+                        "hostname",
+                        "started_at",
+                        "last_heartbeat",
+                        "current_index",
+                        "completed",
+                        "failed",
+                    ]
                 )
-            )
             self._cache["workers_df"] = df
         return self._cache["workers_df"]
 
