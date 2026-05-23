@@ -55,7 +55,9 @@ variables or ``~/.aws/credentials``.
 
 from __future__ import annotations
 
+import asyncio
 import pathlib
+import threading
 import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -64,6 +66,8 @@ import fsspec
 import numpy as np
 import xarray as xr  # noqa: TC002 - used at runtime in __call__, _write_dataarray, etc.
 import zarr
+import zarr.api.asynchronous
+import zarr.core.group
 from zarr.storage import FsspecStore, LocalStore
 
 from physicsnemo_curator.core.base import Param, Sink
@@ -71,6 +75,44 @@ from physicsnemo_curator.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
+
+# --- Module-level background event loop for async zarr writes ---
+# A single daemon thread per process hosts a dedicated asyncio event loop.
+# This avoids conflicts with any main-thread event loop (e.g., GFS source).
+_LOOP_LOCK = threading.Lock()
+_BACKGROUND_LOOP: asyncio.AbstractEventLoop | None = None
+_BACKGROUND_THREAD: threading.Thread | None = None
+
+
+def _get_background_loop() -> asyncio.AbstractEventLoop:
+    """Return the shared background event loop, starting it if needed.
+
+    The loop runs in a daemon thread so it is automatically cleaned up
+    when the process exits.  It is safe to call from any thread.
+    """
+    global _BACKGROUND_LOOP, _BACKGROUND_THREAD  # noqa: PLW0603
+
+    if _BACKGROUND_LOOP is not None and _BACKGROUND_LOOP.is_running():
+        return _BACKGROUND_LOOP
+
+    with _LOOP_LOCK:
+        # Double-check after acquiring lock
+        if _BACKGROUND_LOOP is not None and _BACKGROUND_LOOP.is_running():
+            return _BACKGROUND_LOOP
+
+        loop = asyncio.new_event_loop()
+
+        def _run_loop() -> None:
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
+
+        thread = threading.Thread(target=_run_loop, daemon=True, name="zarr-async-io")
+        thread.start()
+
+        _BACKGROUND_LOOP = loop
+        _BACKGROUND_THREAD = thread
+
+    return _BACKGROUND_LOOP
 
 
 class ZarrSink(Sink["xr.DataArray"]):
@@ -222,6 +264,9 @@ class ZarrSink(Sink["xr.DataArray"]):
         # Lazy-initialized in workers (can't pickle stores with async resources)
         self._store: FsspecStore | LocalStore | None = None
         self._root_group: zarr.Group | None = None
+
+        # Async group for concurrent region writes (lazy-initialized per worker)
+        self._async_group: zarr.core.group.AsyncGroup | None = None
 
         # Determine if using remote storage based on URL scheme.
         self._is_remote = "://" in output_path
@@ -468,6 +513,9 @@ class ZarrSink(Sink["xr.DataArray"]):
     def _write_dataarray(self, da: xr.DataArray, index: int) -> list[str]:
         """Split a DataArray by variable and write each to its Zarr group.
 
+        When the store is pre-allocated, all variables are written
+        concurrently using async I/O on a dedicated background event loop.
+
         Parameters
         ----------
         da : xr.DataArray
@@ -491,12 +539,20 @@ class ZarrSink(Sink["xr.DataArray"]):
 
         # Split along the variable dimension and write each separately.
         variables = da.coords["variable"].values
-        for var_name in variables:
-            var_da = da.sel(variable=var_name).drop_vars("variable")
-            var_str = str(var_name)
-            group_path = f"{self._output_path}/{var_str}"
-            self._write_to_zarr(var_da, group_path, index)
-            paths.append(group_path)
+
+        if self._preallocated:
+            # Concurrent async writes for all variables at this index
+            self._async_region_write_all(da, variables, index)
+            for var_name in variables:
+                paths.append(f"{self._output_path}/{var_name!s}")
+        else:
+            # Sequential fallback for append-based writes
+            for var_name in variables:
+                var_da = da.sel(variable=var_name).drop_vars("variable")
+                var_str = str(var_name)
+                group_path = f"{self._output_path}/{var_str}"
+                self._write_to_zarr(var_da, group_path, index)
+                paths.append(group_path)
 
         return paths
 
@@ -560,6 +616,78 @@ class ZarrSink(Sink["xr.DataArray"]):
 
         # Write to the specific index along the append dimension (first dim)
         arr[index] = data
+
+    def _async_region_write_all(self, da: xr.DataArray, variables: np.ndarray, index: int) -> None:
+        """Write all variables for a single index concurrently via async I/O.
+
+        Submits writes for all variables as concurrent tasks on the
+        background event loop and waits for all to complete.
+
+        Parameters
+        ----------
+        da : xr.DataArray
+            Full DataArray with a ``variable`` dimension.
+        variables : np.ndarray
+            Array of variable names from the DataArray coordinate.
+        index : int
+            Position along the append dimension to write to.
+        """
+        loop = _get_background_loop()
+
+        # Submit the gather coroutine and wait for it synchronously
+        future = asyncio.run_coroutine_threadsafe(self._gather_writes(da, variables, index), loop)
+        # Block until all writes complete; propagate any exceptions
+        future.result()
+
+    async def _gather_writes(self, da: xr.DataArray, variables: np.ndarray, index: int) -> None:
+        """Concurrently write all variables for a single time index.
+
+        Opens the async group lazily (first call per worker) and then
+        fires off one write task per variable.
+
+        Parameters
+        ----------
+        da : xr.DataArray
+            Full DataArray with a ``variable`` dimension.
+        variables : np.ndarray
+            Array of variable names.
+        index : int
+            Time-slot index to write into.
+        """
+        # Lazy-init async group on the background loop
+        if self._async_group is None:
+            store = self._get_store()
+            self._async_group = await zarr.api.asynchronous.open_group(store, mode="r+")
+
+        # Fire all variable writes concurrently
+        tasks = []
+        for var_name in variables:
+            var_da = da.sel(variable=var_name).drop_vars("variable")
+            data = var_da.values
+            tasks.append(self._async_write_one(str(var_name), data, index))
+
+        await asyncio.gather(*tasks)
+
+    async def _async_write_one(self, var_name: str, data: np.ndarray, index: int) -> None:
+        """Write a single variable's data to the pre-allocated array.
+
+        Parameters
+        ----------
+        var_name : str
+            Variable name (key in the root group).
+        data : np.ndarray
+            Numpy array to write. May have a leading singleton time dim.
+        index : int
+            Position along the append dimension.
+        """
+        arr = await self._async_group.getitem(var_name)  # ty: ignore[unresolved-attribute]
+        assert isinstance(arr, zarr.AsyncArray)
+
+        # Squeeze leading singleton time dimension if present
+        if data.ndim == len(arr.shape) and data.shape[0] == 1:
+            data = data[0]
+
+        await arr.setitem(index, data)
 
     def _append_to_zarr(self, da: xr.DataArray, group_path: str) -> None:
         """Append a DataArray to a Zarr group, creating it if needed.
