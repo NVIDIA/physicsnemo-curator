@@ -395,7 +395,7 @@ class DrivAerMLSource(Source[Mesh]):
         part = self._mesh_parts[seq]
         return _MESH_NAME_TEMPLATES[part].format(run_id=run_id)
 
-    def __getitem__(self, index: int) -> Generator[Mesh | DomainMesh]:  # ty: ignore[invalid-method-override]
+    def __getitem__(self, index: int) -> Generator[Mesh | DomainMesh]:
         """Read the mesh(es) for the *index*-th run.
 
         For ``"boundary"`` and ``"volume"`` mesh types, yields a single

@@ -34,6 +34,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 import xarray as xr
+import zarr
+import zarr.storage
 
 from physicsnemo_curator.core.base import Filter, Param
 from physicsnemo_curator.core.logging import get_logger
@@ -179,7 +181,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
 
             # Merge with existing data if it exists (worker-level aggregation)
             if group_path.exists():
-                existing_stats = xr.open_zarr(str(group_path))
+                existing_stats = _open_stats_zarr(group_path)
                 merged_stats = _merge_moment_datasets([existing_stats, new_stats])
                 merged_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
                 self._log.debug("Merged stats for %s", var_name)
@@ -310,7 +312,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
             for child in sorted(store_path.iterdir()):
                 if child.is_dir():
                     var_name = child.name
-                    ds = xr.open_zarr(str(child))
+                    ds = _open_stats_zarr(child)
                     var_groups.setdefault(var_name, []).append(ds)
 
         if not var_groups:
@@ -624,6 +626,62 @@ class _MomentAccumulator:
             attrs={"count": int(self._count)},
         )
         return ds
+
+
+def _open_stats_zarr(path: str | pathlib.Path) -> xr.Dataset:
+    """Open a stats Zarr v3 store using zarr-python and return an xr.Dataset.
+
+    This avoids ``xr.open_zarr`` which can fail on zarr v3 stores that
+    lack the xarray-specific ``.zmetadata`` consolidation.  We read
+    arrays directly from the zarr group and reconstruct the Dataset.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the zarr group directory.
+
+    Returns
+    -------
+    xr.Dataset
+        Reconstructed dataset with the same variables and attributes.
+    """
+    store = zarr.storage.LocalStore(str(path), read_only=True)
+    group = zarr.open_group(store, mode="r")
+    attrs = dict(group.attrs)
+
+    # Known stat variable names written by _MomentAccumulator.finalize()
+    stat_vars = {"mean", "variance", "skewness", "min", "max", "welford_mean", "welford_m2", "welford_m3"}
+
+    data_vars: dict[str, tuple[list[str], np.ndarray]] = {}
+    dims: list[str] = []
+
+    for var_name in stat_vars:
+        if var_name in group:
+            arr = group[var_name]
+            data = arr[:]
+            # zarr v3 stores dimension names in array metadata
+            dim_names = getattr(arr.metadata, "dimension_names", None)
+            arr_dims: list[str] = [str(d) for d in dim_names] if dim_names else []
+            if not dims and arr_dims:
+                dims = arr_dims
+            data_vars[var_name] = (arr_dims if arr_dims else dims, np.asarray(data))
+
+    # Reconstruct coordinates from arrays that are NOT stat variables
+    coords: dict[str, Any] = {}
+    for name in group:
+        if name not in stat_vars:
+            arr = group[name]
+            if not hasattr(arr, "ndim"):
+                continue
+            if arr.ndim == 0:
+                coords[name] = np.asarray(arr[()])
+            else:
+                coords[name] = np.asarray(arr[:])
+
+    if not data_vars:
+        return xr.Dataset(attrs=attrs)
+
+    return xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
 
 
 def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
