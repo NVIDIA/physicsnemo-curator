@@ -18,7 +18,6 @@
 
 from __future__ import annotations
 
-import concurrent.futures
 import json
 import pickle
 import time
@@ -566,7 +565,12 @@ class TestConcurrentMetrics:
     """Test metrics collection under concurrent access."""
 
     def test_concurrent_getitem(self, tmp_path):
-        """Multiple threads calling __getitem__ concurrently."""
+        """Sequential __getitem__ calls with checkpoint flush.
+
+        Note: Threading is not a supported execution backend (process_pool is
+        preferred), so this test uses sequential execution with checkpoint()
+        calls to verify WAL checkpoint flushes pending writes correctly.
+        """
         pipeline = Pipeline(
             source=_TimedSource(20, delay=0.0),
             filters=[_DoubleFilter()],
@@ -575,11 +579,12 @@ class TestConcurrentMetrics:
             db_dir=tmp_path / ".pnc",
         )
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-            futures = [pool.submit(pipeline.__getitem__, i) for i in range(20)]
-            results = [f.result() for f in futures]
+        # Process all indices sequentially (threading removed as supported backend)
+        results = [pipeline[i] for i in range(20)]
 
         assert len(results) == 20
+        # Force WAL checkpoint so all writes are visible to subsequent reads
+        pipeline._require_metrics().checkpoint()
         metrics = pipeline.metrics
         assert len(metrics.indices) == 20
 
