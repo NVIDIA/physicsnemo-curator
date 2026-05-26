@@ -234,9 +234,7 @@ class TestAtomicInfoFilterLogging:
         filt = AtomicInfoFilter(log_level="debug", include_fields=True)
         data = _make_mock_atomic_data(n_nodes=5, n_edges=8)
 
-        with caplog.at_level(
-            logging.DEBUG, logger="physicsnemo_curator.domains.atm.filters.atomic_info"
-        ):
+        with caplog.at_level(logging.DEBUG, logger="physicsnemo_curator.domains.atm.filters.atomic_info"):
             list(filt(_single(data)))
 
         # Should have per-field lines.
