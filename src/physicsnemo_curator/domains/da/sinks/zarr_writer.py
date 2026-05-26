@@ -35,24 +35,84 @@ When executed with a parallel backend (``process_pool``), the sink
 partitions pipeline indices into chunk-aligned groups so that no two
 workers write to the same Zarr chunk concurrently.  The partitioning
 dimension defaults to the ``append_dim`` (``"time"``).
+
+Remote Storage Support
+----------------------
+The sink supports writing to remote storage (S3, GCS, Azure) via fsspec.
+Pass an fsspec-compatible URL as the *output_path* (e.g.,
+``s3://bucket/path/dataset.zarr``) and provide authentication via
+*storage_options*::
+
+    sink = ZarrSink(
+        output_path="s3://my-bucket/weather/gfs.zarr",
+        storage_options={"key": "...", "secret": "..."},
+        ...
+    )
+
+For AWS S3, you can also rely on ambient credentials from environment
+variables or ``~/.aws/credentials``.
 """
 
 from __future__ import annotations
 
+import asyncio
 import pathlib
+import threading
 import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, ClassVar
 
+import fsspec
 import numpy as np
-import xarray as xr
+import xarray as xr  # noqa: TC002 - used at runtime in __call__, _write_dataarray, etc.
 import zarr
+import zarr.api.asynchronous
+import zarr.core.group
+from zarr.storage import FsspecStore, LocalStore
 
 from physicsnemo_curator.core.base import Param, Sink
 from physicsnemo_curator.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
+
+# --- Module-level background event loop for async zarr writes ---
+# A single daemon thread per process hosts a dedicated asyncio event loop.
+# This avoids conflicts with any main-thread event loop (e.g., GFS source).
+_LOOP_LOCK = threading.Lock()
+_BACKGROUND_LOOP: asyncio.AbstractEventLoop | None = None
+_BACKGROUND_THREAD: threading.Thread | None = None
+
+
+def _get_background_loop() -> asyncio.AbstractEventLoop:
+    """Return the shared background event loop, starting it if needed.
+
+    The loop runs in a daemon thread so it is automatically cleaned up
+    when the process exits.  It is safe to call from any thread.
+    """
+    global _BACKGROUND_LOOP, _BACKGROUND_THREAD  # noqa: PLW0603
+
+    if _BACKGROUND_LOOP is not None and _BACKGROUND_LOOP.is_running():
+        return _BACKGROUND_LOOP
+
+    with _LOOP_LOCK:
+        # Double-check after acquiring lock
+        if _BACKGROUND_LOOP is not None and _BACKGROUND_LOOP.is_running():
+            return _BACKGROUND_LOOP
+
+        loop = asyncio.new_event_loop()
+
+        def _run_loop() -> None:
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
+
+        thread = threading.Thread(target=_run_loop, daemon=True, name="zarr-async-io")
+        thread.start()
+
+        _BACKGROUND_LOOP = loop
+        _BACKGROUND_THREAD = thread
+
+    return _BACKGROUND_LOOP
 
 
 class ZarrSink(Sink["xr.DataArray"]):
@@ -77,7 +137,8 @@ class ZarrSink(Sink["xr.DataArray"]):
     Parameters
     ----------
     output_path : str
-        Path to the output Zarr store directory.
+        Path to the output Zarr store directory.  Supports local paths
+        and remote fsspec URLs (e.g., ``s3://bucket/path/store.zarr``).
     chunks : dict[str, int] | None
         Chunk sizes per dimension for the Zarr arrays.  Defaults to
         ``{"time": 1, "lat": 721, "lon": 1440}`` (one time-step per
@@ -99,10 +160,14 @@ class ZarrSink(Sink["xr.DataArray"]):
         Variable names for pre-allocation.  Each variable becomes a
         separate Zarr group.  Required when *n_indices* is set.
     overwrite : bool
-        If *True*, an existing store at *output_path* will be
-        overwritten during pre-allocation.  If *False* (default) and
-        the store already exists, a :class:`FileExistsError` is raised
-        to prevent accidental data loss.
+        If *True*, existing variable groups at *output_path* will be
+        overwritten during pre-allocation.  If *False* (default), existing
+        variable groups are preserved and only missing variables are
+        created, allowing pipelines to resume from partial runs.
+    storage_options : dict[str, Any] | None
+        Extra keyword arguments for the fsspec filesystem.  Use this
+        to provide credentials for remote stores (e.g., S3 keys).
+        If *None*, uses ambient credentials from environment or config.
 
     Examples
     --------
@@ -121,6 +186,26 @@ class ZarrSink(Sink["xr.DataArray"]):
     ...     n_indices=72,
     ...     variables=["t2m", "q2m", "tcwv"],
     ...     overwrite=True,
+    ... )
+
+    Resume from existing store (append missing data):
+
+    >>> sink = ZarrSink(
+    ...     output_path="output.zarr",  # Existing store with partial data
+    ...     chunks={"time": 1, "lat": 721, "lon": 1440},
+    ...     n_indices=72,
+    ...     variables=["t2m", "q2m", "tcwv"],
+    ...     overwrite=False,  # Preserve existing variable groups
+    ... )
+
+    Remote S3 storage:
+
+    >>> sink = ZarrSink(
+    ...     output_path="s3://my-bucket/weather/gfs.zarr",
+    ...     chunks={"time": 1, "lat": 721, "lon": 1440},
+    ...     n_indices=28,
+    ...     variables=["t2m", "u10m"],
+    ...     storage_options={"anon": False},  # Use ambient AWS credentials
     ... )
     """
 
@@ -163,9 +248,11 @@ class ZarrSink(Sink["xr.DataArray"]):
         n_indices: int | None = None,
         variables: list[str] | None = None,
         overwrite: bool = False,
+        storage_options: dict[str, Any] | None = None,
     ) -> None:
         self._log = get_logger(self)
-        self._output_path = pathlib.Path(output_path)
+        self._output_path = output_path
+        self._storage_options = storage_options or {}
         self._chunks = chunks if chunks is not None else dict(self._DEFAULT_CHUNKS)
         self._shards = shards
         self._append_dim = append_dim
@@ -173,6 +260,25 @@ class ZarrSink(Sink["xr.DataArray"]):
         self._variables = variables
         self._overwrite = overwrite
         self._preallocated = False
+
+        # Lazy-initialized in workers (can't pickle stores with async resources)
+        self._store: FsspecStore | LocalStore | None = None
+        self._root_group: zarr.Group | None = None
+
+        # Async group for concurrent region writes (lazy-initialized per worker)
+        self._async_group: zarr.core.group.AsyncGroup | None = None
+
+        # Determine if using remote storage based on URL scheme.
+        self._is_remote = "://" in output_path
+
+        # Sync filesystem for path existence checks during preallocation
+        if self._is_remote:
+            from fsspec.core import split_protocol
+
+            protocol, _ = split_protocol(output_path)
+            self._fs = fsspec.filesystem(protocol, **self._storage_options)
+        else:
+            self._fs = fsspec.filesystem("file")
 
         # Validate: n_indices and variables must both be set or both be None.
         if (n_indices is None) != (variables is None):
@@ -183,14 +289,27 @@ class ZarrSink(Sink["xr.DataArray"]):
         if n_indices is not None and variables is not None:
             self._preallocate_store(n_indices, variables)
 
+    def _get_store(self) -> FsspecStore | LocalStore:
+        """Get or create the zarr store (lazy init for worker processes)."""
+        if self._store is None:
+            if self._is_remote:
+                self._store = FsspecStore.from_url(self._output_path, storage_options=self._storage_options)
+            else:
+                self._store = LocalStore(self._output_path)
+        return self._store
+
     def _preallocate_store(self, n_indices: int, variables: list[str]) -> None:
-        """Create the Zarr store with pre-allocated arrays for region writes.
+        """Create or extend the Zarr store with pre-allocated arrays for region writes.
 
         Each variable gets its own Zarr group at
         ``<output_path>/<variable_name>/`` with a ``data`` array of
         shape ``(n_indices, *spatial_dims)``.  Spatial dimension sizes
         are taken from :attr:`_chunks` (all dimensions except the
         append dimension).
+
+        If the store already exists, only missing variables are created.
+        Existing variables are left untouched to allow resuming interrupted
+        pipelines.
 
         Parameters
         ----------
@@ -223,41 +342,96 @@ class ZarrSink(Sink["xr.DataArray"]):
         for dim_name, dim_size in spatial_dims.items():
             coords[dim_name] = np.arange(dim_size)
 
-        # Check for existing store and respect overwrite flag.
-        if self._output_path.exists() and any((self._output_path / v).exists() for v in variables):
-            if not self._overwrite:
-                msg = (
-                    f"Zarr store already exists at '{self._output_path}'. "
-                    f"Set overwrite=True to replace it, or remove the directory manually."
-                )
-                raise FileExistsError(msg)
+        # Check for existing store.
+        store_exists = self._fs.exists(self._output_path)
+
+        # Determine which variables already exist.
+        # Use a single ls() call instead of N exists() calls to avoid N network round-trips.
+        existing_vars: set[str] = set()
+        if store_exists:
+            try:
+                # List contents of the store directory once
+                contents = self._fs.ls(self._output_path, detail=False)
+                # Extract basenames and check against requested variables
+                for path in contents:
+                    basename = path.rstrip("/").rsplit("/", 1)[-1]
+                    if basename in variables:
+                        existing_vars.add(basename)
+            except FileNotFoundError:
+                # Store path doesn't exist yet
+                pass
+
+        # If overwrite is True and store exists, remove existing variable groups.
+        if store_exists and self._overwrite and existing_vars:
             self._log.warning("Overwriting existing Zarr store at: %s", self._output_path)
+            existing_vars.clear()  # Force re-creation of all variables
 
-        self._output_path.mkdir(parents=True, exist_ok=True)
+        # Variables to create (those not already existing).
+        vars_to_create = [v for v in variables if v not in existing_vars]
 
-        for var_name in variables:
-            group_path = self._output_path / var_name
-
-            # Create empty NaN-filled DataArray with correct shape
-            data = np.full(shape, np.nan, dtype=np.float32)
-            da = xr.DataArray(data, dims=dim_names, coords=coords)
-            ds = da.to_dataset(name="data")
-
-            ds.to_zarr(
-                store=str(group_path),
-                mode="w",
-                encoding=encoding,
-                zarr_format=3,
+        if existing_vars:
+            self._log.info(
+                "Resuming existing Zarr store: %d variables exist, %d to create",
+                len(existing_vars),
+                len(vars_to_create),
             )
-            self._log.debug("Pre-allocated Zarr group: %s (shape=%s)", group_path, shape)
+
+        # Open or create root group at the output path.
+        # All variable arrays are created directly under this root group.
+        store = self._get_store()
+        if store_exists:
+            root = zarr.open_group(store, mode="r+")
+            self._log.debug("Opened existing root Zarr group at: %s", self._output_path)
+        else:
+            root = zarr.open_group(store, mode="w", zarr_format=3)
+            self._log.debug("Created root Zarr group at: %s", self._output_path)
+
+        # Build shards tuple if sharding is enabled (same for all variables)
+        shard_tuple = None
+        if self._shards is not None:
+            shard_tuple = tuple(self._shards.get(d, c) for d, c in zip(dim_names, chunk_sizes, strict=True))
+
+        for i, var_name in enumerate(vars_to_create, 1):
+            self._log.info(
+                "Creating variable %d/%d: %s (shape=%s, chunks=%s)",
+                i,
+                len(vars_to_create),
+                var_name,
+                shape,
+                chunk_sizes,
+            )
+
+            # If overwrite is set, remove existing array first.
+            if self._overwrite and var_name in root:
+                del root[var_name]
+
+            # Create empty array directly under root group.
+            # write_data=False means no chunk files are written (metadata only).
+            # dimension_names enables xarray compatibility for reading.
+            root.create_array(
+                var_name,
+                shape=shape,
+                chunks=chunk_sizes,
+                shards=shard_tuple,
+                dtype=np.float32,
+                fill_value=np.nan,
+                dimension_names=dim_names,
+                write_data=False,
+            )
+
+            self._log.debug("Pre-allocated Zarr array: %s/%s (metadata only)", self._output_path, var_name)
 
         self._preallocated = True
-        self._log.info(
-            "Pre-allocated Zarr store: %d variables, %d time steps, shape=%s",
-            len(variables),
-            n_indices,
-            shape,
-        )
+        if vars_to_create:
+            self._log.info(
+                "Pre-allocated Zarr store: %d variables, %d time steps, shape=%s",
+                len(vars_to_create),
+                n_indices,
+                shape,
+            )
+
+        # Reset store so workers create their own (FsspecStore can't be pickled)
+        self._store = None
 
     def __call__(self, items: Iterator[xr.DataArray], index: int) -> list[str]:
         """Consume DataArrays and write each variable to the Zarr store.
@@ -339,6 +513,9 @@ class ZarrSink(Sink["xr.DataArray"]):
     def _write_dataarray(self, da: xr.DataArray, index: int) -> list[str]:
         """Split a DataArray by variable and write each to its Zarr group.
 
+        When the store is pre-allocated, all variables are written
+        concurrently using async I/O on a dedicated background event loop.
+
         Parameters
         ----------
         da : xr.DataArray
@@ -355,23 +532,31 @@ class ZarrSink(Sink["xr.DataArray"]):
 
         # If no 'variable' dim, write directly
         if "variable" not in da.dims:
-            group_path = self._output_path / "data"
+            group_path = f"{self._output_path}/data"
             self._write_to_zarr(da, group_path, index)
-            paths.append(str(group_path))
+            paths.append(group_path)
             return paths
 
         # Split along the variable dimension and write each separately.
         variables = da.coords["variable"].values
-        for var_name in variables:
-            var_da = da.sel(variable=var_name).drop_vars("variable")
-            var_str = str(var_name)
-            group_path = self._output_path / var_str
-            self._write_to_zarr(var_da, group_path, index)
-            paths.append(str(group_path))
+
+        if self._preallocated:
+            # Concurrent async writes for all variables at this index
+            self._async_region_write_all(da, variables, index)
+            for var_name in variables:
+                paths.append(f"{self._output_path}/{var_name!s}")
+        else:
+            # Sequential fallback for append-based writes
+            for var_name in variables:
+                var_da = da.sel(variable=var_name).drop_vars("variable")
+                var_str = str(var_name)
+                group_path = f"{self._output_path}/{var_str}"
+                self._write_to_zarr(var_da, group_path, index)
+                paths.append(group_path)
 
         return paths
 
-    def _write_to_zarr(self, da: xr.DataArray, group_path: pathlib.Path, index: int) -> None:
+    def _write_to_zarr(self, da: xr.DataArray, group_path: str, index: int) -> None:
         """Write a DataArray to a Zarr group using the appropriate strategy.
 
         When the store is pre-allocated, uses region writes
@@ -382,8 +567,8 @@ class ZarrSink(Sink["xr.DataArray"]):
         ----------
         da : xr.DataArray
             Data to write (should have the append dim as the first dim).
-        group_path : pathlib.Path
-            Path to the Zarr group directory.
+        group_path : str
+            Path to the Zarr group directory (local or remote URL).
         index : int
             Pipeline index — used as the position along the append
             dimension for region writes.
@@ -393,49 +578,118 @@ class ZarrSink(Sink["xr.DataArray"]):
         else:
             self._append_to_zarr(da, group_path)
 
-    def _region_write(self, da: xr.DataArray, group_path: pathlib.Path, index: int) -> None:
-        """Write a DataArray to a pre-allocated Zarr group using region indexing.
+    def _region_write(self, da: xr.DataArray, group_path: str, index: int) -> None:
+        """Write a DataArray to a pre-allocated Zarr array using region indexing.
 
         Each call writes to a specific slice along the append dimension,
         determined by *index*.  This is concurrent-safe because each
         worker writes to disjoint chunk regions without modifying shared
         array metadata.
 
+        Uses a cached root group to avoid repeated store/connection setup.
+
         Parameters
         ----------
         da : xr.DataArray
             Data to write.  Must have exactly one element along the
             append dimension.
-        group_path : pathlib.Path
-            Path to the pre-allocated Zarr group.
+        group_path : str
+            Path to the pre-allocated Zarr array (local or remote URL).
+            This is an array directly under the root group, not a nested group.
         index : int
             Position along the append dimension to write to.
         """
-        ds = da.to_dataset(name="data")
+        # Extract variable name from group_path (last component)
+        var_name = group_path.rsplit("/", 1)[-1]
 
-        # Build region spec: slice the append dim at the index position.
-        region: dict[str, slice] = {self._append_dim: slice(index, index + 1)}
+        # Open root group lazily (cached per worker)
+        if self._root_group is None:
+            self._root_group = zarr.open_group(self._get_store(), mode="r+")
 
-        # Drop all coordinates/variables that don't share a dimension with
-        # the region.  xarray's region write requires every variable in the
-        # dataset to have at least one dim in common with the region dims.
-        # Dimension coordinates (e.g. hrrr_x, hrrr_y, time) are 1-D and
-        # only indexed on themselves — drop those that lack the append dim.
-        region_dims = set(region.keys())
-        drop_vars = [
-            name
-            for name in list(ds.coords) + list(ds.data_vars)
-            if name != "data" and not region_dims.intersection(ds[name].dims)
-        ]
-        ds = ds.drop_vars(drop_vars)
+        arr = self._root_group[var_name]
+        assert isinstance(arr, zarr.Array), f"Expected Array, got {type(arr)}"
 
-        ds.to_zarr(
-            store=str(group_path),
-            mode="r+",
-            region=region,
-        )
+        # Get the numpy data and squeeze out the time dimension if needed
+        data = da.values
+        if data.ndim == len(arr.shape) and data.shape[0] == 1:
+            data = data[0]  # Remove leading singleton time dim
 
-    def _append_to_zarr(self, da: xr.DataArray, group_path: pathlib.Path) -> None:
+        # Write to the specific index along the append dimension (first dim)
+        arr[index] = data
+
+    def _async_region_write_all(self, da: xr.DataArray, variables: np.ndarray, index: int) -> None:
+        """Write all variables for a single index concurrently via async I/O.
+
+        Submits writes for all variables as concurrent tasks on the
+        background event loop and waits for all to complete.
+
+        Parameters
+        ----------
+        da : xr.DataArray
+            Full DataArray with a ``variable`` dimension.
+        variables : np.ndarray
+            Array of variable names from the DataArray coordinate.
+        index : int
+            Position along the append dimension to write to.
+        """
+        loop = _get_background_loop()
+
+        # Submit the gather coroutine and wait for it synchronously
+        future = asyncio.run_coroutine_threadsafe(self._gather_writes(da, variables, index), loop)
+        # Block until all writes complete; propagate any exceptions
+        future.result()
+
+    async def _gather_writes(self, da: xr.DataArray, variables: np.ndarray, index: int) -> None:
+        """Concurrently write all variables for a single time index.
+
+        Opens the async group lazily (first call per worker) and then
+        fires off one write task per variable.
+
+        Parameters
+        ----------
+        da : xr.DataArray
+            Full DataArray with a ``variable`` dimension.
+        variables : np.ndarray
+            Array of variable names.
+        index : int
+            Time-slot index to write into.
+        """
+        # Lazy-init async group on the background loop
+        if self._async_group is None:
+            store = self._get_store()
+            self._async_group = await zarr.api.asynchronous.open_group(store, mode="r+")
+
+        # Fire all variable writes concurrently
+        tasks = []
+        for var_name in variables:
+            var_da = da.sel(variable=var_name).drop_vars("variable")
+            data = var_da.values
+            tasks.append(self._async_write_one(str(var_name), data, index))
+
+        await asyncio.gather(*tasks)
+
+    async def _async_write_one(self, var_name: str, data: np.ndarray, index: int) -> None:
+        """Write a single variable's data to the pre-allocated array.
+
+        Parameters
+        ----------
+        var_name : str
+            Variable name (key in the root group).
+        data : np.ndarray
+            Numpy array to write. May have a leading singleton time dim.
+        index : int
+            Position along the append dimension.
+        """
+        arr = await self._async_group.getitem(var_name)  # ty: ignore[unresolved-attribute]
+        assert isinstance(arr, zarr.AsyncArray)
+
+        # Squeeze leading singleton time dimension if present
+        if data.ndim == len(arr.shape) and data.shape[0] == 1:
+            data = data[0]
+
+        await arr.setitem(index, data)
+
+    def _append_to_zarr(self, da: xr.DataArray, group_path: str) -> None:
         """Append a DataArray to a Zarr group, creating it if needed.
 
         This is the legacy write path used when the store is NOT
@@ -448,8 +702,8 @@ class ZarrSink(Sink["xr.DataArray"]):
         ----------
         da : xr.DataArray
             Data to write (should have the append dim as the first dim).
-        group_path : pathlib.Path
-            Path to the Zarr group directory.
+        group_path : str
+            Path to the Zarr group directory (local or remote URL).
         """
         # Convert to Dataset for xarray's Zarr writer
         ds = da.to_dataset(name="data")
@@ -472,27 +726,40 @@ class ZarrSink(Sink["xr.DataArray"]):
             shard_tuple = tuple(self._shards.get(str(d), chunk_tuple[i]) for i, d in enumerate(da.dims))
             encoding["data"]["shards"] = shard_tuple
 
-        if group_path.exists():
+        if self._fs.exists(group_path):
             # Append along the configured dimension
             ds.to_zarr(
-                store=str(group_path),
+                store=group_path,
                 mode="a",
                 append_dim=self._append_dim,
                 zarr_format=3,
+                storage_options=self._storage_options if self._is_remote else None,
             )
         else:
-            group_path.parent.mkdir(parents=True, exist_ok=True)
+            # Create parent directory (local only; remote stores handle this automatically).
+            if not self._is_remote:
+                pathlib.Path(group_path).parent.mkdir(parents=True, exist_ok=True)
             ds.to_zarr(
-                store=str(group_path),
+                store=group_path,
                 mode="w",
                 encoding=encoding,
                 zarr_format=3,
+                storage_options=self._storage_options if self._is_remote else None,
             )
 
     @property
-    def output_path(self) -> pathlib.Path:
+    def output_path(self) -> str:
         """Return the output Zarr store path."""
         return self._output_path
+
+    @property
+    def store(self) -> LocalStore | FsspecStore:
+        """Return the underlying Zarr store.
+
+        For local paths, returns a :class:`zarr.storage.LocalStore`.
+        For remote URLs, returns a :class:`zarr.storage.FsspecStore`.
+        """
+        return self._get_store()
 
     @property
     def append_dim(self) -> str:

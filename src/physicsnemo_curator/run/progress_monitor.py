@@ -63,7 +63,8 @@ class LogProgressMonitor:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._start_time: float = 0.0
-        self._last_log_id: int = 0  # Track last seen database log entry
+        # Start from max existing log ID to skip logs from previous invocations
+        self._last_log_id: int = store.max_log_id() if hasattr(store, "max_log_id") else 0
         self._db_log_handler: DatabaseLogHandler | None = None
         self._setup_db_logging()
 
@@ -283,10 +284,14 @@ def start_progress_monitor(
 
     store = pipeline._get_store()
     indices = config.indices if config.indices is not None else list(range(len(pipeline)))
-    total = len(indices)
     n_workers = config.resolved_n_jobs
 
-    # Store total indices count so the dashboard can show accurate progress
+    # Total is the union of all unique indices: new + previously failed + previously completed.
+    # - New indices overlapping with completed are skipped (already done)
+    # - New indices overlapping with failed are re-attempted
+    completed = store.completed_indices()
+    failed = set(store.failed_indices().keys())
+    total = len(completed | failed | set(indices))
     store.set_total_indices(total)
 
     # Log mode when TUI is disabled or terminal is non-interactive

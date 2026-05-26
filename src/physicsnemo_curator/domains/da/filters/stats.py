@@ -34,6 +34,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 import xarray as xr
+import zarr
+import zarr.storage
 
 from physicsnemo_curator.core.base import Filter, Param
 from physicsnemo_curator.core.logging import get_logger
@@ -68,6 +70,11 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
     dims : tuple[str, ...]
         Dimension names along which to reduce (e.g. ``("time",)`` to
         compute per-spatial-point statistics across time).
+    keep_shards : bool
+        If ``True``, per-worker shard Zarr stores are retained after
+        merging via :func:`~physicsnemo_curator.run.gather_pipeline`.
+        Useful for debugging or inspecting intermediate results.
+        Default is ``False``.
 
     Examples
     --------
@@ -86,7 +93,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         Returns
         -------
         list[Param]
-            Descriptors for *output* and *dims*.
+            Descriptors for *output*, *dims*, and *keep_shards*.
         """
         return [
             Param(name="output", description="Output Zarr store path for statistics", type=str),
@@ -96,12 +103,24 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
                 type=str,
                 default="time",
             ),
+            Param(
+                name="keep_shards",
+                description="Keep per-worker shard Zarr stores after merging (default: False)",
+                type=bool,
+                default=False,
+            ),
         ]
 
-    def __init__(self, output: str, dims: tuple[str, ...] = ("time",)) -> None:
+    def __init__(
+        self,
+        output: str,
+        dims: tuple[str, ...] = ("time",),
+        keep_shards: bool = False,
+    ) -> None:
         self._log = get_logger(self)
         self._output_path = pathlib.Path(output)
         self._dims = dims
+        self._keep_shards = keep_shards
         self._accumulators: dict[str, _MomentAccumulator] = {}
         self._last_artifacts: list[str] = []
 
@@ -162,7 +181,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
 
             # Merge with existing data if it exists (worker-level aggregation)
             if group_path.exists():
-                existing_stats = xr.open_zarr(str(group_path))
+                existing_stats = _open_stats_zarr(group_path)
                 merged_stats = _merge_moment_datasets([existing_stats, new_stats])
                 merged_stats.to_zarr(str(group_path), mode="w", zarr_format=3)
                 self._log.debug("Merged stats for %s", var_name)
@@ -240,6 +259,11 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         """Return the reduction dimensions."""
         return self._dims
 
+    @property
+    def keep_shards(self) -> bool:
+        """Return whether to keep per-worker shard files after merging."""
+        return self._keep_shards
+
     @staticmethod
     def merge(zarr_paths: list[str], output: str) -> str:
         """Merge moment-statistics Zarr stores produced by parallel workers.
@@ -288,7 +312,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
             for child in sorted(store_path.iterdir()):
                 if child.is_dir():
                     var_name = child.name
-                    ds = xr.open_zarr(str(child))
+                    ds = _open_stats_zarr(child)
                     var_groups.setdefault(var_name, []).append(ds)
 
         if not var_groups:
@@ -335,7 +359,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         import holoviews as hv
         import panel as pn
 
-        hv.extension("bokeh")
+        hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
 
         if not artifact_paths:
             return pn.pane.Markdown("*No DataArray Statistics artifacts found.*")
@@ -604,6 +628,62 @@ class _MomentAccumulator:
         return ds
 
 
+def _open_stats_zarr(path: str | pathlib.Path) -> xr.Dataset:
+    """Open a stats Zarr v3 store using zarr-python and return an xr.Dataset.
+
+    This avoids ``xr.open_zarr`` which can fail on zarr v3 stores that
+    lack the xarray-specific ``.zmetadata`` consolidation.  We read
+    arrays directly from the zarr group and reconstruct the Dataset.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the zarr group directory.
+
+    Returns
+    -------
+    xr.Dataset
+        Reconstructed dataset with the same variables and attributes.
+    """
+    store = zarr.storage.LocalStore(str(path), read_only=True)
+    group = zarr.open_group(store, mode="r")
+    attrs = dict(group.attrs)
+
+    # Known stat variable names written by _MomentAccumulator.finalize()
+    stat_vars = {"mean", "variance", "skewness", "min", "max", "welford_mean", "welford_m2", "welford_m3"}
+
+    data_vars: dict[str, tuple[list[str], np.ndarray]] = {}
+    dims: list[str] = []
+
+    for var_name in stat_vars:
+        if var_name in group:
+            arr = group[var_name]
+            data = arr[:]
+            # zarr v3 stores dimension names in array metadata
+            dim_names = getattr(arr.metadata, "dimension_names", None)
+            arr_dims: list[str] = [str(d) for d in dim_names] if dim_names else []
+            if not dims and arr_dims:
+                dims = arr_dims
+            data_vars[var_name] = (arr_dims if arr_dims else dims, np.asarray(data))
+
+    # Reconstruct coordinates from arrays that are NOT stat variables
+    coords: dict[str, Any] = {}
+    for name in group:
+        if name not in stat_vars:
+            arr = group[name]
+            if not hasattr(arr, "ndim"):
+                continue
+            if arr.ndim == 0:
+                coords[name] = np.asarray(arr[()])
+            else:
+                coords[name] = np.asarray(arr[:])
+
+    if not data_vars:
+        return xr.Dataset(attrs=attrs)
+
+    return xr.Dataset(data_vars=data_vars, coords=coords, attrs=attrs)
+
+
 def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
     """Merge finalized moment datasets using Chan's parallel Welford algorithm.
 
@@ -628,24 +708,54 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
 
     def _extract_state(ds: xr.Dataset) -> tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Extract (count, mean, m2, m3, min, max) from a dataset."""
-        n = int(ds.attrs["count"])
-        min_val = ds["min"].values.astype(np.float64)
-        max_val = ds["max"].values.astype(np.float64)
+        n = int(ds.attrs.get("count", 0))
+        if n == 0:
+            # Empty dataset - return zeros
+            ref_var = next(iter(ds.data_vars.values()), None)
+            shape = ref_var.shape if ref_var is not None else ()
+            zeros = np.zeros(shape, dtype=np.float64)
+            return 0, zeros, zeros.copy(), zeros.copy(), zeros.copy(), zeros.copy()
 
-        # Prefer exact Welford state if available
-        if "welford_mean" in ds:
+        # Get a reference shape from any available variable
+        ref_var = next(iter(ds.data_vars.values()))
+        shape = ref_var.shape
+
+        # Extract min/max with fallback to inf/-inf
+        min_val = ds["min"].values.astype(np.float64) if "min" in ds else np.full(shape, np.inf, dtype=np.float64)
+        max_val = ds["max"].values.astype(np.float64) if "max" in ds else np.full(shape, -np.inf, dtype=np.float64)
+
+        # Prefer exact Welford state if all three variables available
+        if "welford_mean" in ds and "welford_m2" in ds and "welford_m3" in ds:
             mean = ds["welford_mean"].values.astype(np.float64)
             m2 = ds["welford_m2"].values.astype(np.float64)
             m3 = ds["welford_m3"].values.astype(np.float64)
-        else:
+        elif "welford_mean" in ds and "welford_m2" in ds:
+            # Partial Welford state (missing m3) - use what we have, set m3 to 0
+            mean = ds["welford_mean"].values.astype(np.float64)
+            m2 = ds["welford_m2"].values.astype(np.float64)
+            m3 = np.zeros(shape, dtype=np.float64)
+        elif "mean" in ds and "variance" in ds:
             # Recover from derived statistics (legacy stores)
             mean = ds["mean"].values.astype(np.float64)
             var = ds["variance"].values.astype(np.float64)
             m2 = var * n
-            skew = ds["skewness"].values.astype(np.float64)
-            with np.errstate(divide="ignore", invalid="ignore"):
-                m2_safe = np.where(m2 > 0, m2, np.nan)
-                m3 = np.where(m2 > 0, skew * np.power(m2_safe, 1.5) / np.sqrt(n), 0.0)
+            if "skewness" in ds:
+                skew = ds["skewness"].values.astype(np.float64)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    m2_safe = np.where(m2 > 0, m2, np.nan)
+                    m3 = np.where(m2 > 0, skew * np.power(m2_safe, 1.5) / np.sqrt(n), 0.0)
+            else:
+                m3 = np.zeros(shape, dtype=np.float64)
+        else:
+            # Minimal data - extract what we can
+            if "welford_mean" in ds:
+                mean = ds["welford_mean"].values.astype(np.float64)
+            elif "mean" in ds:
+                mean = ds["mean"].values.astype(np.float64)
+            else:
+                mean = np.zeros(shape, dtype=np.float64)
+            m2 = np.zeros(shape, dtype=np.float64)
+            m3 = np.zeros(shape, dtype=np.float64)
 
         return n, mean, m2, m3, min_val, max_val
 
@@ -655,6 +765,12 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
     # Merge remaining datasets one at a time.
     for ds_b in datasets[1:]:
         n_b, mean_b, m2_b, m3_b, min_b, max_b = _extract_state(ds_b)
+
+        if n_b == 0:
+            continue  # Skip empty datasets
+        if n_a == 0:
+            n_a, mean_a, m2_a, m3_a, min_a, max_a = n_b, mean_b, m2_b, m3_b, min_b, max_b
+            continue
 
         n_ab = n_a + n_b
         delta = mean_b - mean_a
@@ -686,7 +802,7 @@ def _merge_moment_datasets(datasets: list[xr.Dataset]) -> xr.Dataset:
 
     # Reconstruct the Dataset with the same structure as the inputs.
     ref = datasets[0]
-    dims: list[str] = [str(d) for d in ref["mean"].dims]
+    dims: list[str] = [str(d) for d in next(iter(ref.data_vars.values())).dims]
     coords = dict(ref.coords.items())
 
     data_vars = {

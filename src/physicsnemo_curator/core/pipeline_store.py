@@ -557,6 +557,7 @@ CREATE TABLE IF NOT EXISTS index_results (
     peak_memory_bytes INTEGER,
     gpu_memory_bytes  INTEGER,
     error             TEXT,
+    worker_id         TEXT,
     PRIMARY KEY (idx, run_id),
     FOREIGN KEY (run_id) REFERENCES pipeline_runs (run_id)
 );
@@ -916,6 +917,12 @@ class PipelineStore:
                 conn.execute("ALTER TABLE pipeline_runs ADD COLUMN run_dir TEXT")
             if "total_indices" not in run_cols:
                 conn.execute("ALTER TABLE pipeline_runs ADD COLUMN total_indices INTEGER")
+
+            # Migrate: add worker_id column to index_results if missing
+            idx_cols = {row[1] for row in conn.execute("PRAGMA table_info(index_results)").fetchall()}
+            if "worker_id" not in idx_cols:
+                conn.execute("ALTER TABLE index_results ADD COLUMN worker_id TEXT")
+
             conn.commit()
 
             # Atomically insert if not exists, then SELECT to get run_id.
@@ -1058,6 +1065,7 @@ class PipelineStore:
         peak_memory_bytes: int,
         gpu_memory_bytes: int | None,
         stages: list[StageMetrics],
+        worker_id: str | None = None,
     ) -> None:
         """Record a successfully completed index with metrics.
 
@@ -1075,6 +1083,8 @@ class PipelineStore:
             Peak GPU memory delta, or ``None``.
         stages : list[StageMetrics]
             Per-stage timing breakdown.
+        worker_id : str | None
+            ID of the worker that processed this index.
         """
         now = datetime.now(tz=UTC).isoformat()
         conn = self._connect()
@@ -1082,8 +1092,8 @@ class PipelineStore:
             conn.execute(
                 "INSERT OR REPLACE INTO index_results "
                 "(idx, run_id, status, output_paths, completed_at, wall_time_ns, "
-                "peak_memory_bytes, gpu_memory_bytes, error) "
-                "VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, NULL)",
+                "peak_memory_bytes, gpu_memory_bytes, error, worker_id) "
+                "VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, NULL, ?)",
                 (
                     index,
                     self._run_id,
@@ -1092,6 +1102,7 @@ class PipelineStore:
                     wall_time_ns,
                     peak_memory_bytes,
                     gpu_memory_bytes,
+                    worker_id,
                 ),
             )
 
@@ -1122,7 +1133,7 @@ class PipelineStore:
         finally:
             conn.close()
 
-    def record_error(self, index: int, error: str, wall_time_ns: int) -> None:
+    def record_error(self, index: int, error: str, wall_time_ns: int, worker_id: str | None = None) -> None:
         """Record a failed index execution.
 
         Parameters
@@ -1133,6 +1144,8 @@ class PipelineStore:
             Error message.
         wall_time_ns : int
             Wall-clock time before the error in nanoseconds.
+        worker_id : str | None
+            ID of the worker that processed this index.
         """
         now = datetime.now(tz=UTC).isoformat()
         conn = self._connect()
@@ -1140,9 +1153,9 @@ class PipelineStore:
             conn.execute(
                 "INSERT OR REPLACE INTO index_results "
                 "(idx, run_id, status, output_paths, completed_at, wall_time_ns, "
-                "peak_memory_bytes, gpu_memory_bytes, error) "
-                "VALUES (?, ?, 'error', NULL, ?, ?, NULL, NULL, ?)",
-                (index, self._run_id, now, wall_time_ns, error),
+                "peak_memory_bytes, gpu_memory_bytes, error, worker_id) "
+                "VALUES (?, ?, 'error', NULL, ?, ?, NULL, NULL, ?, ?)",
+                (index, self._run_id, now, wall_time_ns, error, worker_id),
             )
             conn.commit()
         finally:
@@ -1181,6 +1194,38 @@ class PipelineStore:
                 (self._run_id,),
             ).fetchall()
             return {r[0]: r[1] for r in rows}
+        finally:
+            conn.close()
+
+    def indices_by_worker(self, worker_id: str) -> dict[str, list[int]]:
+        """Return indices processed by a specific worker, grouped by status.
+
+        Parameters
+        ----------
+        worker_id : str
+            The worker ID to query.
+
+        Returns
+        -------
+        dict[str, list[int]]
+            Dictionary with keys 'completed' and 'failed', each containing
+            a sorted list of indices processed by this worker.
+        """
+        conn = self._connect()
+        try:
+            completed = conn.execute(
+                "SELECT idx FROM index_results "
+                "WHERE run_id = ? AND worker_id = ? AND status = 'completed' ORDER BY idx",
+                (self._run_id, worker_id),
+            ).fetchall()
+            failed = conn.execute(
+                "SELECT idx FROM index_results WHERE run_id = ? AND worker_id = ? AND status = 'error' ORDER BY idx",
+                (self._run_id, worker_id),
+            ).fetchall()
+            return {
+                "completed": [r[0] for r in completed],
+                "failed": [r[0] for r in failed],
+            }
         finally:
             conn.close()
 
@@ -1384,6 +1429,26 @@ class PipelineStore:
                 }
                 for row in rows
             ]
+        finally:
+            conn.close()
+
+    def max_log_id(self) -> int:
+        """Return the maximum log ID for this run.
+
+        Used to initialize log polling to skip logs from previous invocations.
+
+        Returns
+        -------
+        int
+            The highest log ID for this run, or 0 if no logs exist.
+        """
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM logs WHERE run_id = ?",
+                (self._run_id,),
+            ).fetchone()
+            return row[0] if row else 0
         finally:
             conn.close()
 
@@ -1638,15 +1703,14 @@ class PipelineStore:
         now = datetime.now(tz=UTC).isoformat()
         conn = self._connect()
         try:
+            # Use INSERT OR REPLACE to reset worker state for new invocations.
+            # This ensures completed_count starts at 0 for each run.
             conn.execute(
-                "INSERT OR IGNORE INTO workers "
-                "(worker_id, run_id, pid, hostname, started_at, last_heartbeat, current_index, invocation_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
+                "INSERT OR REPLACE INTO workers "
+                "(worker_id, run_id, pid, hostname, started_at, last_heartbeat, "
+                "current_index, completed_count, invocation_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?)",
                 (worker_id, self._run_id, pid, hostname, now, now, invocation_id),
-            )
-            conn.execute(
-                "UPDATE workers SET last_heartbeat = ? WHERE worker_id = ?",
-                (now, worker_id),
             )
             conn.commit()
         finally:

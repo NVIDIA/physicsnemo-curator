@@ -972,7 +972,7 @@ class TestZarrSink:
         from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
 
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
-        assert sink.output_path == tmp_path / "output.zarr"
+        assert sink.output_path == str(tmp_path / "output.zarr")
 
 
 # ===================================================================
@@ -1265,12 +1265,12 @@ class TestMomentsFilter:
     """Unit tests for MomentsFilter."""
 
     def test_params(self) -> None:
-        """MomentsFilter.params() returns descriptors for output and dims."""
+        """MomentsFilter.params() returns descriptors for output, dims, and keep_shards."""
         from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
 
         params = MomentsFilter.params()
         names = {p.name for p in params}
-        assert {"output", "dims"} == names
+        assert {"output", "dims", "keep_shards"} == names
 
     def test_name_and_description(self) -> None:
         """MomentsFilter has correct name and description."""

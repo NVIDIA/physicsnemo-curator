@@ -174,9 +174,9 @@ def _remap_mixed_connectivity(
         - Updated global_data with remapped connectivity.
         - Boolean mask of shape ``(n_cells,)`` — ``True`` for kept cells.
     """
-    connectivity: np.ndarray = global_data["mixed_connectivity"].numpy()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
-    offsets: np.ndarray = global_data["mixed_offsets"].numpy()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
-    cell_types: np.ndarray = global_data["mixed_cell_types"].numpy()  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    connectivity: np.ndarray = global_data["mixed_connectivity"].numpy()  # type: ignore[assignment]
+    offsets: np.ndarray = global_data["mixed_offsets"].numpy()  # type: ignore[assignment]
+    cell_types: np.ndarray = global_data["mixed_cell_types"].numpy()  # type: ignore[assignment]
 
     n_cells = len(offsets) - 1
 
@@ -212,10 +212,12 @@ def _remap_mixed_connectivity(
     new_cell_types = cell_types[cell_valid]
 
     # Build updated global_data
+    # Use .keys() to avoid StopIteration leaking from TensorDict.__iter__
+    # into a generator context (PEP 479 converts it to RuntimeError).
     gd_dict: dict[str, torch.Tensor] = {}
-    for key in global_data:
+    for key in global_data.keys():  # noqa: SIM118
         if key not in ("mixed_connectivity", "mixed_offsets", "mixed_cell_types"):
-            gd_dict[str(key)] = global_data[key]  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+            gd_dict[str(key)] = global_data[key]  # type: ignore[assignment]
     gd_dict["mixed_connectivity"] = torch.from_numpy(new_connectivity)
     gd_dict["mixed_offsets"] = torch.from_numpy(new_offsets_arr)
     gd_dict["mixed_cell_types"] = torch.from_numpy(new_cell_types)

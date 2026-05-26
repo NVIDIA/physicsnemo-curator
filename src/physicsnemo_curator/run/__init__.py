@@ -56,8 +56,10 @@ You can register custom backends using :func:`register_backend`::
 
 from __future__ import annotations
 
+import pathlib
 from typing import TYPE_CHECKING, Any
 
+from physicsnemo_curator.core.logging import _ensure_logging_configured
 from physicsnemo_curator.run.base import RunBackend, RunConfig
 from physicsnemo_curator.run.dask import DaskBackend
 from physicsnemo_curator.run.loky import LokyBackend
@@ -171,6 +173,8 @@ def run_pipeline(
     backend: str = "sequential",
     indices: Iterable[int] | None = None,
     use_tui: bool = True,
+    db_dir: str | None = None,
+    resume: bool = False,
     **backend_kwargs: Any,
 ) -> list[list[str]]:
     """Execute a pipeline over all (or selected) source indices.
@@ -196,6 +200,12 @@ def run_pipeline(
         Whether to show the full-screen Textual TUI for progress
         (requires an interactive terminal). When ``False``, prints
         simple timestamped log lines to the console instead.
+    db_dir : str | None
+        Directory for the pipeline's SQLite database. Defaults to the
+        system cache directory (``~/.cache/psnc/`` or ``$PSNC_CACHE_DIR``).
+    resume : bool
+        If ``True``, reuse an existing database file for checkpoint
+        resumption. If ``False`` (default), create a fresh database.
     **backend_kwargs : Any
         Extra keyword arguments forwarded to the backend.
 
@@ -234,7 +244,15 @@ def run_pipeline(
     Process only a subset of indices:
 
     >>> results = run_pipeline(pipeline, indices=[0, 5, 10])
+
+    With checkpoint resumption:
+
+    >>> results = run_pipeline(pipeline, db_dir="outputs/checkpoint", resume=True)
     """
+    # Ensure console logging is configured so users see output even if they
+    # never called configure_logging() explicitly.
+    _ensure_logging_configured()
+
     # Validate backend
     if backend not in _BACKENDS:
         available = ", ".join(sorted(_BACKENDS.keys()))
@@ -245,6 +263,16 @@ def run_pipeline(
     if pipeline.sink is None:
         msg = "Pipeline has no sink. Call .write(sink) before run_pipeline()."
         raise RuntimeError(msg)
+
+    # Apply db_dir and resume if provided (before store initialization)
+    if db_dir is not None:
+        object.__setattr__(pipeline, "db_dir", pathlib.Path(db_dir))
+    if resume:
+        object.__setattr__(pipeline, "resume", resume)
+
+    # Initialize the store now (deferred from pipeline construction)
+    if pipeline.track_metrics:
+        pipeline._init_store()
 
     # Build configuration
     idx_list: list[int] | None = list(indices) if indices is not None else None
@@ -351,15 +379,17 @@ def gather_pipeline(pipeline: Pipeline[Any]) -> list[str]:
             filter_name = type(f).name
             store.replace_filter_artifacts(filter_name, i_f, shard_files, merged)
 
-        # Clean up shard files/directories
-        for shard in shard_files:
-            shard_path = pathlib.Path(shard)
-            if shard_path.is_dir():
-                import shutil
+        # Clean up shard files/directories unless keep_shards is True
+        keep_shards = getattr(f, "keep_shards", False)
+        if not keep_shards:
+            for shard in shard_files:
+                shard_path = pathlib.Path(shard)
+                if shard_path.is_dir():
+                    import shutil
 
-                shutil.rmtree(shard_path, ignore_errors=True)
-            else:
-                shard_path.unlink(missing_ok=True)
+                    shutil.rmtree(shard_path, ignore_errors=True)
+                else:
+                    shard_path.unlink(missing_ok=True)
 
     return merged_paths
 

@@ -437,15 +437,13 @@ class Pipeline[T]:
     invocation_id: str | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        """Eagerly create the pipeline store when metrics are enabled.
+        """Validate pipeline configuration.
 
-        The store is only created for complete pipelines (those with a
-        sink attached).  Intermediate pipelines built via :meth:`filter`
-        skip store creation — the final pipeline produced by
-        :meth:`write` will create it.
+        Store creation is deferred until :func:`run_pipeline` or first
+        access to metrics, allowing ``db_dir`` / ``resume`` to be set
+        after pipeline construction.
         """
-        if self.track_metrics and self.sink is not None:
-            self._init_store()
+        pass
 
     def filter(self, f: Filter[T]) -> Pipeline[T]:
         """Return a new pipeline with an additional filter appended.
@@ -468,6 +466,7 @@ class Pipeline[T]:
             track_memory=self.track_memory,
             track_gpu=self.track_gpu,
             db_dir=self.db_dir,
+            db_file=self.db_file,
             resume=self.resume,
         )
 
@@ -498,6 +497,7 @@ class Pipeline[T]:
             track_memory=self.track_memory,
             track_gpu=self.track_gpu,
             db_dir=self.db_dir,
+            db_file=self.db_file,
             resume=self.resume,
         )
 
@@ -673,13 +673,14 @@ class Pipeline[T]:
                 peak_memory,
                 gpu_delta,
                 stage_metrics,
+                worker_id,
             )
 
             return result
 
         except Exception as exc:
             elapsed = time.perf_counter_ns() - overall_start
-            store._resilient_write("record_error", store.record_error, index, str(exc), elapsed)
+            store._resilient_write("record_error", store.record_error, index, str(exc), elapsed, worker_id)
             raise
 
         finally:

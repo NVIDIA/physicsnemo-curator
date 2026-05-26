@@ -65,7 +65,7 @@ class DashboardApp:
         pmui.Page
             The themed dashboard page.
         """
-        pn.extension("bokeh")
+        pn.extension()
 
         tabs = pmui.Tabs(
             ("Overview", overview_tab(self.store)),

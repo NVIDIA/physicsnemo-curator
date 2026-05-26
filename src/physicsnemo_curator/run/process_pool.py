@@ -22,6 +22,7 @@ Suitable for CPU-bound workloads that benefit from true parallelism.
 
 from __future__ import annotations
 
+import logging
 import multiprocessing
 import sys
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
@@ -39,6 +40,8 @@ from physicsnemo_curator.run.progress_monitor import start_progress_monitor
 
 if TYPE_CHECKING:
     from physicsnemo_curator.core.base import Pipeline
+
+_log = logging.getLogger(__name__)
 
 
 def _default_mp_context() -> multiprocessing.context.BaseContext:
@@ -137,6 +140,7 @@ class ProcessPoolBackend(RunBackend):
                 # Dispatch batches with work-stealing.
                 pending: set[Future[dict[int, list[str]]]] = set()
                 future_to_group: dict[Future[dict[int, list[str]]], list[int]] = {}
+                failed_indices: dict[int, Exception] = {}
 
                 next_submit = 0
                 for _ in range(min(n_jobs, len(batches))):
@@ -149,8 +153,16 @@ class ProcessPoolBackend(RunBackend):
                 while pending:
                     done, pending = wait(pending, return_when=FIRST_COMPLETED)
                     for future in done:
-                        group_results = future.result()
-                        result_map.update(group_results)
+                        batch = future_to_group[future]
+                        try:
+                            group_results = future.result()
+                            result_map.update(group_results)
+                        except Exception as exc:
+                            # Log error and continue with remaining indices
+                            _log.error("Failed to process indices %s: %s", batch, exc)
+                            for idx in batch:
+                                failed_indices[idx] = exc
+                                result_map[idx] = []  # Empty result for failed index
 
                         if next_submit < len(batches):
                             batch = batches[next_submit]
@@ -160,10 +172,14 @@ class ProcessPoolBackend(RunBackend):
                             future_to_group[fut_next] = batch
                             pending.add(fut_next)
                             next_submit += 1
+
+                if failed_indices:
+                    _log.warning("Pipeline completed with %d failed indices", len(failed_indices))
             else:
                 # Default: one index per future with work-stealing.
                 pending_idx: set[Future[list[str]]] = set()
                 future_to_idx: dict[Future[list[str]], int] = {}
+                failed_indices_single: dict[int, Exception] = {}
 
                 # Submit initial batch (one per worker)
                 next_submit = 0
@@ -179,7 +195,13 @@ class ProcessPoolBackend(RunBackend):
                     done_idx, pending_idx = wait(pending_idx, return_when=FIRST_COMPLETED)
                     for future in done_idx:
                         idx = future_to_idx[future]
-                        result_map[idx] = future.result()
+                        try:
+                            result_map[idx] = future.result()
+                        except Exception as exc:
+                            # Log error and continue with remaining indices
+                            _log.error("Failed to process index %d: %s", idx, exc)
+                            failed_indices_single[idx] = exc
+                            result_map[idx] = []  # Empty result for failed index
 
                         # Submit next task if available
                         if next_submit < len(indices):
@@ -190,6 +212,9 @@ class ProcessPoolBackend(RunBackend):
                             future_to_idx[fut_next_idx] = next_idx
                             pending_idx.add(fut_next_idx)
                             next_submit += 1
+
+                if failed_indices_single:
+                    _log.warning("Pipeline completed with %d failed indices", len(failed_indices_single))
 
         return [result_map[idx] for idx in indices]
 

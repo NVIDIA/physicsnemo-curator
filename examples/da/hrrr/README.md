@@ -17,9 +17,10 @@ The pipeline:
 
 ```bash
 uv sync --extra da
+uv pip install matplotlib
 
 # or with pip
-pip install physicsnemo-curator[da]
+pip install physicsnemo-curator[da] matplotlib
 ```
 
 Required packages: `xarray`, `earth2studio`, `zarr>=3.0`.

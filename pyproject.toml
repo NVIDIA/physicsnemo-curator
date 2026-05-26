@@ -55,7 +55,7 @@ mesh = [
 ]
 da = [
     "xarray>=2024.1",
-    "earth2studio>=0.10",
+    "earth2studio @ git+https://github.com/NVIDIA/earth2studio.git@main",
     "zarr>=3.0",
     "gcsfs>=2024.1",
 ]

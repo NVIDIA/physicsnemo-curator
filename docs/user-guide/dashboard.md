@@ -155,6 +155,35 @@ This installs the required dependencies:
 
 ## Launching the Dashboard
 
+### From the Command Line
+
+The easiest way to launch the dashboard is via the `psnc` CLI:
+
+```bash
+# Launch with a database file path
+psnc dashboard ./outputs/checkpoint/abc123.db
+
+# Launch with a hash prefix (matches against ~/.cache/psnc/*.db)
+psnc dashboard a1b2
+
+# Launch with a pipeline config file
+psnc dashboard my_pipeline.yaml
+
+# Specify a custom port
+psnc dashboard ./pipeline.db --port 8080
+
+# Don't open browser automatically
+psnc dashboard ./pipeline.db --no-browser
+```
+
+**CLI Options:**
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `db_path` | — | (required) | Path to `.db` file, pipeline config, or hash prefix |
+| `--port` | `-p` | `5006` | Server port |
+| `--no-browser` | — | `False` | Don't open a browser window automatically |
+
 ### From Python
 
 ```python
