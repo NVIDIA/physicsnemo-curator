@@ -301,8 +301,8 @@ pipeline = (
 
 ### VTISource and GridSidecarSink (structured grids)
 
-VTK ImageData (`.vti`) describes a uniform rectilinear grid (origin + spacing
-+ dimensions) and does not fit the unstructured `Mesh` model.
+VTK ImageData (`.vti`) describes a uniform rectilinear grid (origin + spacing +
+dimensions) and does not fit the unstructured `Mesh` model.
 {class}`~physicsnemo_curator.domains.mesh.sources.vti.VTISource` reads each
 `.vti` file into a {class}`tensordict.TensorDict` of **dense N-D field
 tensors** instead:

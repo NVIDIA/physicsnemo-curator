@@ -359,7 +359,7 @@ class DataArrayStatsFilter(Filter["xr.DataArray"]):
         import holoviews as hv
         import panel as pn
 
-        hv.extension("bokeh")  # ty: ignore[too-many-positional-arguments]
+        hv.extension("bokeh")
 
         if not artifact_paths:
             return pn.pane.Markdown("*No DataArray Statistics artifacts found.*")

@@ -584,9 +584,7 @@ def constrained_delaunay_disk(
             keep_mask &= ~point_in_polygon(cell_centroids_xz, sil)
         out_cells = out_cells[keep_mask]
 
-    out_points = torch.from_numpy(
-        np.column_stack([all_xz[:, 0], np.zeros(len(all_xz)), all_xz[:, 1]])
-    ).float()
+    out_points = torch.from_numpy(np.column_stack([all_xz[:, 0], np.zeros(len(all_xz)), all_xz[:, 1]])).float()
 
     # Re-orient each cell to +y (inward); vtkDelaunay2D winding is not
     # guaranteed consistent under our axis swap.

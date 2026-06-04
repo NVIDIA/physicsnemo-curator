@@ -176,9 +176,7 @@ def _toy_domain():
 class TestInjection:
     def test_box_tunnel_generator(self):
         dm = _toy_domain()
-        gen = BoxTunnelBoundaries(
-            x_min=-40, x_max=80, y_min=-22, y_max=22, z_height=20, x_bl=-2.339, n_per_side=(4, 4)
-        )
+        gen = BoxTunnelBoundaries(x_min=-40, x_max=80, y_min=-22, y_max=22, z_height=20, x_bl=-2.339, n_per_side=(4, 4))
         out = inject_boundaries(dm, gen)
         assert set(out.boundary_names) == {"inlet", "outlet", "slip", "no_slip", "vehicle"}
         assert out.interior.n_points == 50  # interior preserved
@@ -194,9 +192,7 @@ class TestInjection:
 
     def test_boundary_injection_filter(self):
         dm = _toy_domain()
-        gen = BoxTunnelBoundaries(
-            x_min=-40, x_max=80, y_min=-22, y_max=22, z_height=20, x_bl=-2.339, n_per_side=(4, 4)
-        )
+        gen = BoxTunnelBoundaries(x_min=-40, x_max=80, y_min=-22, y_max=22, z_height=20, x_bl=-2.339, n_per_side=(4, 4))
         out = next(BoundaryInjectionFilter(gen)([dm].__iter__()))
         assert "inlet" in out.boundary_names
 

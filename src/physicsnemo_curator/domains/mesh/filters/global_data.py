@@ -121,8 +121,13 @@ class GlobalDataFilter(Filter["Mesh"]):
         global_data : TensorDict
             The mesh's ``global_data`` (modified in place).
         """
-        existing = set(global_data.keys())  # ty: ignore[unresolved-attribute]
+        from tensordict import TensorDictBase
+
+        if not isinstance(global_data, TensorDictBase):
+            logger.warning("GlobalDataFilter: global_data is not a TensorDict, skipping injection.")
+            return
+        existing = set(global_data.keys())
         for key, tensor in self._values.items():
             if key in existing and not self._overwrite:
                 continue
-            global_data[key] = tensor  # ty: ignore[unresolved-attribute]
+            global_data[key] = tensor

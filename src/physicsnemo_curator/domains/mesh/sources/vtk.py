@@ -369,7 +369,7 @@ class VTKSource(Source[Mesh]):
 
         from physicsnemo.mesh.domain_mesh import DomainMesh
 
-        _, volume_path, boundary_path = item
+        _, volume_path, boundary_path = item  # ty: ignore[invalid-assignment]
         interior = self._read_one(volume_path)
         boundary = self._read_one(boundary_path)
         domain = DomainMesh(interior=interior, boundaries={self._boundary_name: boundary})

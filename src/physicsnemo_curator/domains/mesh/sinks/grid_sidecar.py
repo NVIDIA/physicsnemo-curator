@@ -161,8 +161,8 @@ class GridSidecarSink(Sink["TensorDict"]):
         relpath = ""
         stem = ""
         has_relpath = self._source is not None and hasattr(self._source, "relative_path")
-        if has_relpath:
-            rel = self._source.relative_path(index)  # ty: ignore[union-attr]
+        if has_relpath and self._source is not None:
+            rel = self._source.relative_path(index)  # ty: ignore[unresolved-attribute]
             rel_path = pathlib.PurePosixPath(rel)
             stem = rel_path.stem
             relpath = str(rel_path.parent) if str(rel_path.parent) != "." else ""

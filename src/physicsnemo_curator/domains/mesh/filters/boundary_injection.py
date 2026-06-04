@@ -149,10 +149,12 @@ class BoundaryInjectionFilter(Filter["Mesh"]):
             The injected domain mesh to check.
         """
         try:
-            if hasattr(domain, "is_boundary_watertight"):
-                watertight = domain.is_boundary_watertight(tolerance=self._watertight_tolerance)
-            elif hasattr(domain, "check_boundary_watertight"):
-                watertight = domain.check_boundary_watertight()
+            is_boundary_watertight = getattr(domain, "is_boundary_watertight", None)
+            check_boundary_watertight = getattr(domain, "check_boundary_watertight", None)
+            if is_boundary_watertight is not None:
+                watertight = is_boundary_watertight(tolerance=self._watertight_tolerance)
+            elif check_boundary_watertight is not None:
+                watertight = check_boundary_watertight()
             else:
                 logger.warning("BoundaryInjectionFilter: no watertight-check method on DomainMesh.")
                 return
