@@ -41,6 +41,33 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _fix_group_readable(root: pathlib.Path) -> None:
+    """Ensure *root* and everything inside it is group-readable.
+
+    Adds the group-read bit to all files and the group-read + execute bits
+    to all directories under *root* (so the group can traverse and read the
+    tensordict memmap tree).
+
+    Parameters
+    ----------
+    root : pathlib.Path
+        Root directory (or file) to make group-readable.
+    """
+    import os
+    import stat
+
+    if root.is_file():
+        root.chmod(root.stat().st_mode | stat.S_IRGRP)
+        return
+
+    for dirpath, _dirnames, filenames in os.walk(root):
+        dp = pathlib.Path(dirpath)
+        dp.chmod(dp.stat().st_mode | stat.S_IRGRP | stat.S_IXGRP)
+        for fn in filenames:
+            fp = dp / fn
+            fp.chmod(fp.stat().st_mode | stat.S_IRGRP)
+
+
 class MeshSink(Sink["Mesh"]):
     """Write :class:`~physicsnemo.mesh.Mesh` and :class:`~physicsnemo.mesh.domain_mesh.DomainMesh` objects to disk.
 
@@ -130,7 +157,8 @@ class MeshSink(Sink["Mesh"]):
         Returns
         -------
         list[Param]
-            The ``output_dir`` and optional ``naming_template`` parameters.
+            The ``output_dir``, optional ``naming_template``, and
+            ``group_readable`` parameters.
         """
         return [
             Param(name="output_dir", description="Output directory for mesh files", type=str),
@@ -144,12 +172,19 @@ class MeshSink(Sink["Mesh"]):
                 type=str,
                 default=None,
             ),
+            Param(
+                name="group_readable",
+                description="Make written outputs group-readable (chmod g+r)",
+                type=bool,
+                default=False,
+            ),
         ]
 
     def __init__(
         self,
         output_dir: str,
         naming_template: str | None = None,
+        group_readable: bool = False,
     ) -> None:
         """Initialise the mesh sink.
 
@@ -160,6 +195,9 @@ class MeshSink(Sink["Mesh"]):
         naming_template : str or None
             Python format string for subdirectory names.  See the class
             docstring for details.
+        group_readable : bool
+            If ``True``, ``chmod g+r`` (and ``g+x`` on directories) the
+            written output so it is readable by the owning group.
 
         Raises
         ------
@@ -170,6 +208,7 @@ class MeshSink(Sink["Mesh"]):
 
         self._output_dir = pathlib.Path(output_dir)
         self._naming_template = naming_template
+        self._group_readable = group_readable
         self._source: Source[Mesh] | None = None
         self._log = get_logger(self)
 
@@ -220,6 +259,8 @@ class MeshSink(Sink["Mesh"]):
         list[str]
             Paths of the saved mesh directories.
         """
+        import shutil
+        import tempfile
         import time
 
         from physicsnemo.mesh.domain_mesh import DomainMesh as _DomainMesh
@@ -286,7 +327,22 @@ class MeshSink(Sink["Mesh"]):
             subdir.parent.mkdir(parents=True, exist_ok=True)
 
             t0 = time.perf_counter()
-            mesh.save(str(subdir))
+            # Write to a temp directory in the same parent, then atomically
+            # rename into place so an interrupted write never leaves a
+            # partial/corrupt output directory behind.
+            tmp_dir = tempfile.mkdtemp(prefix=".tmp_", dir=str(subdir.parent))
+            try:
+                mesh.save(tmp_dir)
+                if subdir.exists():
+                    shutil.rmtree(subdir)
+                pathlib.Path(tmp_dir).replace(subdir)
+            except BaseException:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                raise
+
+            if self._group_readable:
+                _fix_group_readable(subdir)
+
             self._log.debug(
                 "idx_%d: Saved %s to %s (%.2fs)",
                 index,

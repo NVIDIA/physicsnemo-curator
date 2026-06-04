@@ -18,7 +18,7 @@
 
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 
-__all__ = ["MeshSink", "MeshVTUSink", "MeshZarrSink"]
+__all__ = ["GridSidecarSink", "MeshSink", "MeshVTUSink", "MeshZarrSink"]
 
 
 def __getattr__(name: str):
@@ -31,5 +31,9 @@ def __getattr__(name: str):
         from physicsnemo_curator.domains.mesh.sinks.mesh_vtu import MeshVTUSink
 
         return MeshVTUSink
+    if name == "GridSidecarSink":
+        from physicsnemo_curator.domains.mesh.sinks.grid_sidecar import GridSidecarSink
+
+        return GridSidecarSink
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

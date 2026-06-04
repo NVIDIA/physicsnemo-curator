@@ -43,6 +43,7 @@ from physicsnemo.mesh.domain_mesh import DomainMesh
 
 from physicsnemo_curator.core.base import Param, Source
 from physicsnemo_curator.core.cache import default_data_cache_dir
+from physicsnemo_curator.domains.mesh.sources import _vtk_convert
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -556,7 +557,7 @@ class DrivAerMLSource(Source[Mesh]):
 
     @staticmethod
     def _build_cells_from_rust(rust_mesh: Any) -> torch.Tensor | None:
-        """Build a cells tensor from Rust mesh connectivity and offsets.
+        """Build a uniform cells tensor from Rust connectivity (shared core).
 
         Parameters
         ----------
@@ -566,33 +567,9 @@ class DrivAerMLSource(Source[Mesh]):
         Returns
         -------
         torch.Tensor or None
-            Cells tensor of shape ``(n_cells, nodes_per_cell)`` if
-            connectivity is available, else ``None``.
+            Uniform cell connectivity, or ``None`` for missing / mixed cells.
         """
-        connectivity = rust_mesh.cells
-        offsets = rust_mesh.cell_offsets
-
-        if connectivity is None or offsets is None or connectivity.size == 0 or offsets.size == 0:
-            return None
-
-        n_cells = rust_mesh.n_cells
-        if n_cells == 0:
-            return None
-
-        # Determine nodes per cell from offsets
-        if offsets.size > 1:
-            nodes_per_cell = int(offsets[1] - offsets[0])
-        elif connectivity.size > 0:
-            nodes_per_cell = connectivity.size // n_cells
-        else:
-            return None
-
-        # If mixed cell types, cannot form a uniform (n_cells, npc) tensor
-        if connectivity.size != n_cells * nodes_per_cell:
-            return None
-
-        cells = torch.from_numpy(connectivity.reshape(n_cells, nodes_per_cell)).to(torch.int64)
-        return cells
+        return _vtk_convert.build_cells_from_rust(rust_mesh)
 
     @staticmethod
     def _tessellate_polygons(
@@ -600,75 +577,23 @@ class DrivAerMLSource(Source[Mesh]):
         offsets: Any,
         n_cells: int,
     ) -> torch.Tensor:
-        """Fan-tessellate mixed polygons into triangles.
-
-        Converts arbitrary polygons (3–N vertices) into triangles using
-        fan triangulation from the first vertex of each polygon. A polygon
-        with *k* vertices produces *k - 2* triangles.
+        """Fan-tessellate mixed polygons into triangles (shared core).
 
         Parameters
         ----------
         connectivity : numpy.ndarray
-            Flat connectivity array (vertex indices for all cells).
+            Flat connectivity array.
         offsets : numpy.ndarray
-            Offset into *connectivity* for each cell (length ``n_cells + 1``
-            in VTK convention, or ``n_cells`` with implicit 0 start).
+            Per-cell VTK offsets.
         n_cells : int
             Number of polygons.
 
         Returns
         -------
         torch.Tensor
-            Triangle cells of shape ``(n_triangles, 3)`` with dtype int64.
+            Triangle cells of shape ``(n_triangles, 3)``.
         """
-        import numpy as np
-
-        conn = np.asarray(connectivity, dtype=np.int64)
-        offs = np.asarray(offsets, dtype=np.int64)
-
-        # VTK offsets: [end0, end1, ...] (cumulative, 1-based)
-        # Convert to start/end pairs
-        if offs.size == n_cells:
-            # Offsets give the *end* of each cell's connectivity
-            starts = np.empty(n_cells, dtype=np.int64)
-            starts[0] = 0
-            starts[1:] = offs[:-1]
-            ends = offs
-        else:
-            # Offset array has n_cells+1 entries: [0, end0, end1, ...]
-            starts = offs[:-1]
-            ends = offs[1:]
-
-        # Count vertices per cell and total triangles
-        n_verts = ends - starts  # vertices per polygon
-        n_tris_per_cell = n_verts - 2  # triangles per polygon
-        total_tris = int(n_tris_per_cell.sum())
-
-        # Vectorized fan triangulation:
-        # For each polygon, fan from vertex 0: tri_j = (v0, v_{j}, v_{j+1})
-        # Build index arrays for all triangles simultaneously.
-
-        # Repeat the start offset for each triangle from that polygon
-        # cell_of_tri[t] = which polygon triangle t belongs to
-        cell_of_tri = np.repeat(np.arange(n_cells, dtype=np.int64), n_tris_per_cell)
-
-        # local_j[t] = which fan triangle within the polygon (0-based)
-        # For polygon with k verts -> tris 0..k-3, local_j = 0,1,...,k-3
-        local_j = np.arange(total_tris, dtype=np.int64)
-        # Subtract cumulative tris-per-cell to get local index
-        cum_tris = np.zeros(n_cells + 1, dtype=np.int64)
-        np.cumsum(n_tris_per_cell, out=cum_tris[1:])
-        local_j -= cum_tris[cell_of_tri]
-
-        # Start of each polygon's connectivity
-        poly_starts = starts[cell_of_tri]
-
-        triangles = np.empty((total_tris, 3), dtype=np.int64)
-        triangles[:, 0] = conn[poly_starts]  # fan center (vertex 0)
-        triangles[:, 1] = conn[poly_starts + local_j + 1]
-        triangles[:, 2] = conn[poly_starts + local_j + 2]
-
-        return torch.from_numpy(triangles)
+        return _vtk_convert.tessellate_polygons(connectivity, offsets, n_cells)
 
     @staticmethod
     def _expand_cell_data_for_tessellation(
@@ -676,17 +601,14 @@ class DrivAerMLSource(Source[Mesh]):
         offsets: Any,
         n_cells: int,
     ) -> dict[str, torch.Tensor]:
-        """Repeat cell data entries for tessellated triangles.
-
-        When a polygon with *k* vertices is split into *k - 2* triangles,
-        the cell data value must be repeated *k - 2* times.
+        """Repeat cell data for tessellated triangles (shared core).
 
         Parameters
         ----------
         cell_data_dict : dict
-            Mapping of field name to tensor of shape ``(n_cells, ...)``.
+            Mapping of field name to ``(n_cells, ...)`` tensor.
         offsets : numpy.ndarray
-            Cell offsets (same convention as ``_tessellate_polygons``).
+            Cell offsets.
         n_cells : int
             Number of original polygons.
 
@@ -695,30 +617,7 @@ class DrivAerMLSource(Source[Mesh]):
         dict
             Expanded cell data with shape ``(n_triangles, ...)``.
         """
-        import numpy as np
-
-        offs = np.asarray(offsets, dtype=np.int64)
-
-        if offs.size == n_cells:
-            starts = np.empty(n_cells, dtype=np.int64)
-            starts[0] = 0
-            starts[1:] = offs[:-1]
-            ends = offs
-        else:
-            starts = offs[:-1]
-            ends = offs[1:]
-
-        n_verts = ends - starts
-        n_tris_per_cell = (n_verts - 2).astype(np.int64)
-
-        # Build repeat indices: each cell i is repeated n_tris_per_cell[i] times
-        repeat_counts = torch.from_numpy(n_tris_per_cell)
-
-        expanded = {}
-        for name, tensor in cell_data_dict.items():
-            expanded[name] = torch.repeat_interleave(tensor, repeat_counts, dim=0)
-
-        return expanded
+        return _vtk_convert.expand_cell_data_for_tessellation(cell_data_dict, offsets, n_cells)
 
     # -- Volume reading -------------------------------------------------------
 
@@ -1138,48 +1037,11 @@ class DrivAerMLSource(Source[Mesh]):
         n_cells = rust_mesh.n_cells  # ty: ignore[unresolved-attribute]
         connectivity = rust_mesh.cells  # ty: ignore[unresolved-attribute]
 
-        points_raw = torch.from_numpy(rust_mesh.points)  # ty: ignore[unresolved-attribute]
-        offsets = rust_mesh.cell_offsets  # ty: ignore[unresolved-attribute]
-
-        if (
-            connectivity is not None
-            and connectivity.size > 0
-            and offsets is not None
-            and offsets.size > 1
-            and n_cells > 0
-        ):
-            import numpy as np
-
-            # Offsets are cumulative node counts: cell i spans
-            # connectivity[starts[i]:starts[i+1]].
-            off = np.empty(n_cells + 1, dtype=np.int64)
-            off[0] = 0
-            off[1:] = offsets
-
-            # Check if all cells have the same node count (uniform mesh)
-            nodes_first = int(off[1])
-            if connectivity.size == n_cells * nodes_first:
-                # Uniform cell type — fast vectorized path
-                conn = torch.from_numpy(connectivity.reshape(n_cells, nodes_first)).to(torch.int64)
-                cell_points = points_raw[conn]  # (n_cells, nodes_per_cell, 3)
-                centroids = cell_points.mean(dim=1)  # (n_cells, 3)
-            else:
-                # Mixed cell types — vectorized scatter-add approach
-                conn_t = torch.from_numpy(connectivity).to(torch.int64)
-                # Gather all referenced points
-                all_pts = points_raw[conn_t]  # (total_nodes, 3)
-                # Build cell index for each node in connectivity
-                nodes_per_cell = np.diff(off)  # (n_cells,)
-                cell_ids = np.repeat(np.arange(n_cells, dtype=np.int64), nodes_per_cell)
-                cell_ids_t = torch.from_numpy(cell_ids).unsqueeze(1).expand(-1, 3)
-                # Sum points per cell
-                centroids = torch.zeros(n_cells, 3, dtype=points_raw.dtype)
-                centroids.scatter_add_(0, cell_ids_t, all_pts)
-                # Divide by node count per cell
-                npc_t = torch.from_numpy(nodes_per_cell.astype(np.float64)).to(points_raw.dtype)
-                centroids /= npc_t.unsqueeze(1)
+        if connectivity is not None and connectivity.size > 0 and n_cells > 0:
+            # Shared core: uniform fast path + mixed scatter-add.
+            centroids = _vtk_convert.compute_centroids_from_rust(rust_mesh)
         else:
-            centroids = points_raw
+            centroids = torch.from_numpy(rust_mesh.points)  # ty: ignore[unresolved-attribute]
 
         # Cell data becomes point_data for the centroid point-cloud
         # Filter to target interior fields only
@@ -1461,7 +1323,7 @@ class DrivAerMLSource(Source[Mesh]):
 
     @staticmethod
     def _downcast_fp32(mesh: Mesh) -> Mesh:
-        """Downcast float64 tensors in a Mesh to float32 in-place.
+        """Downcast float64 tensors in a Mesh to float32 in-place (shared core).
 
         Parameters
         ----------
@@ -1473,22 +1335,7 @@ class DrivAerMLSource(Source[Mesh]):
         Mesh
             The same mesh with float64 arrays converted to float32.
         """
-        if mesh.points.dtype == torch.float64:
-            mesh.points = mesh.points.float()
-
-        if mesh.point_data is not None:
-            for key in list(mesh.point_data.keys()):  # noqa: SIM118 - TensorDict needs .keys()
-                tensor = mesh.point_data[key]
-                if tensor.dtype == torch.float64:
-                    mesh.point_data[key] = tensor.float()
-
-        if mesh.cell_data is not None:
-            for key in list(mesh.cell_data.keys()):  # noqa: SIM118 - TensorDict needs .keys()
-                tensor = mesh.cell_data[key]
-                if tensor.dtype == torch.float64:
-                    mesh.cell_data[key] = tensor.float()
-
-        return mesh
+        return _vtk_convert.downcast_fp32(mesh)
 
     @staticmethod
     def _merge_to_single_solid(pv_mesh: Any) -> Any:
