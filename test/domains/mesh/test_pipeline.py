@@ -35,6 +35,17 @@ from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter  # noqa: E4
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink  # noqa: E402
 from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource  # noqa: E402
 
+# Network errors that should cause E2E tests to be skipped rather than
+# reported as failures (the remote API is outside our control).
+_NETWORK_ERRORS: tuple[type[BaseException], ...] = (OSError, TimeoutError)
+
+try:
+    import httpx
+
+    _NETWORK_ERRORS = (*_NETWORK_ERRORS, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError)
+except ImportError:
+    pass
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -1138,16 +1149,19 @@ class TestDrivAerMLRemotePipeline:
         import fsspec
 
         cache_dir = str(tmp_path / "hf_cache")
-        fs, root_path = fsspec.core.url_to_fs(_DRIVAERML_URL)
-        glob_expr = f"{root_path}/xNormal_p6*"
-        all_files = fs.glob(glob_expr)
-        files = sorted(f for f in all_files if f.endswith(".vtp"))
-        # Force download by caching each file
-        for remote_path in files:
-            local_path = pathlib.Path(cache_dir) / remote_path.lstrip("/")
-            if not local_path.exists():
-                local_path.parent.mkdir(parents=True, exist_ok=True)
-                fs.get(remote_path, str(local_path))
+        try:
+            fs, root_path = fsspec.core.url_to_fs(_DRIVAERML_URL)
+            glob_expr = f"{root_path}/xNormal_p6*"
+            all_files = fs.glob(glob_expr)
+            files = sorted(f for f in all_files if f.endswith(".vtp"))
+            # Force download by caching each file
+            for remote_path in files:
+                local_path = pathlib.Path(cache_dir) / remote_path.lstrip("/")
+                if not local_path.exists():
+                    local_path.parent.mkdir(parents=True, exist_ok=True)
+                    fs.get(remote_path, str(local_path))
+        except _NETWORK_ERRORS as exc:
+            pytest.skip(f"HuggingFace API unreachable: {exc}")
         # Point VTKSource at the cache directory
         self.source = VTKSource(cache_dir, warn_on_lost_data=False)
         self.tmp_path = tmp_path

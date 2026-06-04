@@ -32,6 +32,17 @@ import pytest
 if TYPE_CHECKING:
     import pathlib
 
+# Network errors that should cause E2E tests to be skipped rather than
+# reported as failures (the remote API is outside our control).
+_NETWORK_ERRORS: tuple[type[BaseException], ...] = (OSError, TimeoutError)
+
+try:
+    import httpx
+
+    _NETWORK_ERRORS = (*_NETWORK_ERRORS, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError)
+except ImportError:
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Helpers — write mock Parquet files matching the HF dataset schema
@@ -315,9 +326,12 @@ class TestNavierStokesCylinderSourceE2E:
         """Build the source with a local cache directory."""
         from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 
-        self.source = NavierStokesCylinderSource(
-            cache_storage=str(tmp_path / "cache"),
-        )
+        try:
+            self.source = NavierStokesCylinderSource(
+                cache_storage=str(tmp_path / "cache"),
+            )
+        except _NETWORK_ERRORS as exc:
+            pytest.skip(f"HuggingFace API unreachable: {exc}")
         self.tmp_path = tmp_path
 
     def test_discovers_snapshots(self) -> None:
