@@ -16,21 +16,29 @@
 
 """Mesh data filters/transforms."""
 
+from physicsnemo_curator.domains.mesh.filters.boundary_injection import BoundaryInjectionFilter
+from physicsnemo_curator.domains.mesh.filters.clean import CleanFilter
 from physicsnemo_curator.domains.mesh.filters.edge_compute import EdgeComputeFilter
 from physicsnemo_curator.domains.mesh.filters.field_select import FieldSelectFilter
+from physicsnemo_curator.domains.mesh.filters.global_data import GlobalDataFilter
 from physicsnemo_curator.domains.mesh.filters.mean import MeanFilter
 from physicsnemo_curator.domains.mesh.filters.mesh_info import MeshInfoFilter
+from physicsnemo_curator.domains.mesh.filters.point_data_to_cell import PointDataToCellDataFilter
 from physicsnemo_curator.domains.mesh.filters.precision import PrecisionFilter
 from physicsnemo_curator.domains.mesh.filters.quality import MeshQualityFilter
 from physicsnemo_curator.domains.mesh.filters.random_permutation import RandomPermutationFilter
 from physicsnemo_curator.domains.mesh.filters.wall_node import WallNodeFilter
 
 __all__ = [
+    "BoundaryInjectionFilter",
+    "CleanFilter",
     "EdgeComputeFilter",
     "FieldSelectFilter",
+    "GlobalDataFilter",
     "MeanFilter",
     "MeshInfoFilter",
     "MeshQualityFilter",
+    "PointDataToCellDataFilter",
     "PrecisionFilter",
     "RandomPermutationFilter",
     "WallNodeFilter",

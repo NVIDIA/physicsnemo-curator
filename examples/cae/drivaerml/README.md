@@ -7,15 +7,20 @@ automotive CFD meshes through a complete Source → Filter → Sink pipeline.
 
 The pipeline:
 
-1. **MeshStatsFilter** — computes per-field statistics (mean, std,
-   skewness, kurtosis) using Welford accumulators that merge across
-   parallel workers.
-2. **PrecisionFilter** — casts float64 fields to float32.
-3. **RandomPermutationFilter** — shuffles point and cell ordering to
+1. **BoundaryInjectionFilter** — synthesizes the rectangular wind-tunnel
+   boundaries (`inlet`, `outlet`, `slip`, `no_slip`) the dataset ships
+   without and injects them into each `DomainMesh` alongside the existing
+   `vehicle` surface (via `BoxTunnelBoundaries`, inferring the floor height
+   per sample). STL meshes pass through unchanged.
+2. **RandomPermutationFilter** — shuffles point and cell ordering to
    remove spatial bias before training.
-4. **MeshSink** — writes each mesh in PhysicsNeMo's native format
+3. **MeshSink** — writes each mesh in PhysicsNeMo's native format
    (`.pdmsh` for DomainMesh, `.pmsh` for plain Mesh), grouped into
    per-run subdirectories.
+
+`DrivAerMLSource` already downcasts to float32, so a separate
+`PrecisionFilter` is not needed. Pass `--check-watertight` to log
+`DomainMesh.check_boundary_watertight` after injection.
 
 ## Prerequisites
 
@@ -83,7 +88,17 @@ python main.py --input /path/to/drivaerml --output /path/to/output
 
 # Limit to specific number of workers
 python main.py --workers 4
+
+# Process only the first N runs (handy for a quick test)
+python main.py --limit 2
+
+# Verify the synthesized boundary surface is watertight (informational)
+python main.py --check-watertight
 ```
+
+Each output `domain_{run}.pdmsh` carries the interior, the `vehicle`
+surface, and the injected `inlet` / `outlet` / `slip` / `no_slip`
+boundaries.
 
 ## Output Structure
 

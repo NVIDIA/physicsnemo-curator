@@ -1,3 +1,7 @@
+# Slurm jobs:
+*.err
+*.out
+
 *pycache*
 *outputs*
 *egg-info*
