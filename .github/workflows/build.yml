@@ -7,8 +7,18 @@ name: Build
 on:
   push:
     branches: [main, refactor]
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
   pull_request:
     branches: [main, refactor]
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
