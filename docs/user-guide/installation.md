@@ -39,13 +39,8 @@ advanced backends, install the corresponding extra:
 
 | Extra | Backend | Install |
 |-------|---------|---------|
-| **loky** | joblib/loky (robust process pool) | `pip install 'physicsnemo-curator[loky]'` |
-| **dask** | Dask bags (distributed execution) | `pip install 'physicsnemo-curator[dask]'` |
-
-```bash
-# Install multiple backend extras
-pip install 'physicsnemo-curator[loky,dask]'
-```
+| **loky** | joblib/loky (robust process pool) | `uv sync --group loky'` |
+| **dask** | Dask bags (distributed execution, experimental) | `uv sync --group dask'` |
 
 ### Installing Multiple Groups
 
