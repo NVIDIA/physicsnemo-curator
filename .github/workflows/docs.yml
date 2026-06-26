@@ -7,12 +7,22 @@ name: Docs
 on:
   push:
     branches: [main, refactor]
+    paths:
+      - "docs/**"
+      - "src/**"
+      - "pyproject.toml"
+  pull_request:
+    branches: [main, refactor]
+    paths:
+      - "docs/**"
+      - "src/**"
+      - "pyproject.toml"
   workflow_call: # Allow other workflows (e.g. benchmark) to trigger a rebuild
   workflow_dispatch:
 
 # Allow only one concurrent deployment
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -60,6 +70,7 @@ jobs:
 
   deploy:
     needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
