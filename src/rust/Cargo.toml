@@ -10,8 +10,8 @@ name = "physicsnemo_curator"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.28", features = ["abi3-py312"] }
-numpy = "0.28"
+pyo3 = { version = "0.29", features = ["abi3-py312"] }
+numpy = "0.29"
 quick-xml = "0.37"
 rayon = "1.10"
 base64 = "0.22"
