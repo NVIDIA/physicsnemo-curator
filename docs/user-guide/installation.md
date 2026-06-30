@@ -25,9 +25,9 @@ you need.  Each submodule has its own group:
 
 | Group | Contents | Install |
 |-------|----------|---------|
-| **mesh** | physicsnemo, pyvista, pyarrow, torch | `pip install .[mesh]` or `uv sync --group mesh` |
-| **da** | xarray, earth2studio, zarr, gcsfs | `uv sync --group da` |
-| **atm** | nvalchemi, ase, torch | `uv sync --group atm` |
+| **mesh** | physicsnemo, pyvista, pyarrow, torch | `pip install .[mesh]` or `uv sync --extra mesh` |
+| **da** | xarray, earth2studio, zarr, gcsfs | `pip install .[da]` or `uv sync --extra da` |
+| **atm** | nvalchemi, ase, torch | `pip install .[atm]` or `uv sync --extra atm` |
 | **dev** | ruff, ty, pytest, maturin, interrogate, pre-commit | `uv sync --group dev` |
 | **docs** | sphinx, nvidia-sphinx-theme, myst-parser, etc. | `uv sync --group docs` |
 
@@ -39,17 +39,17 @@ advanced backends, install the corresponding extra:
 
 | Extra | Backend | Install |
 |-------|---------|---------|
-| **loky** | joblib/loky (robust process pool) | `uv sync --group loky'` |
-| **dask** | Dask bags (distributed execution, experimental) | `uv sync --group dask'` |
+| **loky** | joblib/loky (robust process pool) | `uv sync --extra loky` |
+| **dask** | Dask bags (distributed execution, experimental) | `uv sync --extra dask` |
 
 ### Installing Multiple Groups
 
 ```bash
 # Development with mesh support
-uv sync --group dev --group mesh
+uv sync --group dev --extra mesh
 
 # Everything
-uv sync --group dev --group mesh --group docs
+uv sync --group dev --extra mesh --group docs
 ```
 
 ## Verifying the Installation
