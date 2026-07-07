@@ -16,9 +16,10 @@
 
 """Mesh data sinks/writers."""
 
+from physicsnemo_curator.domains.mesh.sinks.mesh_domain_zarr import DomainMeshZarrSink
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 
-__all__ = ["GridSidecarSink", "MeshSink", "MeshVTUSink", "MeshZarrSink"]
+__all__ = ["DomainMeshZarrSink", "GridSidecarSink", "MeshSink", "MeshVTUSink", "MeshZarrSink"]
 
 
 def __getattr__(name: str):
