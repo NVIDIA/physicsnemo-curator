@@ -38,6 +38,13 @@ Mesh schema (each mesh-schema group)::
         cell_data/<field>
         global_data/<field>
 
+Data fields mirror the ``TensorDict`` tree: a ``<field>`` is either an array
+(a tensor leaf) or a subgroup (a nested ``TensorDict``), recursively. Field
+names must be non-empty and must not contain ``"/"`` (the zarr path
+separator), and non-tensor leaves (``NonTensorData``, e.g. strings) are not
+representable in schema v1; the sink rejects both with clear errors rather
+than corrupting the store. Groups are written as zarr format 3.
+
 Chunks are sized along the cell/point axes (``chunk_cells`` /
 ``chunk_points``) so a training-time contiguous block subsample touches a
 bounded number of chunks; align ``chunk_cells`` with the reader's
@@ -97,11 +104,10 @@ def _to_cell_soup(mesh: Mesh) -> Mesh:
         return mesh
     cells = mesh.cells
     n_cells, nodes_per_cell = cells.shape
-    points = mesh.points[cells].reshape(-1, mesh.points.shape[1]).contiguous()
-    point_data = {
-        k: mesh.point_data[k][cells].reshape(points.shape[0], *mesh.point_data[k].shape[1:]).contiguous()
-        for k in mesh.point_data.keys()
-    }
+    flat = cells.reshape(-1)
+    points = mesh.points[flat].contiguous()
+    # TensorDict batch-indexing gathers every leaf (nested included) at once.
+    point_data = mesh.point_data[flat].contiguous()
     soup_cells = torch.arange(points.shape[0], dtype=torch.int64).reshape(n_cells, nodes_per_cell)
     return _Mesh(
         points=points,
@@ -306,6 +312,50 @@ class DomainMeshZarrSink(Sink["DomainMesh"]):
         if arr.size:
             z[...] = arr
 
+    def _write_tensordict(self, group, td, chunk0: int) -> None:
+        """Write a TensorDict as a zarr group tree, mirroring its nesting.
+
+        Tensor leaves become arrays; nested TensorDicts become subgroups,
+        recursively. Rejects field names containing ``"/"`` (zarr's path
+        separator -- it would silently create hierarchy instead of a field)
+        and non-tensor leaves (``NonTensorData`` is not representable in
+        schema v1; an attrs-based encoding is reserved for v2).
+
+        Parameters
+        ----------
+        group : zarr.Group
+            Group to write into.
+        td : tensordict.TensorDictBase
+            TensorDict whose tree is mirrored into ``group``.
+        chunk0 : int
+            Chunk length along axis 0 for all leaf arrays.
+        """
+        import torch
+        from tensordict import TensorDictBase
+
+        # Not SIM118: iterating a TensorDict directly walks its batch
+        # dimension, not its keys -- .keys() is semantically required.
+        for key in td.keys():  # noqa: SIM118
+            if not key or "/" in key:
+                msg = (
+                    f"field name {key!r} is not storable in the mesh-zarr schema: "
+                    f"names must be non-empty and must not contain '/' (the zarr "
+                    f"path separator). Rename the field before saving."
+                )
+                raise ValueError(msg)
+            value = td.get(key)
+            if isinstance(value, TensorDictBase):
+                self._write_tensordict(group.create_group(key), value, chunk0)
+            elif isinstance(value, torch.Tensor):
+                self._write_array(group, key, value, chunk0)
+            else:
+                msg = (
+                    f"field {key!r} has unsupported type {type(value).__name__}; "
+                    f"mesh-zarr schema v1 stores tensors and nested TensorDicts "
+                    f"only (NonTensorData / strings are reserved for v2)."
+                )
+                raise TypeError(msg)
+
     def _write_mesh_group(self, group, mesh: Mesh) -> None:
         """Write one mesh-schema group (arrays + verified attrs).
 
@@ -325,12 +375,9 @@ class DomainMeshZarrSink(Sink["DomainMesh"]):
             ("cell_data", mesh.cell_data, self._chunk_cells),
             ("global_data", mesh.global_data, self._chunk_cells),
         ):
-            keys = list(data.keys())
-            if not keys:
+            if not len(data.keys()):
                 continue
-            sub = group.create_group(sub_name)
-            for key in keys:
-                self._write_array(sub, key, data[key], chunk0)
+            self._write_tensordict(group.create_group(sub_name), data, chunk0)
 
         group.attrs["format"] = MESH_FORMAT
         group.attrs["schema_version"] = SCHEMA_VERSION
@@ -356,11 +403,8 @@ class DomainMeshZarrSink(Sink["DomainMesh"]):
         root.attrs["schema_version"] = SCHEMA_VERSION
         root.attrs["boundary_names"] = list(domain.boundary_names)
 
-        gd_keys = list(domain.global_data.keys())
-        if gd_keys:
-            gd = root.create_group("global_data")
-            for key in gd_keys:
-                self._write_array(gd, key, domain.global_data[key], self._chunk_cells)
+        if len(domain.global_data.keys()):
+            self._write_tensordict(root.create_group("global_data"), domain.global_data, self._chunk_cells)
 
         self._write_mesh_group(root.create_group("interior"), domain.interior)
         boundaries = root.create_group("boundaries")
@@ -416,7 +460,10 @@ class DomainMeshZarrSink(Sink["DomainMesh"]):
             # partial/corrupt store behind.
             tmp_dir = tempfile.mkdtemp(prefix=".tmp_", dir=str(output_path.parent))
             try:
-                root = zarr.open_group(tmp_dir, mode="w")
+                # The schema requires zarr format 3 (zarr.json metadata);
+                # pin it explicitly so a zarr.config default override
+                # cannot silently produce a format-2 store.
+                root = zarr.open_group(tmp_dir, mode="w", zarr_format=3)
                 if isinstance(mesh, _DomainMesh):
                     self._write_domain_mesh(root, mesh)
                 else:

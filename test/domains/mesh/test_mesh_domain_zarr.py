@@ -120,9 +120,14 @@ def test_domain_mesh_schema(domain_mesh, tmp_path):
     # Case-level metadata at the root only.
     assert set(root["global_data"].array_keys()) == {"U_inf", "rho_inf", "L_ref"}
 
+    # 0-d global scalars round-trip as 0-d (consumers assert ndim == 0).
+    assert root["global_data/U_inf"].shape == ()
+
     interior = root["interior"]
     assert interior.attrs["format"] == "physicsnemo-mesh-zarr"
     assert interior.attrs["n_cells"] == 0
+    # Point clouds must have no cells array at all (readers key off presence).
+    assert "cells" not in interior
     assert "UMean" in interior["point_data"].array_keys()
 
     vehicle = root["boundaries/vehicle"]
@@ -152,6 +157,118 @@ def test_soup_boundaries(domain_mesh, tmp_path):
     assert root["interior"].attrs["n_cells"] == 0
 
 
+def test_nested_tensordict_written_as_nested_groups(domain_mesh, tmp_path):
+    """Nested TensorDicts map to nested zarr groups, recursively."""
+    import torch
+
+    ref = domain_mesh.boundaries["vehicle"]
+    ref.point_data["turbulence"] = {
+        "k": torch.randn(ref.n_points),
+        "wall": {"omega": torch.randn(ref.n_points, 2)},
+    }
+    domain_mesh.global_data["coeffs"] = {"Cd": torch.tensor(0.3), "Cl": torch.tensor(-0.1)}
+
+    paths = _write(domain_mesh, tmp_path)
+    root = zarr.open_group(paths[0], mode="r")
+
+    vehicle = root["boundaries/vehicle"]
+    turb = vehicle["point_data/turbulence"]
+    assert isinstance(turb, zarr.Group)
+    assert (turb["k"][...] == ref.point_data["turbulence", "k"].numpy()).all()
+    assert (turb["wall/omega"][...] == ref.point_data["turbulence", "wall", "omega"].numpy()).all()
+    # Case-level global_data nests the same way at the root.
+    assert isinstance(root["global_data/coeffs"], zarr.Group)
+    assert float(root["global_data/coeffs/Cd"][()]) == pytest.approx(0.3)
+
+
+def test_field_name_with_slash_rejected(domain_mesh, tmp_path):
+    """'/' in a field name would create zarr hierarchy; the sink refuses."""
+    import torch
+
+    ref = domain_mesh.boundaries["vehicle"]
+    ref.cell_data["wall/shear"] = torch.randn(ref.n_cells)
+    with pytest.raises(ValueError, match="zarr path separator"):
+        _write(domain_mesh, tmp_path)
+    # The failed write must not leave a partial store or temp dir behind.
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_non_tensor_leaf_rejected(domain_mesh, tmp_path):
+    """NonTensorData leaves (strings) are not representable in schema v1."""
+    domain_mesh.global_data["solver"] = "OpenFOAM"
+    with pytest.raises(TypeError, match="NonTensorData"):
+        _write(domain_mesh, tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_soup_layout_attr_is_verified_not_asserted(tmp_path):
+    """layout='soup' is written only when cells are exactly arange."""
+    import torch
+    from physicsnemo.mesh import Mesh
+
+    n_cells, npc = 10, 3
+    arange_cells = torch.arange(n_cells * npc, dtype=torch.int64).reshape(n_cells, npc)
+    true_soup = Mesh(points=torch.randn(n_cells * npc, 3), cells=arange_cells)
+    # Same shape and index range, but not the identity arange.
+    fake_soup = Mesh(points=torch.randn(n_cells * npc, 3), cells=arange_cells.flip(0))
+
+    paths = _write(true_soup, tmp_path / "true")
+    assert zarr.open_group(paths[0], mode="r").attrs["layout"] == "soup"
+    paths = _write(fake_soup, tmp_path / "fake")
+    assert zarr.open_group(paths[0], mode="r").attrs["layout"] == "indexed"
+
+
+def test_cells_dtype_preserved(tmp_path):
+    """The writer's cells dtype is preserved (v1: no downcasting)."""
+    import torch
+    from physicsnemo.mesh import Mesh
+
+    mesh = Mesh(
+        points=torch.randn(9, 3),
+        cells=torch.arange(9, dtype=torch.int32).reshape(3, 3),
+    )
+    paths = _write(mesh, tmp_path)
+    assert zarr.open_group(paths[0], mode="r")["cells"].dtype == "int32"
+
+
+def test_groups_are_zarr_format_3(domain_mesh, tmp_path):
+    """The schema requires zarr format 3 (zarr.json metadata)."""
+    import json
+    import pathlib
+
+    paths = _write(domain_mesh, tmp_path)
+    store = pathlib.Path(paths[0])
+    for sub in ("", "interior", "boundaries/vehicle", "global_data", "interior/point_data"):
+        assert (store / sub / "zarr.json").exists()
+        assert not (store / sub / ".zgroup").exists()
+
+    # Attrs must serialize as plain JSON types (numpy scalars would break).
+    root_attrs = json.loads((store / "zarr.json").read_text())["attributes"]
+    assert isinstance(root_attrs["schema_version"], int)
+    assert all(isinstance(n, str) for n in root_attrs["boundary_names"])
+    mesh_attrs = json.loads((store / "boundaries/vehicle/zarr.json").read_text())["attributes"]
+    assert isinstance(mesh_attrs["n_points"], int)
+    assert isinstance(mesh_attrs["n_cells"], int)
+    assert isinstance(mesh_attrs["nodes_per_cell"], int)
+
+
+def test_validate_mesh_zarr_accepts_sink_output(domain_mesh, tmp_path):
+    """Cross-repo contract: physicsnemo's schema validator passes sink output."""
+    try:
+        from physicsnemo.datapipes import validate_mesh_zarr
+    except ImportError:
+        pytest.skip("physicsnemo.datapipes.validate_mesh_zarr not available")
+    import torch
+
+    domain_mesh.global_data["coeffs"] = {"Cd": torch.tensor(0.3)}
+    paths = _write(domain_mesh, tmp_path, soup_boundaries=True)
+    summary = validate_mesh_zarr(paths[0])
+    assert summary["format"] == "physicsnemo-domainmesh-zarr"
+    assert summary["schema_version"] == 1
+    assert summary["boundaries"]["vehicle"]["layout"] == "soup"
+    assert summary["interior"]["n_cells"] == 0
+
+
 def test_plain_mesh_items_written_as_mesh_schema(tmp_path):
     mesh = _make_surface_mesh()
     paths = _write(mesh, tmp_path)
@@ -172,9 +289,7 @@ def test_naming_template_and_compression_off(tmp_path):
         boundaries={"vehicle": surface},
         global_data={"U_inf": torch.tensor(38.889)},
     )
-    paths_raw = _write(
-        domain_mesh, tmp_path / "raw", compression_level=0, naming_template="case_{index}_{seq}"
-    )
+    paths_raw = _write(domain_mesh, tmp_path / "raw", compression_level=0, naming_template="case_{index}_{seq}")
     assert paths_raw[0].endswith("case_0_0.zarr")
     paths_zstd = _write(domain_mesh, tmp_path / "zstd", compression_level=3)
 
@@ -209,6 +324,9 @@ def test_roundtrip_via_physicsnemo_reader(domain_mesh, tmp_path):
     )
     mesh, _ = reader[0]
     ref = domain_mesh.boundaries["vehicle"]
+    # Soup groups: the reader synthesizes connectivity from n_cells /
+    # nodes_per_cell without reading cells -- wrong attrs would corrupt it.
+    assert torch.equal(mesh.cells, torch.arange(3 * ref.n_cells).reshape(ref.n_cells, 3))
     assert torch.equal(mesh.points[mesh.cells], ref.points[ref.cells])
     assert torch.equal(mesh.cell_data["pMeanTrim"], ref.cell_data["pMeanTrim"])
     # Read-time merge: boundary's own key + case-level keys, single-sourced.
