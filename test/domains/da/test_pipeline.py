@@ -32,6 +32,10 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
+    import zarr
+
+    from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
+
 pytestmark = pytest.mark.requires("da")
 
 # ---------------------------------------------------------------------------
@@ -866,6 +870,41 @@ class TestHRRRSource:
 # ===================================================================
 
 
+def _valid_sink(
+    tmp_path: Path, *, n_indices: int = 3, variables: list[str] | None = None, **kwargs: object
+) -> ZarrSink:
+    """Build a pre-allocated ZarrSink with valid-index tracking enabled."""
+    from physicsnemo_curator.domains.da.sinks.zarr_writer import ZarrSink
+
+    return ZarrSink(
+        output_path=str(tmp_path / "output.zarr"),
+        chunks={"time": 1, "lat": _LATS_N, "lon": _LONS_N},
+        n_indices=n_indices,
+        variables=variables if variables is not None else ["t2m"],
+        track_valid=True,
+        **kwargs,  # type: ignore[arg-type]
+    )
+
+
+def _write_index(sink: ZarrSink, index: int, variables: list[str] | None = None) -> list[str]:
+    """Write one synthetic DataArray to *sink* at *index*."""
+    da = _make_dataarray(variables=variables if variables is not None else ["t2m"], n_lat=_LATS_N, n_lon=_LONS_N)
+
+    def gen():  # type: ignore[override]
+        yield da
+
+    return sink(gen(), index=index)
+
+
+def _valid_array(tmp_path: Path) -> zarr.Array:
+    """Reopen the store and return its ``valid`` array."""
+    import zarr
+
+    arr = zarr.open_group(str(tmp_path / "output.zarr"), mode="r")["valid"]
+    assert isinstance(arr, zarr.Array)
+    return arr
+
+
 class TestZarrSink:
     """Unit tests for ZarrSink."""
 
@@ -973,6 +1012,84 @@ class TestZarrSink:
 
         sink = ZarrSink(output_path=str(tmp_path / "output.zarr"))
         assert sink.output_path == str(tmp_path / "output.zarr")
+
+    def test_track_valid_lifecycle(self, tmp_path: Path) -> None:
+        """The valid array is per-index chunked while writing and collapsed by finalize()."""
+        import numpy as np
+
+        sink = _valid_sink(tmp_path, overwrite=True)
+
+        valid = _valid_array(tmp_path)
+        assert valid.shape == (3,)
+        assert valid.chunks == (1,)
+        assert valid.dtype == np.dtype("bool")
+        assert not bool(valid[0])
+
+        _write_index(sink, 0)
+        _write_index(sink, 2)
+        assert list(np.asarray(_valid_array(tmp_path)[:])) == [True, False, True]
+
+        sink.finalize()
+        valid = _valid_array(tmp_path)
+        assert valid.chunks == (3,)
+        assert list(np.asarray(valid[:])) == [True, False, True]
+
+    def test_track_valid_partial_write_not_marked(self, tmp_path: Path) -> None:
+        """An index missing some pre-allocated variables must not be marked valid."""
+        sink = _valid_sink(tmp_path, n_indices=2, variables=["t2m", "q2m"], overwrite=True)
+
+        # Only one of the two pre-allocated variables arrives.
+        _write_index(sink, 0, variables=["t2m"])
+        assert not bool(_valid_array(tmp_path)[0])
+
+        _write_index(sink, 1, variables=["t2m", "q2m"])
+        assert bool(_valid_array(tmp_path)[1])
+
+    def test_track_valid_resume_preserves_existing(self, tmp_path: Path) -> None:
+        """Resuming with overwrite=False preserves existing valid flags."""
+        _write_index(_valid_sink(tmp_path, overwrite=True), 1)
+
+        _valid_sink(tmp_path, overwrite=False)
+
+        valid = _valid_array(tmp_path)
+        assert bool(valid[1])
+        assert not bool(valid[0])
+        assert valid.chunks == (1,)
+
+    def test_track_valid_resume_after_finalize_rechunks(self, tmp_path: Path) -> None:
+        """Resuming a finalized store restores per-index chunking but keeps flags."""
+        import numpy as np
+
+        sink = _valid_sink(tmp_path, overwrite=True)
+        _write_index(sink, 1)
+        sink.finalize()
+        assert _valid_array(tmp_path).chunks == (3,)
+
+        # Resuming must not leave the array single-chunked, or concurrent
+        # workers would race on the same chunk when marking their index.
+        _valid_sink(tmp_path, overwrite=False)
+
+        valid = _valid_array(tmp_path)
+        assert valid.chunks == (1,)
+        assert list(np.asarray(valid[:])) == [False, True, False]
+
+    def test_track_valid_rejects_invalid_configuration(self, tmp_path: Path) -> None:
+        """A reserved variable name or a changed n_indices is refused up front."""
+        with pytest.raises(ValueError, match="reserved"):
+            _valid_sink(tmp_path, variables=["valid", "t2m"])
+
+        _valid_sink(tmp_path, n_indices=2, overwrite=True)
+        with pytest.raises(ValueError, match="n_indices cannot change"):
+            _valid_sink(tmp_path, n_indices=4)
+
+    def test_track_valid_rejects_write_after_finalize(self, tmp_path: Path) -> None:
+        """Marking after finalize() would be an unsafe whole-array rewrite."""
+        sink = _valid_sink(tmp_path, overwrite=True)
+        _write_index(sink, 0)
+        sink.finalize()
+
+        with pytest.raises(RuntimeError, match="finalize"):
+            _write_index(sink, 1)
 
 
 # ===================================================================
@@ -1365,6 +1482,201 @@ class TestMomentsFilter:
 
         expected_var = np.var(all_values)
         np.testing.assert_allclose(ds["variance"].values.flat[0], expected_var, rtol=1e-10)
+
+    def test_skips_nan_pixels(self, tmp_path: Path) -> None:
+        """NaN pixels must not poison the running mean for finite neighbors."""
+        import numpy as np
+        import xarray as xr
+
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
+
+        filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
+
+        for i in range(3):
+            # Left column finite, right column always NaN
+            data = np.array([[[1.0 + i, np.nan], [2.0 + i, np.nan]]], dtype=np.float64)
+            da = xr.DataArray(
+                data=data,
+                dims=["time", "lat", "lon"],
+                coords={
+                    "time": [np.datetime64(f"2020-01-01T0{i}")],
+                    "lat": [0.0, 1.0],
+                    "lon": [0.0, 1.0],
+                },
+            )
+
+            def gen(d=da):  # type: ignore[override]
+                yield d
+
+            list(filt(gen()))
+
+        filt.flush()
+        ds = xr.open_zarr(str(tmp_path / "stats.zarr" / "data"))
+
+        assert ds.attrs["count"] == 3
+        # Finite column: mean of 1,2,3 and 2,3,4
+        np.testing.assert_allclose(ds["mean"].values[:, 0], [2.0, 3.0])
+        # Always-NaN column stays NaN
+        assert np.isnan(ds["mean"].values[:, 1]).all()
+        assert np.isnan(ds["min"].values[:, 1]).all()
+        assert "welford_n" in ds
+        np.testing.assert_array_equal(ds["welford_n"].values[:, 0], [3, 3])
+        np.testing.assert_array_equal(ds["welford_n"].values[:, 1], [0, 0])
+
+    def test_skips_all_nan_sample(self, tmp_path: Path) -> None:
+        """A sample with no finite values counts as seen but contributes nothing."""
+        import numpy as np
+        import xarray as xr
+
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
+
+        filt = MomentsFilter(output=str(tmp_path / "stats.zarr"), dims=("time",))
+
+        # Middle sample is entirely absent, as when an archive drops a composite.
+        samples = [
+            np.array([[1.0, 1.0], [3.0, 3.0]]),
+            np.array([[np.nan, np.nan], [np.nan, np.nan]]),
+            np.array([[3.0, 3.0], [5.0, 5.0]]),
+        ]
+        for i, arr in enumerate(samples):
+            da = xr.DataArray(
+                data=arr[None, ...],
+                dims=["time", "lat", "lon"],
+                coords={
+                    "time": [np.datetime64(f"2020-01-01T0{i}")],
+                    "lat": [0.0, 1.0],
+                    "lon": [0.0, 1.0],
+                },
+            )
+
+            def gen(d=da):  # type: ignore[override]
+                yield d
+
+            list(filt(gen()))
+
+        filt.flush()
+        ds = xr.open_zarr(str(tmp_path / "stats.zarr" / "data"))
+
+        # Every sample is tallied, but only the finite ones shape the moments.
+        assert ds.attrs["count"] == 3
+        np.testing.assert_array_equal(ds["welford_n"].values, np.full((2, 2), 2))
+        np.testing.assert_allclose(ds["mean"].values[0], [2.0, 2.0])
+        np.testing.assert_allclose(ds["mean"].values[1], [4.0, 4.0])
+        np.testing.assert_allclose(ds["min"].values[0], [1.0, 1.0])
+        np.testing.assert_allclose(ds["max"].values[1], [5.0, 5.0])
+
+    def test_merge_legacy_store_without_welford_n(self, tmp_path: Path) -> None:
+        """Stores predating welford_n still merge via the reconstructed count."""
+        import numpy as np
+        import xarray as xr
+
+        from physicsnemo_curator.domains.da.filters.stats import DataArrayStatsFilter as MomentsFilter
+        from physicsnemo_curator.domains.da.filters.stats import _merge_moment_datasets
+
+        def _flush_shard(path: Path, values: list[np.ndarray]) -> None:
+            filt = MomentsFilter(output=str(path), dims=("time",))
+            for i, arr in enumerate(values):
+                da = xr.DataArray(
+                    data=arr[None, ...],
+                    dims=["time", "lat", "lon"],
+                    coords={
+                        "time": [np.datetime64(f"2020-01-01T0{i}")],
+                        "lat": [0.0, 1.0],
+                        "lon": [0.0, 1.0],
+                    },
+                )
+
+                def gen(d=da):  # type: ignore[override]
+                    yield d
+
+                list(filt(gen()))
+            filt.flush()
+
+        shard_a = tmp_path / "a.zarr"
+        shard_b = tmp_path / "b.zarr"
+        _flush_shard(shard_a, [np.array([[1.0, np.nan], [10.0, np.nan]]), np.array([[3.0, np.nan], [30.0, np.nan]])])
+        _flush_shard(shard_b, [np.array([[np.nan, 2.0], [np.nan, 20.0]]), np.array([[np.nan, 4.0], [np.nan, 40.0]])])
+
+        loaded = [xr.open_zarr(str(shard_a / "data")).load(), xr.open_zarr(str(shard_b / "data")).load()]
+        expected = _merge_moment_datasets(loaded)
+
+        # Emulate a store written before welford_n existed: no per-element count,
+        # and unobserved pixels left NaN because the old accumulator let a single
+        # NaN sample poison them. The count is rebuilt from those NaN positions.
+        legacy = []
+        for ds in loaded:
+            never_seen = ds["welford_n"].values == 0
+            old = ds.drop_vars("welford_n").copy()
+            for name in ("mean", "welford_mean"):
+                poisoned = old[name].values.copy()
+                poisoned[never_seen] = np.nan
+                old[name] = (old[name].dims, poisoned)
+            legacy.append(old)
+
+        merged = _merge_moment_datasets(legacy)
+
+        assert merged.attrs["count"] == expected.attrs["count"]
+        for stat in ("mean", "variance", "min", "max"):
+            np.testing.assert_allclose(merged[stat].values, expected[stat].values)
+
+    def test_merge_nan_aware_shards(self, tmp_path: Path) -> None:
+        """Merging shards combines per-pixel counts without NaN poisoning."""
+        import numpy as np
+        import xarray as xr
+
+        from physicsnemo_curator.domains.da.filters.stats import (
+            DataArrayStatsFilter as MomentsFilter,
+        )
+        from physicsnemo_curator.domains.da.filters.stats import _merge_moment_datasets
+
+        def _flush_shard(path: Path, values: list[np.ndarray]) -> None:
+            filt = MomentsFilter(output=str(path), dims=("time",))
+            for i, arr in enumerate(values):
+                da = xr.DataArray(
+                    data=arr[None, ...],
+                    dims=["time", "lat", "lon"],
+                    coords={
+                        "time": [np.datetime64(f"2020-01-01T0{i}")],
+                        "lat": [0.0, 1.0],
+                        "lon": [0.0, 1.0],
+                    },
+                )
+
+                def gen(d=da):  # type: ignore[override]
+                    yield d
+
+                list(filt(gen()))
+            filt.flush()
+
+        shard_a = tmp_path / "a.zarr"
+        shard_b = tmp_path / "b.zarr"
+        # Shard A observes only left column
+        _flush_shard(
+            shard_a,
+            [
+                np.array([[1.0, np.nan], [10.0, np.nan]]),
+                np.array([[3.0, np.nan], [30.0, np.nan]]),
+            ],
+        )
+        # Shard B observes only right column
+        _flush_shard(
+            shard_b,
+            [
+                np.array([[np.nan, 2.0], [np.nan, 20.0]]),
+                np.array([[np.nan, 4.0], [np.nan, 40.0]]),
+            ],
+        )
+
+        merged = _merge_moment_datasets(
+            [
+                xr.open_zarr(str(shard_a / "data")).load(),
+                xr.open_zarr(str(shard_b / "data")).load(),
+            ]
+        )
+        assert merged.attrs["count"] == 4
+        np.testing.assert_allclose(merged["mean"].values[:, 0], [2.0, 20.0])
+        np.testing.assert_allclose(merged["mean"].values[:, 1], [3.0, 30.0])
+        assert not np.isnan(merged["mean"].values).any()
 
     def test_properties(self) -> None:
         """Properties return the configured values."""
