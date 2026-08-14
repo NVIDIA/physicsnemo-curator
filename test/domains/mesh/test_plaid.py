@@ -19,15 +19,11 @@
 from __future__ import annotations
 
 import pathlib
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import torch
-
-if TYPE_CHECKING:
-    pass
 
 pytestmark = pytest.mark.requires("mesh")
 
@@ -35,15 +31,16 @@ pytestmark = pytest.mark.requires("mesh")
 # Constants that mirror VKI-LS59 defaults
 # ---------------------------------------------------------------------------
 
-_N_SURFACE = 8   # boundary nodes
-_N_VOLUME = 20   # interior nodes
-_N_EDGES = 7     # BAR_2 edges
-_N_QUADS = 10    # QUAD_4 quads  →  20 triangles after splitting
+_N_SURFACE = 8  # boundary nodes
+_N_VOLUME = 20  # interior nodes
+_N_EDGES = 7  # BAR_2 edges
+_N_QUADS = 10  # QUAD_4 quads  →  20 triangles after splitting
 
 
 # ---------------------------------------------------------------------------
 # Helpers: build a fake plaid Sample
 # ---------------------------------------------------------------------------
+
 
 def _make_plaid_sample(
     *,
@@ -54,6 +51,9 @@ def _make_plaid_sample(
     add_surface_conn: bool = True,
     add_volume_conn: bool = True,
     add_globals: bool = True,
+    add_surface_z: bool = False,
+    add_surface_cell_fields: bool = False,
+    add_volume_cell_fields: bool = False,
 ) -> MagicMock:
     """Return a mock plaid.Sample that mimics the VKI-LS59 feature layout."""
     rng = np.random.default_rng(42)
@@ -97,6 +97,16 @@ def _make_plaid_sample(
             "Global/eth_is": np.array(0.9, dtype=np.float32) if add_globals else None,
             "Global/power": np.array(5e6, dtype=np.float32) if add_globals else None,
         }
+        if add_surface_z:
+            mapping[f"{surface_base}/{zone}/GridCoordinates/CoordinateZ"] = rng.random(_N_SURFACE).astype(np.float32)
+        if add_surface_cell_fields:
+            # Rotor37-like: same field also exposed as a CellCenterFields value,
+            # sized to the surface's BAR_2 edge count (_N_EDGES).
+            mapping[f"{surface_base}/{zone}/CellCenterFields/Pressure"] = rng.random(_N_EDGES).astype(np.float32)
+        if add_volume_cell_fields:
+            # Rotor37-like: one value per original QUAD_4 element (_N_QUADS),
+            # *not* per post-triangulation cell (_N_QUADS * 2).
+            mapping[f"{volume_base}/{zone}/CellCenterFields/Density"] = rng.random(_N_QUADS).astype(np.float32)
         return mapping.get(path)
 
     sample = MagicMock()
@@ -261,12 +271,8 @@ class TestPlaidSourceLocal:
 
             src = PlaidSource(local_folder=str(tmp_path))
             dm = next(src[0])
-            assert dm.interior.points.shape == (
-                _N_VOLUME, 2
-            ), "Volume coords must be (N, 2)"
-            assert dm.boundaries["surface"].points.shape == (
-                _N_SURFACE, 2
-            ), "Surface coords must be (N, 2)"
+            assert dm.interior.points.shape == (_N_VOLUME, 2), "Volume coords must be (N, 2)"
+            assert dm.boundaries["surface"].points.shape == (_N_SURFACE, 2), "Surface coords must be (N, 2)"
 
     # -- Connectivity ----------------------------------------------------------
 
@@ -396,3 +402,154 @@ class TestPlaidSourceLocal:
             src = PlaidSource(local_folder=str(tmp_path))
             with pytest.raises(IndexError):
                 next(src[-4])
+
+
+# ---------------------------------------------------------------------------
+# Generic (Rotor37-like) dataset support: 3-D coords, cell_data, optional bases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestPlaidSourceGenericDataset:
+    """Tests for dataset layouts that differ from VKI-LS59 (e.g. Rotor37)."""
+
+    def test_3d_coordinates_when_z_present(self, tmp_path: pathlib.Path) -> None:
+        """CoordinateZ is included automatically when present in the sample.
+
+        Only the surface base is 3-D in this mock (Rotor37-like); volume_base
+        is disabled so DomainMesh doesn't reject mismatched spatial dims
+        between a 3-D surface and the mock's 2-D volume base.
+        """
+        with _patch_init_from_disk(tmp_path, add_surface_z=True):
+            from physicsnemo_curator.domains.mesh.sources.plaid import PlaidSource
+
+            src = PlaidSource(local_folder=str(tmp_path), volume_base=None)
+            dm = next(src[0])
+            assert dm.boundaries["surface"].points.shape == (_N_SURFACE, 3)
+            # No volume_base -> empty point cloud matching the surface's 3 dims.
+            assert dm.interior.points.shape == (0, 3)
+
+    def test_surface_cell_data(self, tmp_path: pathlib.Path) -> None:
+        """CellCenterFields are read into cell_data, validated against n_cells."""
+        with _patch_init_from_disk(tmp_path, add_surface_cell_fields=True):
+            from physicsnemo_curator.domains.mesh.sources.plaid import PlaidSource
+
+            src = PlaidSource(
+                local_folder=str(tmp_path),
+                surface_cell_fields=["Pressure"],
+            )
+            dm = next(src[0])
+            surf = dm.boundaries["surface"]
+            assert surf.cell_data is not None
+            assert "Pressure" in surf.cell_data
+            assert surf.cell_data["Pressure"].shape == (_N_EDGES,)
+
+    def test_cell_field_wrong_length_skipped(self, tmp_path: pathlib.Path) -> None:
+        """A CellCenterFields entry with a mismatched length is skipped, not raised."""
+        with _patch_init_from_disk(tmp_path, add_surface_cell_fields=True):
+            from physicsnemo_curator.domains.mesh.sources.plaid import PlaidSource
+
+            # Surface has no cell connectivity here -> n_cells == 0, so the
+            # mocked Pressure array (length _N_EDGES) mismatches and is dropped.
+            src = PlaidSource(
+                local_folder=str(tmp_path),
+                surface_cell_fields=["Pressure"],
+                surface_element_type=None,
+            )
+            dm = next(src[0])
+            assert dm.boundaries["surface"].cell_data is None or ("Pressure" not in dm.boundaries["surface"].cell_data)
+
+    def test_quad4_cell_data_expanded_to_split_triangles(self, tmp_path: pathlib.Path) -> None:
+        """QUAD_4 CellCenterFields (one value/quad) are duplicated 2x to match triangulated cells.
+
+        Regression test for Rotor37: CellCenterFields values are stored once
+        per original QUAD_4 element, but volume_element_type="QUAD_4" splits
+        each quad into 2 triangles, so cell_data must be expanded to align.
+        """
+        with _patch_init_from_disk(tmp_path, add_volume_cell_fields=True):
+            from physicsnemo_curator.domains.mesh.sources.plaid import PlaidSource
+
+            src = PlaidSource(local_folder=str(tmp_path), volume_cell_fields=["Density"])
+            dm = next(src[0])
+            assert dm.interior.cells.shape == (_N_QUADS * 2, 3)
+            assert dm.interior.cell_data is not None
+            assert "Density" in dm.interior.cell_data
+            assert dm.interior.cell_data["Density"].shape == (_N_QUADS * 2,)
+            # Each split-triangle pair shares its parent quad's value.
+            density = dm.interior.cell_data["Density"]
+            assert torch.equal(density[0::2], density[1::2])
+
+    def test_hexa8_split_into_6_tetrahedra(self) -> None:
+        """HEXA_8 elements are split into 6 simplicial tetrahedra each.
+
+        Exercises `_get_cells` directly (no dataset I/O needed): a single
+        unit-cube hexahedron, standard CGNS/VTK node order, should decompose
+        into 6 tetrahedra whose volumes sum back to exactly 1.0.
+        """
+        from unittest.mock import MagicMock
+
+        from physicsnemo_curator.domains.mesh.sources.plaid import PlaidSource
+
+        src = PlaidSource.__new__(PlaidSource)
+        src._zone = "Zone"
+        src._log = MagicMock()
+
+        hexa_conn = np.arange(8, dtype=np.int64)
+        sample = MagicMock()
+        sample.get_feature_by_path.side_effect = lambda path, t=None: hexa_conn if "Elements_HEXA_8" in path else None
+
+        cells = src._get_cells(sample, 0.0, "Base", "HEXA_8")
+        assert cells.shape == (6, 4)
+        assert cells.dtype == torch.int64
+
+        # Sub-cells from the same hex are consecutive (grouping required for
+        # `_build_mesh`'s repeat_interleave-based cell_data expansion).
+        assert torch.equal(cells.unique(), torch.arange(8, dtype=torch.int64))
+
+        points = torch.tensor(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [1, 1, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [1, 0, 1],
+                [1, 1, 1],
+                [0, 1, 1],
+            ],
+            dtype=torch.float64,
+        )
+        total_volume = 0.0
+        for tet in cells:
+            p0, p1, p2, p3 = points[tet]
+            total_volume += abs(torch.dot(p1 - p0, torch.linalg.cross(p2 - p0, p3 - p0)).item()) / 6
+        assert total_volume == pytest.approx(1.0)
+
+    def test_volume_base_none_yields_empty_interior(self, tmp_path: pathlib.Path) -> None:
+        """volume_base=None -> interior is an empty point cloud matching surface dims."""
+        with _patch_init_from_disk(tmp_path, add_surface_z=True):
+            from physicsnemo_curator.domains.mesh.sources.plaid import PlaidSource
+
+            src = PlaidSource(local_folder=str(tmp_path), volume_base=None)
+            dm = next(src[0])
+            assert dm.interior.n_points == 0
+            assert dm.interior.points.shape[-1] == 3  # matches 3-D surface
+            assert dm.boundaries["surface"].n_points == _N_SURFACE
+
+    def test_surface_base_none_omits_boundaries(self, tmp_path: pathlib.Path) -> None:
+        """surface_base=None -> boundaries is empty, interior is still the volume mesh."""
+        with _patch_init_from_disk(tmp_path):
+            from physicsnemo_curator.domains.mesh.sources.plaid import PlaidSource
+
+            src = PlaidSource(local_folder=str(tmp_path), surface_base=None)
+            dm = next(src[0])
+            assert dm.n_boundaries == 0
+            assert dm.interior.n_points == _N_VOLUME
+
+    def test_both_bases_none_raises(self, tmp_path: pathlib.Path) -> None:
+        """Both surface_base and volume_base None is a configuration error."""
+        with _patch_init_from_disk(tmp_path):
+            from physicsnemo_curator.domains.mesh.sources.plaid import PlaidSource
+
+            with pytest.raises(ValueError, match="surface_base"):
+                PlaidSource(local_folder=str(tmp_path), surface_base=None, volume_base=None)
