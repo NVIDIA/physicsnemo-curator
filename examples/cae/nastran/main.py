@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Curate Nastran tetrahedral models and modal OP2 results into native meshes."""
+"""Curate Nastran models and modal OP2 results into native or VTK meshes."""
 
 import argparse
 
-from physicsnemo_curator.domains.mesh import MeshSink, NastranSource
+from physicsnemo_curator.domains.mesh import MeshSink, MeshVTKSink, NastranSource
 from physicsnemo_curator.run import run_pipeline
 
 
@@ -26,7 +26,13 @@ def main() -> None:
     """Run a Nastran deck/OP2 curation pipeline."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="Deck file or directory of cases")
-    parser.add_argument("--output", required=True, help="Output directory for .pmsh meshes")
+    parser.add_argument("--output", required=True, help="Output directory")
+    parser.add_argument(
+        "--format",
+        choices=["pmsh", "vtu", "vtk", "vtp"],
+        default="pmsh",
+        help="Output format; vtp extracts the boundary surface",
+    )
     parser.add_argument("--file-pattern", default="**/*", help="Deck discovery glob")
     parser.add_argument("--op2-pattern", default="", help="Relative OP2 template; {stem} is the deck stem")
     parser.add_argument("--encoding", default="latin1", help="Deck encoding, e.g. cp932")
@@ -43,7 +49,13 @@ def main() -> None:
         read_results=not args.geometry_only,
         punch=args.punch,
     )
-    pipeline = source.write(MeshSink(output_dir=args.output, naming_template="{relpath}/{stem}_{seq}"))
+    naming = "{relpath}/{stem}_{seq}"
+    sink = (
+        MeshSink(output_dir=args.output, naming_template=naming)
+        if args.format == "pmsh"
+        else MeshVTKSink(output_dir=args.output, file_format=args.format, naming_template=naming)
+    )
+    pipeline = source.write(sink)
     results = run_pipeline(pipeline, backend="process_pool", n_jobs=args.workers, use_tui=False)
     print(f"Curated {len(results)} decks into {sum(len(paths) for paths in results)} meshes")
 

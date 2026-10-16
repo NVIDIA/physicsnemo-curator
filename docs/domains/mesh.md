@@ -367,6 +367,47 @@ sink = MeshSink(
 paths = pipeline[0]  # ['./output/boundary_0.vtp.pmsh']
 ```
 
+### MeshVTKSink
+
+{class}`~physicsnemo_curator.domains.mesh.sinks.mesh_vtk.MeshVTKSink` exports
+meshes for ParaView and VTK-based interchange. Select `file_format="vtu"`
+(default) or `"vtk"` for a complete unstructured volume, or `"vtp"` to
+extract its boundary surface. VTP omits interior nodes and volume cells.
+
+```python
+from physicsnemo_curator.domains.mesh import MeshVTKSink, NastranSource
+
+pipeline = NastranSource("./modal_cases/").write(
+    MeshVTKSink("./vtk/", file_format="vtu", naming_template="{relpath}/{stem}_{seq}")
+)
+paths = pipeline[0]
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `output_dir` | required | Output directory |
+| `file_format` | `"vtu"` | `"vtu"`, `"vtk"`, or boundary-surface `"vtp"` |
+| `naming_template` | `"mesh_{index:04d}_{seq}"` | Supports index/seq and source relpath/stem |
+| `binary` | `True` | Use `False` for ASCII |
+
+Each mesh/subcase gets its own file. Nastran modes become separate
+three-component vectors such as `mode_shape_m0001`, `mode_rotation_m0001`,
+and `mode_shape_m0007`, using original mode numbers. Select the appropriate
+vector in ParaView's **Warp By Vector** to inspect a mode; modes are not
+time steps. Other tensor components are flattened into VTK arrays. Integer
+IDs and float64 precision are retained; bool and half-precision fields are
+stored as uint8 and float32, respectively.
+
+Global tensors, including constraint tables, are written to VTK Field Data.
+Nested paths use `/`, e.g. `constraints/mpc_terms` (`~` and `/` in individual
+keys are escaped as `~0` and `~1`). The JSON `physicsnemo_schema` field
+records original paths, shapes and dtypes, and describes empty arrays that
+VTK cannot store directly. For VTP, point/cell fields and their shapes refer
+to the surface subset; global constraints still use the full model's
+original IDs. VTK readers do not automatically reconstruct these fields as
+a native TensorDict or apply the constraint equations. Use `.pmsh` for the
+native structured training representation.
+
 ### Transform filters
 
 Several generic, in-pipeline transform filters complement the statistics
