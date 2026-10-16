@@ -53,6 +53,11 @@ mesh = [
     "ansys-dpf-core>=0.12",
     "zarr>=3.0",
 ]
+nastran = [
+    "pyNastran>=1.4.1,<1.5",
+    # pyNastran 1.4 uses NumPy 1.x; newer Arrow wheels require NumPy 2.
+    "pyarrow<26",
+]
 da = [
     "xarray>=2024.1",
     "earth2studio @ git+https://github.com/NVIDIA/earth2studio.git@main",
