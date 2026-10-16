@@ -35,17 +35,20 @@ from physicsnemo_curator.domains.mesh.filters.quality import MeshQualityFilter
 from physicsnemo_curator.domains.mesh.filters.random_permutation import RandomPermutationFilter
 from physicsnemo_curator.domains.mesh.filters.stats import MeshStatsFilter, merge_welford_stats
 from physicsnemo_curator.domains.mesh.filters.wall_node import WallNodeFilter
+from physicsnemo_curator.domains.mesh.sinks.mesh_vtk import MeshVTKSink
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 from physicsnemo_curator.domains.mesh.sources.ahmedml import AhmedMLSource
 from physicsnemo_curator.domains.mesh.sources.ansys_rst import AnsysRSTSource
 from physicsnemo_curator.domains.mesh.sources.d3plot import D3PlotSource
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.sources.nastran import NastranSource
 from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
 # Register submodule and components with the global registry.
 registry.register_submodule("mesh", "Mesh data curation (physicsnemo.mesh.Mesh)", "physicsnemo.mesh")
 registry.register_source("mesh", AnsysRSTSource)
+registry.register_source("mesh", NastranSource)
 registry.register_source("mesh", D3PlotSource)
 registry.register_source("mesh", VTKSource)
 registry.register_source("mesh", DrivAerMLSource)
@@ -60,6 +63,7 @@ registry.register_filter("mesh", PrecisionFilter)
 registry.register_filter("mesh", RandomPermutationFilter)
 registry.register_filter("mesh", WallNodeFilter)
 registry.register_sink("mesh", MeshSink)
+registry.register_sink("mesh", MeshVTKSink)
 
 __all__ = [
     "AhmedMLSource",
@@ -72,6 +76,8 @@ __all__ = [
     "MeshQualityFilter",
     "MeshSink",
     "MeshStatsFilter",
+    "MeshVTKSink",
+    "NastranSource",
     "NavierStokesCylinderSource",
     "PrecisionFilter",
     "RandomPermutationFilter",

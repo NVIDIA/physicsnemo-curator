@@ -159,6 +159,105 @@ from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 source = DrivAerMLSource(mesh_type="boundary")
 ```
 
+### NastranSource
+
+{class}`~physicsnemo_curator.domains.mesh.sources.nastran.NastranSource` reads
+Nastran `.deck`, `.bdf`, `.dat`, `.nas`, and `.pch` models with optional paired
+`.op2` real normal-mode results. Install the additional reader dependencies
+with Python 3.12 (pyNastran 1.4 requires NumPy 1.x):
+
+```bash
+pip install 'physicsnemo-curator[mesh,nastran]'
+# From a source checkout:
+uv sync --python 3.12 --extra mesh --extra nastran
+```
+
+```python
+from physicsnemo_curator.domains.mesh import NastranSource, MeshSink
+
+# Each subdirectory contains a deck and its OP2 result file.
+source = NastranSource("./modal_cases/")
+mesh = next(source[0])
+pipeline = source.write(MeshSink(output_dir="./curated/"))
+paths = pipeline[0]
+```
+
+Directory discovery is recursive and deterministic. A single deck file can
+also be passed directly. Each source index is one deck and yields one mesh
+per real eigenvector result table, usually one per subcase, with all modes
+stored together. For geometry alone use `read_results=False`.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `input_path` | required | Deck file or directory |
+| `file_pattern` | `"**/*"` | Deck discovery glob within a directory |
+| `op2_pattern` | `""` | Relative OP2 filename template with `{stem}` |
+| `read_results` | `True` | Require paired OP2 modal results |
+| `encoding` | `"latin1"` | Deck text encoding; use `"cp932"` for Japanese text |
+| `punch` | `False` | Bulk-data-only input without executive/case control; automatic for `.pch` |
+
+An empty `op2_pattern` first selects a same-stem OP2, then a unique sibling
+OP2. Thus a directory containing `Input_model.deck` and `Output_model.op2`
+works directly. Multiple candidate OP2 files require an explicit template
+such as `op2_pattern="{stem}.op2"` or a relative filename. Missing results
+raise an error. `relative_path(index)` supports sink naming templates.
+
+**Geometry and fields:** CTETRA4 and CTETRA10 elements with PSOLID/MAT1 are
+supported. A 10-node tetrahedron becomes eight linear tetrahedra, retaining
+all midside nodes. This is a piecewise linear approximation of curved
+quadratic elements. Parent cell IDs and material fields are repeated on the
+eight children. Coordinates use the Nastran basic frame; translational and
+rotational modes are transformed from rectangular GRID CD frames to basic
+axes. Results are matched by GRID ID, independently of deck/OP2 ordering.
+Incomplete, duplicate, or mismatched GRID result tables raise an error.
+
+| Location | Fields | Shape |
+|----------|--------|-------|
+| `point_data` | `node_id`, `input_coordinate_id`, `output_coordinate_id` | `(N,)` |
+| `point_data` | `output_coordinate_basis` (local-to-basic rotation, row vectors) | `(N, 3, 3)` |
+| `point_data` | `permanent_spc` (GRID PS, six DOF mask) | `(N, 6)` |
+| `point_data` | `mode_shape`, `mode_rotation` | `(N, M, 3)` |
+| `cell_data` | `element_id`, `property_id`, `material_id` | `(E,)` |
+| `cell_data` | `young_modulus`, `poisson_ratio`, `density` | `(E,)` |
+| `global_data` | `mode_numbers`, `eigenvalues`, `frequencies` | `(M,)` |
+| `global_data` | `subcase_id`, `spc_id`, `mpc_id` | scalar |
+
+Units and solver eigenvector normalization are preserved. `frequencies`
+contains solver-reported cycles per model time unit (Hz if time is seconds).
+Signed eigenvalues are retained, including slightly negative rigid-body
+modes. No extra normalization, deformation, or unit conversion is applied.
+
+**Constraints:** `global_data["constraints"]` holds numeric tables in
+original Nastran IDs. Definitions are retained separately from the selected
+subcase's `spc_id`/`mpc_id`; inactive sets are not merged into active ones.
+
+| Key | Columns / meaning |
+|-----|-------------------|
+| `spc` | `(set_id, node_id, component)` for each SPC/SPC1 DOF |
+| `spc_value` | Enforced displacement aligned with `spc` rows |
+| `spcadds`, `mpcadds` | `(combined_set_id, child_set_id)` |
+| `mpc_set_id` | Set ID per MPC equation |
+| `mpc_offsets` | Offsets into the term arrays, including final end offset |
+| `mpc_terms` | `(node_id, component)` per MPC term |
+| `mpc_coefficient` | Coefficient per MPC term |
+| `rbe2` | `(element_id, independent_node_id, dependent_node_id, components)` |
+| `rbe2_alpha` | Thermal expansion coefficient per RBE2 dependent-node row |
+| `rbe2_tref` | Reference temperature per RBE2 dependent-node row |
+
+SPC/MPC components refer to each node's original output coordinate system;
+its ID and basis are retained in `output_coordinate_id` and
+`output_coordinate_basis`. RBE2 components use the Nastran
+component code (e.g. `123456`). These tables preserve definitions; the
+reader does not solve or enforce the constraints.
+
+The initial reader supports tetrahedral real modal analysis. Other element
+and material families, RBE3, cylindrical/spherical output frames, complex
+modes, transient results, stress/strain, and element energies are outside
+this reader's scope. Unsupported mesh/constraint cards raise an error;
+only eigenvector tables are requested from OP2.
+
+See `examples/cae/nastran/` for a command-line curation pipeline.
+
 ### MeanFilter
 
 {class}`~physicsnemo_curator.domains.mesh.filters.mean.MeanFilter` computes the spatial mean
@@ -267,6 +366,47 @@ sink = MeshSink(
 )
 paths = pipeline[0]  # ['./output/boundary_0.vtp.pmsh']
 ```
+
+### MeshVTKSink
+
+{class}`~physicsnemo_curator.domains.mesh.sinks.mesh_vtk.MeshVTKSink` exports
+meshes for ParaView and VTK-based interchange. Select `file_format="vtu"`
+(default) or `"vtk"` for a complete unstructured volume, or `"vtp"` to
+extract its boundary surface. VTP omits interior nodes and volume cells.
+
+```python
+from physicsnemo_curator.domains.mesh import MeshVTKSink, NastranSource
+
+pipeline = NastranSource("./modal_cases/").write(
+    MeshVTKSink("./vtk/", file_format="vtu", naming_template="{relpath}/{stem}_{seq}")
+)
+paths = pipeline[0]
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `output_dir` | required | Output directory |
+| `file_format` | `"vtu"` | `"vtu"`, `"vtk"`, or boundary-surface `"vtp"` |
+| `naming_template` | `"mesh_{index:04d}_{seq}"` | Supports index/seq and source relpath/stem |
+| `binary` | `True` | Use `False` for ASCII |
+
+Each mesh/subcase gets its own file. Nastran modes become separate
+three-component vectors such as `mode_shape_m0001`, `mode_rotation_m0001`,
+and `mode_shape_m0007`, using original mode numbers. Select the appropriate
+vector in ParaView's **Warp By Vector** to inspect a mode; modes are not
+time steps. Other tensor components are flattened into VTK arrays. Integer
+IDs and float64 precision are retained; bool and half-precision fields are
+stored as uint8 and float32, respectively.
+
+Global tensors, including constraint tables, are written to VTK Field Data.
+Nested paths use `/`, e.g. `constraints/mpc_terms` (`~` and `/` in individual
+keys are escaped as `~0` and `~1`). The JSON `physicsnemo_schema` field
+records original paths, shapes and dtypes, and describes empty arrays that
+VTK cannot store directly. For VTP, point/cell fields and their shapes refer
+to the surface subset; global constraints still use the full model's
+original IDs. VTK readers do not automatically reconstruct these fields as
+a native TensorDict or apply the constraint equations. Use `.pmsh` for the
+native structured training representation.
 
 ### Transform filters
 
