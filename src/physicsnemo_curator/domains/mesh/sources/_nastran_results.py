@@ -21,6 +21,7 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import json
+from collections import defaultdict
 from typing import Any
 
 import numpy as np
@@ -40,6 +41,7 @@ def _array_tensor(value: np.ndarray) -> torch.Tensor | None:
 def _archive_result(result: Any, name: str, key: Any) -> tuple[TensorDict, dict[str, Any]]:
     """Retain all numeric instance arrays and metadata for any backend result class."""
     arrays: dict[str, torch.Tensor] = {}
+    sparse: dict[str, TensorDict] = {}
     metadata: dict[str, Any] = {
         "table": name,
         "key": _json_value(key),
@@ -47,7 +49,8 @@ def _archive_result(result: Any, name: str, key: Any) -> tuple[TensorDict, dict[
         "subcase_id": getattr(result, "isubcase", None),
         "attributes": {},
     }
-    for attribute, value in vars(result).items():
+    attributes = vars(result) if hasattr(result, "__dict__") else {"data": result}
+    for attribute, value in attributes.items():
         if attribute in {"data_frame", "h5_file"}:
             continue
         if isinstance(value, np.ndarray):
@@ -55,6 +58,23 @@ def _archive_result(result: Any, name: str, key: Any) -> tuple[TensorDict, dict[
             if tensor is not None:
                 arrays[attribute] = tensor
                 continue
+        elif hasattr(value, "tocoo"):
+            # Monitor-point tables may store their values in sparse matrices.
+            coo = value.tocoo()
+            sparse[attribute] = TensorDict(
+                {
+                    "row": _array_tensor(coo.row),
+                    "column": _array_tensor(coo.col),
+                    "data": _array_tensor(coo.data),
+                },
+                batch_size=[],
+            )
+            metadata.setdefault("sparse_arrays", {})[attribute] = {
+                "shape": list(coo.shape),
+                "dtype": str(coo.dtype),
+                "storage": "coo",
+            }
+            continue
         metadata["attributes"][attribute] = _json_value(value)
     if hasattr(result, "get_headers"):
         metadata["headers"] = list(result.get_headers())
@@ -64,22 +84,48 @@ def _archive_result(result: Any, name: str, key: Any) -> tuple[TensorDict, dict[
         if tensor is not None:
             arrays["data"] = tensor
     metadata["arrays"] = {k: {"shape": list(v.shape), "dtype": str(v.dtype)} for k, v in arrays.items()}
-    return TensorDict(
+    archive = TensorDict(
         {"arrays": TensorDict(arrays, batch_size=[]), "metadata": _encode_json(metadata)}, batch_size=[]
-    ), metadata
+    )
+    if sparse:
+        archive["sparse_arrays"] = TensorDict(sparse, batch_size=[])
+    return archive, metadata
 
 
 def _discover_results(op2: Any, patterns: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Inventory all nonempty backend tables and select families by glob, never by hardcoded names."""
     includes = [p.strip() for p in patterns.split(",") if p.strip()] or ["*"]
     records, catalog = [], []
-    for name in op2.get_table_types():
+    names = list(dict.fromkeys(op2.get_table_types()))
+    seen = set(names)
+    for name in names:
         table = op2.get_result(name)
-        if not isinstance(table, dict) or not table:
+        if table is None:
+            continue
+        # PSD collections expose a second level of table families. Other
+        # singleton objects (GPDT, EQEXIN, optimization results) are results.
+        if callable(getattr(table, "get_table_types", None)):
+            children = table.get_table_types()
+            for child in children:
+                if child not in seen:
+                    names.append(child)
+                    seen.add(child)
+            continue
+        if name == "cstm" and table.data is None:
+            continue  # pyNastran initializes an empty coordinate-table object.
+        if isinstance(table, dict | list | tuple) and not table:
+            continue
+        if isinstance(table, np.ndarray) and not table.size:
             continue
         selected = any(fnmatch.fnmatchcase(name, pattern) for pattern in includes)
-        for key, result in table.items():
-            if not hasattr(result, "__dict__"):
+        entries = table.items() if isinstance(table, dict) else [(None, table)]
+        for key, result in entries:
+            if not selected:
+                catalog.append({"table": name, "key": _json_value(key), "status": "excluded_by_user"})
+                continue
+            if not hasattr(result, "__dict__") and not isinstance(
+                result, np.ndarray | np.generic | dict | list | tuple | str | bytes | int | float | complex | bool
+            ):
                 catalog.append(
                     {
                         "table": name,
@@ -88,9 +134,6 @@ def _discover_results(op2: Any, patterns: str) -> tuple[list[dict[str, Any]], li
                         "reason": "backend object has no instance attributes",
                     }
                 )
-                continue
-            if not selected:
-                catalog.append({"table": name, "key": _json_value(key), "status": "excluded_by_user"})
                 continue
             archive, metadata = _archive_result(result, name, key)
             identity = json.dumps([name, _json_value(key)], sort_keys=True).encode("utf-8")
@@ -128,13 +171,13 @@ def _discover_results(op2: Any, patterns: str) -> tuple[list[dict[str, Any]], li
         if hasattr(data, "tocoo"):
             coo = data.tocoo()
             arrays = {
-                "row": torch.from_numpy(coo.row.copy()),
-                "column": torch.from_numpy(coo.col.copy()),
-                "data": torch.from_numpy(coo.data.copy()),
+                "row": _array_tensor(coo.row),
+                "column": _array_tensor(coo.col),
+                "data": _array_tensor(coo.data),
             }
             metadata = {"table": f"matrices.{name}", "shape": list(data.shape), "storage": "coo", "subcase_id": None}
         else:
-            arrays = {"data": torch.from_numpy(np.array(data, copy=True))}
+            arrays = {"data": _array_tensor(data)}
             metadata = {"table": f"matrices.{name}", "shape": list(data.shape), "storage": "dense", "subcase_id": None}
         metadata["attributes"] = {k: _json_value(v) for k, v in vars(matrix).items() if k != "data"}
         metadata["class"] = type(matrix).__name__
@@ -159,11 +202,15 @@ def _discover_results(op2: Any, patterns: str) -> tuple[list[dict[str, Any]], li
 def _rotate_nodal(data: np.ndarray, model: Any, node_ids: list[int]) -> np.ndarray:
     """Rotate recognized displacement-like vectors, retaining raw table values separately."""
     data = data.copy()
-    for cid in {model.nodes[nid].Cd() for nid in node_ids} - {0}:
+    coordinate_rows: dict[int, list[int]] = defaultdict(list)
+    for row, nid in enumerate(node_ids):
+        coordinate_rows[model.nodes[nid].Cd()].append(row)
+    for cid, rows in coordinate_rows.items():
+        if cid == 0:
+            continue
         coord = model.coords[cid]
         if coord.type not in {"CORD1R", "CORD2R"}:
             raise NotImplementedError(f"Output coordinate system {cid}: only rectangular CD projection is supported")
-        rows = [i for i, nid in enumerate(node_ids) if model.nodes[nid].Cd() == cid]
         for start in range(0, data.shape[-1], 3):
             data[rows, :, start : start + 3] = data[rows, :, start : start + 3] @ coord.beta()
     return data
@@ -183,6 +230,8 @@ def _project_result(
     # PyNastran normally canonicalizes SORT2, but never guess the layout.
     if getattr(result, "sort_method", 1) != 1:
         return None, {}, "raw table: SORT2 layout requires a dedicated adapter"
+    if getattr(result, "superelement_adaptivity_index", None) not in (None, "", 0):
+        return None, {}, "raw table: superelement/adaptive IDs require a dedicated association adapter"
     name = record["name"]
     field = record.get("field_name", name)
     node_gridtype = getattr(result, "node_gridtype", None)

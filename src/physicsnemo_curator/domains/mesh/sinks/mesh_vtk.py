@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import pathlib
 import tempfile
+import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
 
 def _numpy(tensor: torch.Tensor) -> np.ndarray:
     """Detach a tensor and retain supported numeric precision on the CPU."""
-    tensor = tensor.detach().cpu()
+    tensor = tensor.detach().resolve_conj().resolve_neg().cpu()
     if tensor.dtype in {torch.float16, torch.bfloat16}:
         tensor = tensor.float()
     data = tensor.numpy()
@@ -109,6 +110,68 @@ def _repair_norm_ranges(grid: Any) -> None:
             array.GetInformation().Set(vtkDataArray.L2_NORM_RANGE(), bounds, 2)
 
 
+def _canonical_projection(node_ids: torch.Tensor, element_ids: torch.Tensor) -> np.ndarray:
+    """Sort simplex node IDs and rows while preserving duplicate multiplicities."""
+    rows = np.column_stack((element_ids.numpy(), np.sort(node_ids.numpy(), axis=1)))
+    return rows[np.lexsort(rows.T[::-1])]
+
+
+def _original_cells(mesh: Mesh) -> tuple[np.ndarray, np.ndarray, TensorDict]:
+    """Validate the native projection before recovering retained Nastran cells."""
+    nastran = mesh.global_data["nastran"]
+    guidance = "; use_original_geometry=False to export the projection"
+    expected_nodes = nastran.get("projection_node_ids")
+    expected_elements = nastran.get("projection_element_ids")
+    if expected_nodes is None or expected_elements is None:
+        raise ValueError("Original Nastran export requires its projection snapshot" + guidance)
+    node_ids = mesh.point_data.get("node_id")
+    element_ids = mesh.cell_data.get("element_id")
+    if node_ids is None or element_ids is None or node_ids.ndim != 1 or element_ids.ndim != 1:
+        raise ValueError("Original Nastran node/element IDs changed" + guidance)
+    if node_ids.unique().numel() != mesh.n_points:
+        raise ValueError("Original Nastran node IDs must be unique" + guidance)
+    actual_nodes = node_ids[mesh.cells]
+    if (
+        actual_nodes.shape != expected_nodes.shape
+        or element_ids.shape != expected_elements.shape
+        or not np.array_equal(
+            _canonical_projection(actual_nodes, element_ids),
+            _canonical_projection(expected_nodes, expected_elements),
+        )
+    ):
+        raise ValueError("Projected Nastran cells changed" + guidance)
+
+    cell_data = nastran["element_data"]
+    parent_index = {eid: i for i, eid in enumerate(cell_data["element_id"].tolist())}
+    rows = [parent_index[eid] for eid in element_ids.tolist()]
+    if set(mesh.cell_data.keys(True, True)) != set(cell_data.keys(True, True)):
+        raise ValueError("Projected cell fields changed" + guidance)
+    for key, value in cell_data.items(True, True):
+        actual, expected = mesh.cell_data[key], value[rows]
+        if (
+            actual.dtype != expected.dtype
+            or actual.shape != expected.shape
+            or not torch.allclose(actual, expected, rtol=0, atol=0, equal_nan=True)
+        ):
+            raise ValueError("Projected cell values changed" + guidance)
+
+    geometry = nastran["geometry"]
+    node_index = {nid: i for i, nid in enumerate(node_ids.tolist())}
+    original_ids = geometry["point_node_ids"][geometry["connectivity"]].tolist()
+    if any(nid not in node_index for nid in original_ids):
+        raise ValueError("Original Nastran nodes were removed" + guidance)
+    flat = np.array([node_index[nid] for nid in original_ids], dtype=np.int64)
+    offsets = geometry["offsets"].numpy()
+    cells = np.empty(len(flat) + len(offsets) - 1, dtype=np.int64)
+    sizes = np.diff(offsets)
+    positions = offsets[:-1] + np.arange(len(sizes))
+    cells[positions] = sizes
+    mask = np.ones(len(cells), dtype=bool)
+    mask[positions] = False
+    cells[mask] = flat
+    return cells, geometry["vtk_cell_type"].numpy(), cell_data
+
+
 class MeshVTKSink(MeshVTUSink):
     """Export volume meshes as VTU/legacy VTK or their boundary surface as VTP.
 
@@ -131,10 +194,17 @@ class MeshVTKSink(MeshVTUSink):
         Output stem template with index/seq and source-backed relpath/stem
         placeholders. Default ``"mesh_{index:04d}_{seq}"``.
     binary : bool
-        Write binary files by default; False writes ASCII.
+        Write binary files by default; False writes ASCII. VTU/VTP ASCII
+        rejects negative infinity because VTK's reader loses its sign.
     use_original_geometry : bool
         Prefer retained Nastran cells (default True). False exports the
-        native simplicial cells, including transformed cell fields.
+        native simplicial cells, including transformed cell fields. Original
+        export rejects changed connectivity or cell fields.
+
+    Examples
+    --------
+    >>> sink = MeshVTKSink(output_dir="./output", file_format="vtu")  # doctest: +SKIP
+    >>> paths = sink(mesh_iterator, index=0)  # doctest: +SKIP
     """
 
     name: ClassVar[str] = "Mesh VTK Writer"
@@ -176,32 +246,71 @@ class MeshVTKSink(MeshVTUSink):
         binary: bool = True,
         use_original_geometry: bool = True,
     ) -> None:
+        """Initialize the VTK sink and validate output naming."""
         if file_format not in {"vtu", "vtk", "vtp"}:
             raise ValueError("file_format must be 'vtu', 'vtk', or 'vtp'")
+        if naming_template is not None:
+            try:
+                naming_template.format(index=0, seq=0, relpath="test", stem="test")
+            except (KeyError, IndexError, ValueError, AttributeError) as exc:
+                raise ValueError(
+                    f"Invalid naming_template {naming_template!r}: {exc}. "
+                    "Only {index}, {seq}, {relpath}, and {stem} placeholders are supported."
+                ) from exc
         super().__init__(output_dir, naming_template or "mesh_{index:04d}_{seq}", flip_triangle_normals=False)
         self._file_format = file_format
         self._binary = binary
         self._use_original_geometry = use_original_geometry
 
     def __call__(self, items: Iterator[Mesh], index: int) -> list[str]:
-        """Write one atomic file per mesh and return all output paths."""
-        paths = []
+        """Consume meshes and write one atomic file per item.
+
+        Parameters
+        ----------
+        items : Iterator[Mesh]
+            Meshes to persist.
+        index : int
+            Source index used in output names.
+
+        Returns
+        -------
+        list[str]
+            Paths of the written files.
+        """
+        started = time.perf_counter()
+        paths: list[str] = []
+        seen: set[pathlib.Path] = set()
+        values: dict[str, Any] = {"index": index, "relpath": "", "stem": ""}
+        relative_path = getattr(self._source, "relative_path", None)
+        if callable(relative_path):
+            rel = pathlib.PurePosixPath(relative_path(index))
+            values.update(relpath=str(rel.parent), stem=rel.stem)
         for seq, mesh in enumerate(items):
-            values: dict[str, Any] = {"index": index, "seq": seq}
-            relative_path = getattr(self._source, "relative_path", None)
-            if callable(relative_path):
-                rel = pathlib.PurePosixPath(relative_path(index))
-                values.update(relpath=str(rel.parent), stem=rel.stem)
+            if not callable(relative_path) and (
+                "{relpath" in self._naming_template or "{stem" in self._naming_template
+            ):
+                raise ValueError("naming_template requires a source with relative_path(index)")
+            values["seq"] = seq
             name = self._naming_template.format(**values)
             suffix = "." + self._file_format
             if not name.endswith(suffix):
                 name += suffix
             path = self._output_dir / name
-            if str(path) in paths:
+            resolved = path.resolve()
+            if not resolved.is_relative_to(self._output_dir.resolve()):
+                raise ValueError("naming_template must resolve within output_dir")
+            if resolved in seen:
                 raise ValueError("naming_template produces duplicate output paths; include {seq}")
+            seen.add(resolved)
             self._write_mesh(mesh, path)
             paths.append(str(path))
-        self._log.info("Wrote %d %s files for index %d", len(paths), self._file_format.upper(), index)
+        self._log.info(
+            "Wrote %d %s files for index %d (%.2fs)",
+            len(paths),
+            self._file_format.upper(),
+            index,
+            time.perf_counter() - started,
+        )
         return paths
 
     def _write_mesh(self, mesh: Mesh, output_path: pathlib.Path) -> None:
@@ -212,31 +321,7 @@ class MeshVTKSink(MeshVTUSink):
         original_geometry = mesh.global_data.get(("nastran", "geometry")) if self._use_original_geometry else None
         cell_data = mesh.cell_data
         if original_geometry is not None:
-            offsets = original_geometry["offsets"].tolist()
-            node_index = {nid: i for i, nid in enumerate(mesh.point_data["node_id"].tolist())}
-            original_ids = original_geometry["point_node_ids"][original_geometry["connectivity"]].tolist()
-            if any(nid not in node_index for nid in original_ids):
-                raise ValueError(
-                    "Original Nastran nodes were removed; use_original_geometry=False exports the projection"
-                )
-            flat = [node_index[nid] for nid in original_ids]
-            packed = []
-            for start, end in zip(offsets[:-1], offsets[1:], strict=True):
-                packed.extend([end - start, *flat[start:end]])
-            cells = np.array(packed, dtype=np.int64)
-            types = original_geometry["vtk_cell_type"].numpy()
-            cell_data = mesh.global_data["nastran", "element_data"]
-            parent_index = {eid: i for i, eid in enumerate(cell_data["element_id"].tolist())}
-            if set(mesh.cell_data["element_id"].tolist()) != set(parent_index):
-                raise ValueError("Projected elements changed; use_original_geometry=False to export the projection")
-            if set(mesh.cell_data.keys()) != set(cell_data.keys()):
-                raise ValueError("Projected cell fields changed; use_original_geometry=False to export those fields")
-            rows = [parent_index[eid] for eid in mesh.cell_data["element_id"].tolist()]
-            for key in cell_data.keys():  # noqa: SIM118 - TensorDict iterates batch rows, not keys.
-                if not torch.allclose(mesh.cell_data[key], cell_data[key][rows], rtol=0, atol=0, equal_nan=True):
-                    raise ValueError(
-                        "Projected cell values changed; use_original_geometry=False to export those values"
-                    )
+            cells, types, cell_data = _original_cells(mesh)
         else:
             cells, types = self._build_cells(mesh)
             if (mesh.n_cells and len(types) == 0) or np.any(types == 0):
@@ -258,6 +343,13 @@ class MeshVTKSink(MeshVTUSink):
             )
         if "physicsnemo_schema" in grid.field_data:
             raise ValueError("physicsnemo_schema is reserved for VTK export metadata")
+        if self._file_format in {"vtu", "vtp"} and not self._binary:
+            arrays = (grid.points, *grid.point_data.values(), *grid.cell_data.values(), *grid.field_data.values())
+            if any(np.issubdtype(array.dtype, np.floating) and np.isneginf(array).any() for array in arrays):
+                raise ValueError(
+                    "VTK XML ASCII cannot preserve negative infinity; use binary=True or file_format='vtk' "
+                    "for legacy VTK ASCII"
+                )
         if self._file_format == "vtp":
             from vtkmodules.vtkFiltersGeometry import vtkDataSetSurfaceFilter
 
@@ -279,12 +371,34 @@ class MeshVTKSink(MeshVTUSink):
         with tempfile.NamedTemporaryFile(dir=output_path.parent, suffix=output_path.suffix, delete=False) as file:
             temp_path = pathlib.Path(file.name)
         try:
-            grid.save(str(temp_path), binary=self._binary)
+            if self._file_format == "vtk" and not self._binary:
+                from vtkmodules.vtkIOLegacy import vtkUnstructuredGridWriter
+
+                writer = vtkUnstructuredGridWriter()
+                writer.SetFileName(str(temp_path))
+                writer.SetInputData(grid)
+                writer.SetFileTypeToASCII()
+                # VTK's default 11 digits truncate float64 source values.
+                writer.SetPrecision(17)
+                if not writer.Write():
+                    raise OSError(f"VTK writer failed: {output_path}")
+            else:
+                grid.save(str(temp_path), binary=self._binary)
             if temp_path.stat().st_size == 0:
                 raise OSError(f"VTK writer produced an empty file: {output_path}")
             temp_path.replace(output_path)
         finally:
             temp_path.unlink(missing_ok=True)
+
+    @property
+    def file_format(self) -> str:
+        """Return the VTK output format."""
+        return self._file_format
+
+    @property
+    def use_original_geometry(self) -> bool:
+        """Return whether retained Nastran cells are preferred."""
+        return self._use_original_geometry
 
 
 def read_vtk_data(path: str) -> dict[str, TensorDict]:
@@ -292,11 +406,30 @@ def read_vtk_data(path: str) -> dict[str, TensorDict]:
 
     This returns point/cell/global TensorDicts rather than constructing a
     simplicial Mesh: Nastran VTU/VTK preserves original higher-order cells.
+
+    Parameters
+    ----------
+    path : str
+        File produced by :class:`MeshVTKSink`.
+
+    Returns
+    -------
+    dict[str, TensorDict]
+        Tensor fields keyed by ``point_data``, ``cell_data``, and ``global_data``.
+
+    Raises
+    ------
+    ValueError
+        If the file lacks a supported PhysicsNeMo tensor schema.
     """
     import pyvista as pv
 
     grid = pv.read(path)
+    if "physicsnemo_schema" not in grid.field_data:
+        raise ValueError("File has no physicsnemo_schema; read_vtk_data requires MeshVTKSink output")
     schema = json.loads(grid.field_data["physicsnemo_schema"][0])
+    if schema.get("version") != 1:
+        raise ValueError(f"Unsupported PhysicsNeMo VTK schema version: {schema.get('version')!r}")
     blocks = {}
     for association in ("point_data", "cell_data", "global_data"):
         arrays = grid.field_data if association == "global_data" else getattr(grid, association)
@@ -312,7 +445,10 @@ def read_vtk_data(path: str) -> dict[str, TensorDict]:
             else:
                 parts = [np.asarray(arrays[name]) for name in names]
                 if entry.get("encoding") == "complex":
-                    data = parts[0] + 1j * parts[1]
+                    # Arithmetic reconstruction mixes real/imaginary NaN/Inf.
+                    data = np.empty(parts[0].shape, dtype=np.result_type(parts[0].dtype, np.complex64))
+                    data.real = parts[0]
+                    data.imag = parts[1]
                 elif entry.get("encoding") == "modes":
                     data = np.stack(parts, axis=1)
                 else:

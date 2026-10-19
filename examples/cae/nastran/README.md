@@ -25,16 +25,21 @@ The source prefers a same-stem OP2, otherwise requires a unique sibling
 OP2. Use `--op2-pattern 'results_{stem}.op2'` for explicit pairing,
 `--encoding cp932` for Japanese comments, and `--workers 4` to process
 independent decks in parallel. `--punch` accepts bulk-data-only decks;
-`.pch` files automatically use this mode. Outputs mirror case directories.
+`.pch` files automatically use this mode. If INCLUDE files also have deck
+extensions, pass the main deck directly or use a discovery glob such as
+`--file-pattern '**/Input*.deck'`. Outputs mirror case directories.
 Each subcase and topological dimension yields a separate mesh.
 
 All OP2 table families exposed by pyNastran are discovered by default.
-Their numeric arrays, IDs, time/frequency/mode axes, component headers,
+Standalone tables, nested PSD families, and sparse monitor tables are
+included. Their numeric arrays, IDs, time/frequency/mode axes, component headers,
 and other attributes are retained under `global_data["nastran", "results"]`.
 This includes complex, transient, energy, and layered stress/strain tables.
 Unambiguous GRID and element tables also become named mesh fields;
 sparse fields contain NaN and a `__valid` mask. Layered/integration-point
 results remain raw, without guessed averaging or coordinate transforms.
+Superelement/adaptive IDs require a dedicated association adapter and also
+remain raw.
 Use `--result-patterns 'displacements,strain_energy.*'` to select families;
 the catalog records exclusions. Matrix names use `matrices.<name>`.
 
@@ -66,14 +71,17 @@ tetrahedra. Parent cell fields repeat on children: do not sum child strain
 energies. Original element values are in `nastran/element_data`. VTU/VTK
 export original cells and parent fields by default. Use
 `--projected-geometry` to export the native linear cells, including any
-transformed cell features. Supported geometry includes common rods/beams,
+transformed cell features. Original-cell export rejects removed, duplicated,
+or remeshed native cells; point/cell permutations remain valid. Supported geometry includes common rods/beams,
 triangles/quads, tetrahedra, hexahedra, wedges, and pyramids. Unsupported
 topology fails explicitly.
 
 Complete real modes also expose `mode_shape`, `mode_rotation`, frequencies,
 and original mode numbers. VTK splits modal aliases into vectors such as
 `mode_shape_m0001`; select one in ParaView's **Warp By Vector**. Complex
-fields use separate real/imaginary arrays. Solver units and normalization
+fields use separate real/imaginary arrays. XML ASCII export rejects
+negative infinity; use binary output (the default) or legacy VTK ASCII
+to retain those values exactly. Solver units and normalization
 are unchanged. Recognized vectors in rectangular output frames are rotated
 to basic axes; cylindrical/spherical results stay raw with a report.
 
@@ -91,6 +99,9 @@ VTP point/cell arrays represent the boundary only. Its global archive still
 contains the full original result tables and embedded inputs; consumers
 must read Field Data to access them. VTK does not enforce constraints or
 interpret the Nastran archive automatically.
+
+Use Python 3.12 for this reader. Its NumPy 1.x backend dependencies are
+omitted on Python 3.13+; other Curator extras can use NumPy 2 there.
 
 No customer samples are bundled. Tests generate BDF and binary OP2 fixtures
 without a solver. See the mesh domain documentation for field paths and

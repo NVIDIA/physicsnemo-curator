@@ -24,6 +24,7 @@ bytes provide recovery of content not interpreted by the backend.
 
 from __future__ import annotations
 
+from collections import Counter
 from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -42,7 +43,7 @@ from physicsnemo_curator.domains.mesh.sources._nastran_metadata import (
     decode_nastran_json,
     restore_nastran_sources,
 )
-from physicsnemo_curator.domains.mesh.sources._nastran_results import _discover_results, _project_result
+from physicsnemo_curator.domains.mesh.sources._nastran_results import _discover_results, _project_result, _rotate_nodal
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -55,7 +56,12 @@ __all__ = ["NastranSource", "decode_nastran_json", "restore_nastran_sources"]
 
 def _read_deck(path: Path, encoding: str, punch: bool) -> Any:
     """Read a deck, including non-UTF-8 comments and relative INCLUDEs."""
-    from pyNastran.bdf.bdf import BDF
+    try:
+        from pyNastran.bdf.bdf import BDF
+    except ImportError as error:
+        raise ImportError(
+            "Nastran support requires pyNastran. Install physicsnemo-curator[mesh,nastran] with Python 3.12."
+        ) from error
 
     class _EncodedBDF(BDF):
         def _parse_primary_file_header(self, bdf_filename: str | StringIO) -> None:
@@ -65,8 +71,15 @@ def _read_deck(path: Path, encoding: str, punch: bool) -> Any:
             if isinstance(bdf_filename, StringIO):
                 super()._parse_primary_file_header(bdf_filename)
             else:
-                text = Path(bdf_filename).read_text(encoding=encoding)
-                super()._parse_primary_file_header(StringIO(text))
+                # Only leading comment lines can contain backend directives;
+                # avoid reading the entire deck a second time for its header.
+                header = []
+                with Path(bdf_filename).open(encoding=encoding) as source:
+                    for line in source:
+                        if not line.startswith("$"):
+                            break
+                        header.append(line)
+                super()._parse_primary_file_header(StringIO("".join(header)))
 
     model = _EncodedBDF(debug=None)
     model.read_bdf(str(path), encoding=encoding, punch=punch or path.suffix.lower() == ".pch")
@@ -130,6 +143,8 @@ def _constraints(model: Any) -> TensorDict:
 
 def _modal_data(result: Any, model: Any, node_ids: list[int]) -> tuple[torch.Tensor, TensorDict]:
     """Align a complete real eigenvector table by GRID ID and rotate to basic axes."""
+    if getattr(result, "superelement_adaptivity_index", None) not in (None, "", 0):
+        raise NotImplementedError("Superelement/adaptive output requires a dedicated ID association adapter")
     if np.iscomplexobj(result.data) or result.analysis_code != 2:
         raise NotImplementedError("Only real normal-mode eigenvectors (SOL 103) are supported")
     grid = result.node_gridtype[:, 1] == 1
@@ -137,29 +152,18 @@ def _modal_data(result: Any, model: Any, node_ids: list[int]) -> tuple[torch.Ten
     if len(result_ids) != len(set(result_ids)) or set(result_ids) != set(node_ids):
         raise ValueError("OP2 eigenvector GRID IDs must match deck GRID IDs exactly (no missing or duplicate nodes)")
     index = {nid: i for i, nid in enumerate(result_ids)}
-    data = result.data[:, grid, :][:, [index[nid] for nid in node_ids], :].transpose(1, 0, 2).copy()
-    # GRID CD specifies the axes of both translations and rotations. Use the
-    # aligned rows rather than assuming OP2 uses the deck's node ordering.
-    for cid in {model.nodes[nid].Cd() for nid in node_ids} - {0}:
-        coord = model.coords[cid]
-        if coord.type not in {"CORD1R", "CORD2R"}:
-            raise NotImplementedError(f"Output coordinate system {cid}: only rectangular CD is supported")
-        indices = [i for i, nid in enumerate(node_ids) if model.nodes[nid].Cd() == cid]
-        data[indices, :, :3] = data[indices, :, :3] @ coord.beta()
-        data[indices, :, 3:] = data[indices, :, 3:] @ coord.beta()
+    data = result.data[:, grid, :][:, [index[nid] for nid in node_ids], :].transpose(1, 0, 2)
+    data = _rotate_nodal(data, model, node_ids)
     eigenvalues = np.asarray(result.eigns, dtype=np.float64)
     # Preserve solver-reported cycles, including near-zero rigid-body modes
     # whose eigenvalues can be slightly negative. Keep their sign in eigns.
     frequencies = np.asarray(result.mode_cycles, dtype=np.float64)
-    subcase = model.subcases.get(result.isubcase, model.subcases[0])
-    selections = {name.lower() + "_id": subcase.params.get(name, [0])[0] for name in ("SPC", "MPC")}
     global_data = TensorDict(
         {
             "subcase_id": torch.tensor(result.isubcase),
             "mode_numbers": torch.tensor(result.modes, dtype=torch.int64),
             "eigenvalues": torch.from_numpy(eigenvalues.copy()),
             "frequencies": torch.from_numpy(frequencies.copy()),
-            **{name: torch.tensor(value, dtype=torch.int64) for name, value in selections.items()},
         },
         batch_size=[],
     )
@@ -175,6 +179,8 @@ class NastranSource(Source["Mesh"]):
         A deck file or a directory searched recursively for .bdf/.dat/.nas/.deck/.pch.
     file_pattern : str
         Deck discovery glob relative to a directory, default ``"**/*"``.
+        Use a main-deck pattern when INCLUDE files also use deck extensions;
+        discovery treats every matched file as an independent input.
     op2_pattern : str
         OP2 filename template relative to each deck's directory, with ``{stem}``.
         Empty selects a same-stem OP2, then a unique sibling OP2. Ambiguity is an error.
@@ -248,6 +254,7 @@ class NastranSource(Source["Mesh"]):
         result_patterns: str = "*",
         preserve_source_files: bool = True,
     ) -> None:
+        """Discover input decks; defer geometry and result reads until indexing."""
         self._input_path = input_path
         self._file_pattern = file_pattern
         self._op2_pattern = op2_pattern
@@ -298,7 +305,29 @@ class NastranSource(Source["Mesh"]):
         raise ValueError(f"Ambiguous OP2 pairing for {deck}; set op2_pattern explicitly")
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
-        """Yield a mesh per subcase/topological dimension, with raw tables and original inputs."""
+        """Read one input deck and yield meshes with its result archive.
+
+        Parameters
+        ----------
+        index : int
+            Deck index. Negative indices count from the final discovered deck.
+
+        Yields
+        ------
+        Mesh
+            One mesh per result subcase and topological dimension.
+
+        Raises
+        ------
+        IndexError
+            If the index is outside the discovered decks.
+        FileNotFoundError
+            If results are requested and the paired OP2 does not exist.
+        ValueError
+            If pairing is ambiguous, no tables match, or geometry is invalid.
+        NotImplementedError
+            If the deck contains unsupported element topology.
+        """
         from physicsnemo.mesh import Mesh
 
         deck = self._files[index]
@@ -325,15 +354,26 @@ class NastranSource(Source["Mesh"]):
             )
         if self._preserve_source_files:
             base["source_files"] = _source_files(model, deck, op2_path)
+        constraints = _constraints(model)
         cases = sorted({r["subcase_id"] for r in records if r["subcase_id"] is not None}) or [0]
         node_ids = point_data["node_id"].tolist()
         for subcase_id in cases:
             selected_records = [r for r in records if r["subcase_id"] in {None, subcase_id}]
-            for record in selected_records:
+            family_counts = Counter(r["name"] for r in selected_records)
+            reserved_fields = set(point_data.keys()) | set(element_data.keys()) | {"mode_shape", "mode_rotation"}
+            for record in sorted(selected_records, key=lambda r: (r["name"], r["id"])):
                 # Multiple result keys may share a family and subcase (e.g.
                 # superelements). Never overwrite one with another.
-                duplicates = sum(r["name"] == record["name"] for r in selected_records)
-                record["field_name"] = record["name"] + ("__" + record["id"] if duplicates > 1 else "")
+                field = record["name"] + ("__" + record["id"] if family_counts[record["name"]] > 1 else "")
+                if field in reserved_fields or field + "__valid" in reserved_fields:
+                    field += "__" + record["id"]
+                record["field_name"] = field
+                reserved_fields.update((field, field + "__valid"))
+            subcase = model.subcases.get(subcase_id, model.subcases[0])
+            selections = {
+                name.lower() + "_id": torch.tensor(subcase.params.get(name, [0])[0], dtype=torch.int64)
+                for name in ("SPC", "MPC")
+            }
             for group in groups:
                 pd = point_data.clone()
                 parent_data = group["element_data"].clone()
@@ -364,7 +404,12 @@ class NastranSource(Source["Mesh"]):
                     and not np.iscomplexobj(r["result"].data)
                 ]
                 gd = TensorDict(
-                    {"constraints": _constraints(model), "subcase_id": torch.tensor(subcase_id)}, batch_size=[]
+                    {
+                        "constraints": constraints.clone(),
+                        "subcase_id": torch.tensor(subcase_id),
+                        **{name: value.clone() for name, value in selections.items()},
+                    },
+                    batch_size=[],
                 )
                 if len(modal) == 1:
                     try:
@@ -391,6 +436,8 @@ class NastranSource(Source["Mesh"]):
                     }
                 )
                 nastran["parent_row"] = group["parent_row"].clone()
+                nastran["projection_node_ids"] = point_data["node_id"][group["cells"]]
+                nastran["projection_element_ids"] = parent_data["element_id"][group["parent_row"]]
                 gd["nastran"] = nastran
                 # Repeated values remain explicitly parent-associated; no
                 # guessed integration, averaging, or energy redistribution.

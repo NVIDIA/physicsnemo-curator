@@ -54,9 +54,10 @@ mesh = [
     "zarr>=3.0",
 ]
 nastran = [
-    "pyNastran>=1.4.1,<1.5",
+    # NumPy 1.x has wheels through Python 3.12; keep other extras usable on newer Python.
+    "pyNastran>=1.4.1,<1.5; python_version < '3.13'",
     # pyNastran 1.4 uses NumPy 1.x; newer Arrow wheels require NumPy 2.
-    "pyarrow<26",
+    "pyarrow<26; python_version < '3.13'",
 ]
 da = [
     "xarray>=2024.1",
@@ -116,6 +117,9 @@ docs = [
 # (physicsnemo, torch, earth2studio, etc.) not on PyPI. Install them explicitly:
 #   pip install -e ".[mesh]"
 default-groups = ["dev"]
+# NumPy 1.x wheels stop at Python 3.12. Keep the Nastran extra
+# from selecting its NumPy 1.x resolution for other extras on newer Python.
+constraint-dependencies = ["numpy>=2; python_version >= '3.13'"]
 
 # physicsnemo is a private NVIDIA package not on PyPI. Provide metadata
 # so uv can resolve the dependency graph without a registry lookup.

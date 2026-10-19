@@ -164,7 +164,9 @@ source = DrivAerMLSource(mesh_type="boundary")
 {class}`~physicsnemo_curator.domains.mesh.sources.nastran.NastranSource` reads
 Nastran `.deck`, `.bdf`, `.dat`, `.nas`, and `.pch` models with optional paired
 `.op2` results, including modal, static, transient, and complex tables. Install the additional reader dependencies
-with Python 3.12 (pyNastran 1.4 requires NumPy 1.x):
+with Python 3.12. The reader backend requires NumPy 1.x; its extra
+dependencies are omitted on Python 3.13+ so other Curator extras can use
+NumPy 2 on newer Python versions:
 
 ```bash
 pip install 'physicsnemo-curator[mesh,nastran]'
@@ -184,7 +186,10 @@ paths = pipeline[0]
 
 Directory discovery is recursive and deterministic. A single deck file can
 also be passed directly. Each source index is one deck and yields one mesh
-per subcase and topological dimension (lines, surfaces, volumes). For geometry alone use `read_results=False`.
+per subcase and topological dimension (lines, surfaces, volumes). For
+geometry alone use `read_results=False`. When INCLUDE files also use deck
+extensions, pass the main deck directly or narrow `file_pattern`, such as
+`"**/Input*.deck"`, to avoid treating includes as independent cases.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -237,7 +242,7 @@ Signed eigenvalues are retained, including slightly negative rigid-body
 modes. No extra normalization, deformation, or unit conversion is applied.
 
 **Constraints:** `global_data["constraints"]` holds numeric tables in
-original Nastran IDs. Definitions are retained separately from modal
+original Nastran IDs. Definitions are retained separately from
 subcase selections `spc_id`/`mpc_id`; inactive sets are not merged into active ones.
 
 | Key | Columns / meaning |
@@ -260,11 +265,13 @@ component code (e.g. `123456`). These tables preserve definitions; the
 reader does not solve or enforce the constraints.
 
 **General result preservation:** The reader discovers every nonempty result
-table exposed by pyNastran. Each record under `global_data["nastran",
+table exposed by pyNastran, including standalone geometry/optimization
+objects and nested PSD families. Each record under `global_data["nastran",
 "results", "table_<stable hash>"]` contains `arrays` (original numeric
 arrays, including complex values, IDs and axes) and `metadata` (UTF-8 JSON
 bytes with headers, table key/class and attributes). Table names are not a
-hardcoded allowlist. Dense matrices and sparse COO entries are retained.
+hardcoded allowlist. Dense matrices and sparse COO entries are retained;
+sparse table attributes use `sparse_arrays` with shape/storage metadata.
 
 | Nastran global key | Meaning |
 |--------------------|---------|
@@ -276,19 +283,23 @@ hardcoded allowlist. Dense matrices and sparse COO entries are retained.
 | `catalog` | Table inventory, headers, array shapes/dtypes and explicit user exclusions |
 | `projection` | Per-table mesh association or reason it remains raw |
 | `parent_row` | Native simplex to original element row mapping |
+| `projection_node_ids`, `projection_element_ids` | GRID IDs per simplex and parent EIDs for export validation |
 | `source_files` | Original file byte tensors and SHA-256/path manifest (default enabled) |
 
 GRID tables become point fields and unambiguous one-row-per-element tables
 become parent cell fields, named by table family. Multiple keys in a family
 receive stable suffixes. Headers and time/frequency/mode axes remain in the
 raw record. Layered, station, integration-point and SORT2 layouts stay raw;
-no averaging is performed. Sparse element IDs can vary by step. Missing
+no averaging is performed. Superelement/adaptive IDs also remain raw until
+a dedicated association adapter establishes their physical identity.
+Sparse element IDs can vary by step. Missing
 rows have masks; padding/total rows remain in the original arrays. Repeated
 child strain energy is a parent value, not an apportioned child energy:
 use `nastran/element_data` for sums over original elements.
 
 All parsed material/property/load/constraint card fields are archived,
-including families without typed mesh adapters. The numeric constraint
+including families without typed mesh adapters. Cards whose backend
+`raw_fields()` is unavailable use an explicitly marked attribute fallback. The numeric constraint
 convenience tables above cover SPC/SPC1, MPC, RBE2 and combination sets.
 The archive does not imply that every card or result layout has an
 interpreted mesh representation. Backend-unsupported content remains
@@ -442,7 +453,7 @@ paths = pipeline[0]
 | `output_dir` | required | Output directory |
 | `file_format` | `"vtu"` | `"vtu"`, `"vtk"`, or boundary-surface `"vtp"` |
 | `naming_template` | `"mesh_{index:04d}_{seq}"` | Supports index/seq and source relpath/stem |
-| `binary` | `True` | Use `False` for ASCII |
+| `binary` | `True` | Use `False` for ASCII; float64 precision is retained |
 | `use_original_geometry` | `True` | Prefer retained original Nastran cells and parent fields |
 
 Each mesh/subcase gets its own file. Nastran modes become separate
@@ -456,8 +467,11 @@ stored as uint8 and float32, respectively.
 For Nastran sources, VTU/VTK retains original higher-order cells and parent
 fields. Set `use_original_geometry=False` to export native linear cells
 and transformed cell features. Changes to projected cell fields otherwise
-raise explicitly instead of being ignored. Complex values use real/imaginary
-array pairs; `read_vtk_data` reconstructs their original dtype and shape.
+raise explicitly instead of being ignored. Removed, duplicated, or remeshed
+native cells also require projected export; point/cell permutations remain
+valid. XML ASCII (VTU/VTP with `binary=False`) rejects negative infinity because
+the VTK reader loses its sign; use binary output or legacy VTK ASCII for
+those values. Complex values use real/imaginary array pairs; `read_vtk_data` reconstructs their original dtype and shape.
 
 Global tensors, including the full Nastran archive, are written to VTK Field Data.
 Nested paths use `/`, e.g. `constraints/mpc_terms` (`~` and `/` in individual

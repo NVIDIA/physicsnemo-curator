@@ -54,9 +54,31 @@ def _json_value(value: Any) -> Any:
     if isinstance(value, list | tuple | set):
         return [_json_value(item) for item in value]
     if hasattr(value, "raw_fields"):
-        return {"type": value.type, "fields": _json_value(value.raw_fields()), "comment": value.comment}
+        return _card_metadata(value)
     # Non-array backend objects are described, never evaluated or unpickled.
     return {"python_type": type(value).__name__, "text": str(value)}
+
+
+def _card_metadata(card: Any) -> dict[str, Any]:
+    """Retain card state when the backend has no raw-field implementation."""
+    try:
+        fields = card.raw_fields()
+    except NotImplementedError:
+        fields = None
+    metadata = {"type": card.type, "fields": _json_value(fields), "comment": card.comment}
+    if not fields:
+        # DMIG/DMIJ inherit BaseCard.raw_fields(), which returns an empty
+        # list despite containing matrix entries. Exclude cross-reference
+        # objects so their model graph is not recursively duplicated.
+        metadata["attributes"] = _json_value(
+            {
+                name: value
+                for name, value in vars(card).items()
+                if not name.startswith("_") and not name.endswith(("_ref", "_refs"))
+            }
+        )
+        metadata["fields_status"] = "raw_fields_unavailable"
+    return metadata
 
 
 def _encode_json(value: Any) -> torch.Tensor:
@@ -108,28 +130,32 @@ def _deck_metadata(model: Any) -> dict[str, Any]:
 
 def _source_files(model: Any, deck: pathlib.Path, op2: pathlib.Path | None) -> TensorDict:
     """Embed actual inputs and INCLUDE files with portable names and SHA-256 checksums."""
-    paths = {deck.resolve(), *(pathlib.Path(p).resolve() for p in model.active_filenames)}
+    deck = deck.resolve()
+    # Keep the path used by INCLUDE, including symlink aliases. Resolving
+    # an alias would restore the right bytes at a name the deck never uses.
+    paths = {deck, *(pathlib.Path(os.path.normpath(p)).absolute() for p in model.active_filenames)}
     if op2 is not None:
-        paths.add(op2.resolve())
+        op2 = pathlib.Path(os.path.normpath(op2)).absolute()
+        paths.add(op2)
     base = pathlib.Path(os.path.commonpath([str(p.parent) for p in paths]))
     archive = TensorDict({}, batch_size=[])
     manifest = []
     for index, path in enumerate(sorted(paths)):
-        content = path.read_bytes()
+        # Read directly into the array backing the stored tensor: OP2 files
+        # can be large enough that a second bytes/bytearray copy is costly.
+        content = np.fromfile(path, dtype=np.uint8)
         key = f"file_{index:06d}"
-        role = "deck" if path == deck.resolve() else "op2" if op2 and path == op2.resolve() else "include"
+        role = "deck" if path == deck else "op2" if path == op2 else "include"
         manifest.append(
             {
                 "key": key,
                 "path": path.relative_to(base).as_posix(),
                 "role": role,
                 "size": len(content),
-                "sha256": hashlib.sha256(content).hexdigest(),
+                "sha256": hashlib.sha256(memoryview(content)).hexdigest(),
             }
         )
-        archive[key] = (
-            torch.frombuffer(bytearray(content), dtype=torch.uint8) if content else torch.empty(0, dtype=torch.uint8)
-        )
+        archive[key] = torch.from_numpy(content)
     archive["manifest"] = _encode_json(manifest)
     return archive
 
@@ -137,10 +163,24 @@ def _source_files(model: Any, deck: pathlib.Path, op2: pathlib.Path | None) -> T
 def restore_nastran_sources(mesh: Mesh | TensorDict, output_dir: str) -> list[str]:
     """Restore embedded deck/INCLUDE/OP2 inputs into a new directory after hash validation.
 
-    ``mesh`` may also be the global-data TensorDict returned by
-    :func:`physicsnemo_curator.domains.mesh.sinks.mesh_vtk.read_vtk_data`.
-    Existing directories are never overwritten. Stored paths must remain
-    inside the destination. No source text is executed.
+    Parameters
+    ----------
+    mesh : Mesh or TensorDict
+        Native mesh or global-data TensorDict returned by
+        :func:`physicsnemo_curator.domains.mesh.sinks.mesh_vtk.read_vtk_data`.
+    output_dir : str
+        New destination directory. Existing directories are never overwritten.
+
+    Returns
+    -------
+    list[str]
+        Paths of the restored files, including INCLUDE aliases as regular files.
+
+    Notes
+    -----
+    Stored paths must remain inside the destination. No source text is executed.
+    Relative INCLUDE layouts are preserved. Absolute INCLUDE references remain
+    byte-exact and may need adjustment before running the relocated deck.
     """
     global_data = mesh if isinstance(mesh, TensorDict) else mesh.global_data
     sources = global_data["nastran", "source_files"]
@@ -163,7 +203,10 @@ def restore_nastran_sources(mesh: Mesh | TensorDict, output_dir: str) -> list[st
         ):
             raise ValueError(f"Unsafe or duplicate archived path: {entry['path']}")
         names.add(relative.as_posix())
-        content = sources[entry["key"]].detach().cpu().numpy().tobytes()
+        tensor = sources[entry["key"]].detach().cpu()
+        if tensor.dtype != torch.uint8 or tensor.ndim != 1:
+            raise ValueError(f"Nastran source payload must be a byte vector: {relative}")
+        content = memoryview(tensor.contiguous().numpy())
         if len(content) != entry["size"] or hashlib.sha256(content).hexdigest() != entry["sha256"]:
             raise ValueError(f"Nastran source checksum mismatch: {relative}")
         payloads.append((relative, content))

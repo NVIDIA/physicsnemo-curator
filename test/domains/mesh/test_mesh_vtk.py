@@ -28,7 +28,7 @@ import pyvista as pv
 import torch
 from physicsnemo.mesh import Mesh
 
-from physicsnemo_curator.domains.mesh.sinks.mesh_vtk import MeshVTKSink
+from physicsnemo_curator.domains.mesh.sinks.mesh_vtk import MeshVTKSink, read_vtk_data
 
 pytestmark = [pytest.mark.requires("mesh"), pytest.mark.integration]
 
@@ -112,6 +112,28 @@ def test_source_naming_and_multiple_outputs(tmp_path: Path, modal_mesh: Mesh) ->
     assert sink(iter([]), 0) == []
 
 
+@pytest.mark.parametrize("template", ["{unknown}", "{}", "{index:invalid}", "{stem.missing}", "{"])
+def test_naming_template_validated_eagerly(tmp_path: Path, template: str) -> None:
+    with pytest.raises(ValueError, match="Invalid naming_template"):
+        MeshVTKSink(str(tmp_path), naming_template=template)
+
+
+def test_missing_source_naming_is_explicit(tmp_path: Path, modal_mesh: Mesh) -> None:
+    sink = MeshVTKSink(str(tmp_path), naming_template="{relpath}/{stem}_{seq}")
+    assert sink(iter([]), 0) == []
+    with pytest.raises(ValueError, match="relative_path"):
+        sink(iter([modal_mesh]), 0)
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("template", ["../outside_{index}", "/outside_{index}"])
+def test_output_names_remain_within_output_directory(tmp_path: Path, modal_mesh: Mesh, template: str) -> None:
+    sink = MeshVTKSink(str(tmp_path / "out"), naming_template=template)
+    with pytest.raises(ValueError, match="within output_dir"):
+        sink(iter([modal_mesh]), 0)
+    assert not (tmp_path / "out").exists()
+
+
 def test_duplicate_paths_raise(tmp_path: Path, modal_mesh: Mesh) -> None:
     sink = MeshVTKSink(str(tmp_path), naming_template="one")
     with pytest.raises(ValueError, match="duplicate"):
@@ -129,6 +151,19 @@ def test_atomic_failure_keeps_existing_file(tmp_path: Path, modal_mesh: Mesh, mo
     assert list(tmp_path.iterdir()) == [Path(path)]
 
 
+def test_empty_writer_failure_keeps_existing_file(
+    tmp_path: Path, modal_mesh: Mesh, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sink = MeshVTKSink(str(tmp_path))
+    path = Path(sink(iter([modal_mesh]), 0)[0])
+    original = path.read_bytes()
+    monkeypatch.setattr(pv.UnstructuredGrid, "save", Mock())
+    with pytest.raises(OSError, match="empty file"):
+        sink(iter([modal_mesh]), 0)
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
 def test_invalid_format_and_modal_shape(tmp_path: Path, modal_mesh: Mesh) -> None:
     with pytest.raises(ValueError, match="file_format"):
         MeshVTKSink(str(tmp_path), file_format="stl")
@@ -144,6 +179,114 @@ def test_no_modal_fields_or_synthetic_arrays(tmp_path: Path) -> None:
     assert grid.n_cells == 1
 
 
+@pytest.mark.parametrize("file_format", ["vtu", "vtk", "vtp"])
+@pytest.mark.parametrize("binary", [True, False])
+def test_tensor_schema_roundtrip(tmp_path: Path, modal_mesh: Mesh, file_format: str, binary: bool) -> None:
+    complex_values = torch.complex(torch.arange(20).reshape(5, 2, 2).float(), torch.ones(5, 2, 2))
+    modal_mesh.point_data["nested", "a/~b"] = complex_values.conj()
+    modal_mesh.point_data["half"] = torch.arange(5, dtype=torch.float16)
+    modal_mesh.point_data["bfloat"] = torch.arange(5, dtype=torch.bfloat16)
+    modal_mesh.point_data["empty"] = torch.empty(5, 0, dtype=torch.int32)
+    generator = torch.Generator().manual_seed(17)
+    modal_mesh.point_data["precision"] = torch.rand(5, 3, dtype=torch.float64, generator=generator)
+    modal_mesh.global_data["nested", "scalar"] = torch.tensor(1 + 2j, dtype=torch.complex128).conj()
+    modal_mesh.global_data["empty"] = torch.empty(0, 3, dtype=torch.bool)
+    modal_mesh.global_data["half"] = torch.tensor(0.25, dtype=torch.float16)
+    modal_mesh.global_data["precision"] = torch.rand(3, 3, dtype=torch.float64, generator=generator)
+    path = MeshVTKSink(str(tmp_path), file_format=file_format, binary=binary)(iter([modal_mesh]), 0)[0]
+    loaded = read_vtk_data(path)
+    point_rows = loaded["point_data"]["node_id"] - 2**40
+    for association in ("point_data", "cell_data", "global_data"):
+        expected = getattr(modal_mesh, association)
+        if association == "point_data":
+            expected = expected[point_rows]
+        assert set(loaded[association].keys(True, True)) == set(expected.keys(True, True))
+        for key, value in expected.items(True, True):
+            torch.testing.assert_close(loaded[association][key], value, rtol=0, atol=0)
+
+
+def test_array_name_collisions_are_rejected(tmp_path: Path, modal_mesh: Mesh) -> None:
+    modal_mesh.point_data["mode_shape_m0001"] = torch.ones(5, 3)
+    with pytest.raises(ValueError, match="collision"):
+        MeshVTKSink(str(tmp_path))(iter([modal_mesh]), 0)
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("file_format", ["vtu", "vtk", "vtp"])
+@pytest.mark.parametrize("binary", [True, False])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("negative_infinity", [False, True])
+def test_nonfinite_complex_components_roundtrip(
+    tmp_path: Path,
+    modal_mesh: Mesh,
+    file_format: str,
+    binary: bool,
+    dtype: torch.dtype,
+    negative_infinity: bool,
+) -> None:
+    real = torch.tensor([3.0, 4.0, float("inf"), -7.0, float("nan")], dtype=dtype)
+    imaginary = torch.tensor([float("inf"), float("nan"), 2.0, -8.0, 0.0], dtype=dtype)
+    if negative_infinity:
+        real[3] = imaginary[3] = float("-inf")
+    values = torch.complex(real, imaginary)
+    modal_mesh.point_data["nonfinite"] = values
+    modal_mesh.global_data["nonfinite"] = values
+    sink = MeshVTKSink(str(tmp_path), file_format=file_format, binary=binary)
+    if negative_infinity and not binary and file_format in {"vtu", "vtp"}:
+        with pytest.raises(ValueError, match="negative infinity.*binary=True.*file_format='vtk'"):
+            sink(iter([modal_mesh]), 0)
+        assert not list(tmp_path.iterdir())
+        return
+    path = sink(iter([modal_mesh]), 0)[0]
+    loaded = read_vtk_data(path)
+    for association in ("point_data", "global_data"):
+        rows = loaded[association]["node_id"] - 2**40 if association == "point_data" else torch.arange(5)
+        restored = loaded[association]["nonfinite"]
+        # Complex equal_nan=True alone can hide corruption in the other component.
+        torch.testing.assert_close(restored.real, real[rows], rtol=0, atol=0, equal_nan=True)
+        torch.testing.assert_close(restored.imag, imaginary[rows], rtol=0, atol=0, equal_nan=True)
+
+
+@pytest.mark.parametrize("association", ["point_data", "cell_data", "global_data", "points"])
+def test_xml_ascii_rejects_negative_infinity_in_all_arrays(tmp_path: Path, modal_mesh: Mesh, association: str) -> None:
+    if association == "points":
+        modal_mesh.points[0, 0] = float("-inf")
+    else:
+        count = {"point_data": modal_mesh.n_points, "cell_data": modal_mesh.n_cells, "global_data": 1}[association]
+        getattr(modal_mesh, association)["nonfinite"] = torch.full((count,), float("-inf"))
+    with pytest.raises(ValueError, match="negative infinity.*binary=True"):
+        MeshVTKSink(str(tmp_path), binary=False)(iter([modal_mesh]), 0)
+    assert not list(tmp_path.iterdir())
+
+
+def test_schema_errors_are_explicit(tmp_path: Path, modal_mesh: Mesh) -> None:
+    path = MeshVTKSink(str(tmp_path))(iter([modal_mesh]), 0)[0]
+    grid = pv.read(path)
+    grid.field_data["physicsnemo_schema"] = np.array([json.dumps({"version": 2})])
+    grid.save(path)
+    with pytest.raises(ValueError, match="schema version"):
+        read_vtk_data(path)
+    del grid.field_data["physicsnemo_schema"]
+    grid.save(path)
+    with pytest.raises(ValueError, match="no physicsnemo_schema"):
+        read_vtk_data(path)
+
+
+def test_configuration_properties(tmp_path: Path) -> None:
+    sink = MeshVTKSink(str(tmp_path), file_format="vtk", use_original_geometry=False)
+    assert sink.output_dir == tmp_path
+    assert sink.file_format == "vtk"
+    assert not sink.use_original_geometry
+    assert {param.name for param in sink.params()} == {
+        "output_dir",
+        "file_format",
+        "naming_template",
+        "binary",
+        "use_original_geometry",
+    }
+
+
+@pytest.mark.e2e
 def test_registry_and_serialization(tmp_path: Path) -> None:
     from physicsnemo_curator import load_pipeline, registry, save_pipeline
     from physicsnemo_curator.domains.mesh.sources.random import RandomMeshSource

@@ -234,6 +234,57 @@ def test_restore_rejects_paths_and_checksum(tmp_path: Path, bad_path: str) -> No
     assert not (tmp_path / "restore").exists()
 
 
+def test_matrix_cards_without_raw_fields_preserve_entries(tmp_path: Path) -> None:
+    path = tmp_path / "model.bdf"
+    model = _deck(path)
+    model.add_dmig("KAA", 6, 2, 0, 0, 1, [(10, 1)], [(20, 2)], [2.5])
+    model.write_bdf(str(path))
+    mesh = next(NastranSource(str(path), read_results=False, preserve_source_files=False)[0])
+    metadata = decode_nastran_json(mesh.global_data["nastran", "deck_metadata"])
+    matrix = metadata["cards"]["dmig"][0]
+    assert matrix["fields_status"] == "raw_fields_unavailable"
+    assert matrix["attributes"]["name"] == "KAA"
+    assert matrix["attributes"]["GCj"]["values"] == [[10, 1]]
+    assert matrix["attributes"]["GCi"]["values"] == [[20, 2]]
+    assert matrix["attributes"]["Real"]["values"] == [2.5]
+    exported = MeshVTKSink(str(tmp_path / "out"))(iter([mesh]), 0)[0]
+    restored = decode_nastran_json(read_vtk_data(exported)["global_data"]["nastran", "deck_metadata"])
+    assert restored == metadata
+
+
+def test_include_symlink_recovers_at_deck_reference(tmp_path: Path) -> None:
+    deck = tmp_path / "model.bdf"
+    _deck(deck)
+    original = tmp_path / "original.inc"
+    original.write_bytes(b"PARAM,POST,-1\n")
+    alias = tmp_path / "parts" / "alias.inc"
+    alias.parent.mkdir()
+    try:
+        alias.symlink_to(original)
+    except (NotImplementedError, OSError):
+        pytest.skip("Creating symbolic links is unavailable")
+    deck.write_bytes(deck.read_bytes() + b"INCLUDE 'parts/alias.inc'\n")
+    mesh = next(NastranSource(str(deck), read_results=False)[0])
+    restored = tmp_path / "restored"
+    restore_nastran_sources(mesh, str(restored))
+    assert (restored / "parts" / "alias.inc").read_bytes() == original.read_bytes()
+    assert not (restored / "parts" / "alias.inc").is_symlink()
+    assert next(NastranSource(str(restored / "model.bdf"), read_results=False)[0]).n_cells == 8
+
+
+def test_restore_validates_payload_dtype(tmp_path: Path) -> None:
+    path = tmp_path / "model.bdf"
+    _deck(path)
+    mesh = next(NastranSource(str(path), read_results=False)[0])
+    sources = mesh.global_data["nastran", "source_files"]
+    manifest = decode_nastran_json(sources["manifest"])
+    key = manifest[0]["key"]
+    sources[key] = sources[key].to(torch.int64)
+    with pytest.raises(ValueError, match="byte vector"):
+        restore_nastran_sources(mesh, str(tmp_path / "restore"))
+    assert not (tmp_path / "restore").exists()
+
+
 def test_transformed_projection_requires_explicit_export(tmp_path: Path) -> None:
     path = tmp_path / "model.bdf"
     _deck(path)
