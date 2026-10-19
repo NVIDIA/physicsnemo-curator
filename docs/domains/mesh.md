@@ -173,10 +173,7 @@ uv run --extra mesh --with 'pyNastran>=1.4.1,<1.5' \
   python examples/cae/nastran/main.py --input ./cases --output ./curated
 ```
 
-The reader was validated with Python 3.12 and pyNastran 1.4.1. That backend
-requires NumPy 1.x; its requirements apply when explicitly selected.
-Curator's default dependencies, Python requirement, and shared lockfile
-remain unchanged.
+pyNastran 1.4.1 requires NumPy 1.x in the environment used for this reader.
 
 ```python
 from physicsnemo_curator.domains.mesh import NastranSource, MeshSink

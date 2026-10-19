@@ -123,7 +123,7 @@ def _original_geometry(model: Any) -> tuple[torch.Tensor, TensorDict, TensorDict
     )
     for name in sorted({key for row in scalar_properties for key in row}):
         cell_data[name] = torch.tensor([row.get(name, np.nan) for row in scalar_properties], dtype=torch.float64)
-    # Keep the original public MAT1 aliases when a material supports them.
+    # Expose common material fields when the material supports them.
     for field, method in (("young_modulus", "E"), ("poisson_ratio", "Nu"), ("density", "Rho")):
         cell_data[field] = torch.tensor(
             [
@@ -174,13 +174,8 @@ def _geometry_groups(points: torch.Tensor, geometry: TensorDict, cell_data: Tens
             },
             batch_size=[],
         )
-        vtk_cells = []
-        for start, end in zip(offsets[:-1], offsets[1:], strict=True):
-            vtk_cells.extend([end - start, *flat[start:end]])
-        grid = pv.UnstructuredGrid(np.array(vtk_cells), raw["vtk_cell_type"].numpy(), points.numpy())
-        grid.cell_data["parent_row"] = np.arange(len(selected))
-        grid.point_data["original_row"] = np.arange(len(points))
-        tet_rows = np.flatnonzero(np.isin(raw["vtk_cell_type"].numpy(), [10, 24]))
+        is_tetra = np.isin(raw["vtk_cell_type"].numpy(), [10, 24])
+        tet_rows = np.flatnonzero(is_tetra)
         parts = []
         if len(tet_rows):
             tet10 = np.array(
@@ -208,8 +203,14 @@ def _geometry_groups(points: torch.Tensor, geometry: TensorDict, cell_data: Tens
             triangulated.point_data["original_row"] = np.arange(len(points))
             triangulated.cell_data["parent_row"] = np.array(parents)
             parts.append(triangulated)
-        other_rows = np.flatnonzero(~np.isin(raw["vtk_cell_type"].numpy(), [10, 24]))
+        other_rows = np.flatnonzero(~is_tetra)
         if len(other_rows):
+            vtk_cells = []
+            for start, end in zip(offsets[:-1], offsets[1:], strict=True):
+                vtk_cells.extend([end - start, *flat[start:end]])
+            grid = pv.UnstructuredGrid(np.array(vtk_cells), raw["vtk_cell_type"].numpy(), points.numpy())
+            grid.cell_data["parent_row"] = np.arange(len(selected))
+            grid.point_data["original_row"] = np.arange(len(points))
             parts.append(grid.extract_cells(other_rows).triangulate())
         child_batches, parent_batches = [], []
         for triangulated in parts:
