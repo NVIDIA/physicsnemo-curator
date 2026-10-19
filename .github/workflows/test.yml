@@ -102,7 +102,7 @@ jobs:
           rustup default stable
 
       - name: Install dependencies (dev + mesh extras)
-        run: uv sync --group dev --extra mesh --extra nastran
+        run: uv sync --group dev --extra mesh
 
       - name: Build native extension
         run: uv run maturin develop
@@ -120,6 +120,18 @@ jobs:
         run: >
           uv run pytest test/domains/mesh/
           --cov --cov-fail-under=0
+          --cov-report=xml:coverage-mesh.xml
+          --cov-report=term-missing
+          -v --tb=short
+
+      - name: Run optional Nastran reader tests with coverage
+        run: >
+          uv run --with "pyNastran>=1.4.1,<1.5" pytest
+          test/domains/mesh/test_nastran.py
+          test/domains/mesh/test_nastran_archive.py
+          test/domains/mesh/test_nastran_results.py
+          test/domains/mesh/test_mesh_vtk_nastran.py
+          --cov --cov-append --cov-fail-under=0
           --cov-report=xml:coverage-mesh.xml
           --cov-report=term-missing
           -v --tb=short

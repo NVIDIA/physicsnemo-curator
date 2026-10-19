@@ -227,5 +227,5 @@ def test_directory_discovery_can_exclude_include_decks(tmp_path: Path) -> None:
 
 def test_missing_backend_has_installation_guidance(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "pyNastran.bdf.bdf", None)
-    with pytest.raises(ImportError, match=r"physicsnemo-curator\[mesh,nastran\].*Python 3.12"):
+    with pytest.raises(ImportError, match=r"pip install .*pyNastran"):
         _read_deck(tmp_path / "model.bdf", "latin1", False)

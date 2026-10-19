@@ -2,10 +2,10 @@
 
 Convert Nastran decks and paired OP2 results to native PhysicsNeMo meshes,
 VTU, legacy VTK, or VTP. No Nastran solver or license is needed to read
-existing files. Install with Python 3.12:
+existing files. Install the reader explicitly (validated with Python 3.12):
 
 ```bash
-pip install 'physicsnemo-curator[mesh,nastran]'
+pip install 'physicsnemo-curator[mesh]' 'pyNastran>=1.4.1,<1.5'
 ```
 
 Arrange one deck and OP2 per case directory, then run:
@@ -100,8 +100,11 @@ contains the full original result tables and embedded inputs; consumers
 must read Field Data to access them. VTK does not enforce constraints or
 interpret the Nastran archive automatically.
 
-Use Python 3.12 for this reader. Its NumPy 1.x backend dependencies are
-omitted on Python 3.13+; other Curator extras can use NumPy 2 there.
+pyNastran 1.4.1 requires NumPy 1.x. Keep that compatibility requirement in
+the environment explicitly used for this reader. From a source checkout,
+`uv run --extra mesh --with 'pyNastran>=1.4.1,<1.5' python ...` provides the
+reader for one invocation. Curator's default dependencies, Python
+requirement, and shared lockfile remain unchanged.
 
 No customer samples are bundled. Tests generate BDF and binary OP2 fixtures
 without a solver. See the mesh domain documentation for field paths and

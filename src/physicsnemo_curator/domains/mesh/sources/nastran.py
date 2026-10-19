@@ -60,7 +60,7 @@ def _read_deck(path: Path, encoding: str, punch: bool) -> Any:
         from pyNastran.bdf.bdf import BDF
     except ImportError as error:
         raise ImportError(
-            "Nastran support requires pyNastran. Install physicsnemo-curator[mesh,nastran] with Python 3.12."
+            "Nastran support requires the optional reader. Install it with: pip install 'pyNastran>=1.4.1,<1.5'."
         ) from error
 
     class _EncodedBDF(BDF):

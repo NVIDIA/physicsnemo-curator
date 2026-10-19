@@ -163,16 +163,20 @@ source = DrivAerMLSource(mesh_type="boundary")
 
 {class}`~physicsnemo_curator.domains.mesh.sources.nastran.NastranSource` reads
 Nastran `.deck`, `.bdf`, `.dat`, `.nas`, and `.pch` models with optional paired
-`.op2` results, including modal, static, transient, and complex tables. Install the additional reader dependencies
-with Python 3.12. The reader backend requires NumPy 1.x; its extra
-dependencies are omitted on Python 3.13+ so other Curator extras can use
-NumPy 2 on newer Python versions:
+`.op2` results, including modal, static, transient, and complex tables.
+Install pyNastran explicitly in the environment used for this reader:
 
 ```bash
-pip install 'physicsnemo-curator[mesh,nastran]'
-# From a source checkout:
-uv sync --python 3.12 --extra mesh --extra nastran
+pip install 'physicsnemo-curator[mesh]' 'pyNastran>=1.4.1,<1.5'
+# From a source checkout, isolate the reader dependencies to this invocation:
+uv run --extra mesh --with 'pyNastran>=1.4.1,<1.5' \
+  python examples/cae/nastran/main.py --input ./cases --output ./curated
 ```
+
+The reader was validated with Python 3.12 and pyNastran 1.4.1. That backend
+requires NumPy 1.x; its requirements apply when explicitly selected.
+Curator's default dependencies, Python requirement, and shared lockfile
+remain unchanged.
 
 ```python
 from physicsnemo_curator.domains.mesh import NastranSource, MeshSink
