@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Curate Nastran models and modal OP2 results into native or VTK meshes."""
+"""Curate Nastran models and discovered OP2 fields into native or VTK meshes."""
 
 import argparse
 
@@ -37,6 +37,9 @@ def main() -> None:
     parser.add_argument("--op2-pattern", default="", help="Relative OP2 template; {stem} is the deck stem")
     parser.add_argument("--encoding", default="latin1", help="Deck encoding, e.g. cp932")
     parser.add_argument("--geometry-only", action="store_true", help="Skip OP2 results")
+    parser.add_argument("--result-patterns", default="*", help="Comma-separated OP2 table-family globs")
+    parser.add_argument("--no-source-files", action="store_true", help="Omit original input bytes to reduce storage")
+    parser.add_argument("--projected-geometry", action="store_true", help="Export native linear cells to VTK")
     parser.add_argument("--punch", action="store_true", help="Bulk data without executive/case control")
     parser.add_argument("--workers", type=int, default=1)
     args = parser.parse_args()
@@ -48,12 +51,19 @@ def main() -> None:
         encoding=args.encoding,
         read_results=not args.geometry_only,
         punch=args.punch,
+        result_patterns=args.result_patterns,
+        preserve_source_files=not args.no_source_files,
     )
     naming = "{relpath}/{stem}_{seq}"
     sink = (
         MeshSink(output_dir=args.output, naming_template=naming)
         if args.format == "pmsh"
-        else MeshVTKSink(output_dir=args.output, file_format=args.format, naming_template=naming)
+        else MeshVTKSink(
+            output_dir=args.output,
+            file_format=args.format,
+            naming_template=naming,
+            use_original_geometry=not args.projected_geometry,
+        )
     )
     pipeline = source.write(sink)
     results = run_pipeline(pipeline, backend="process_pool", n_jobs=args.workers, use_tui=False)

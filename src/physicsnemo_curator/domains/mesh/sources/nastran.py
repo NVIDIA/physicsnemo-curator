@@ -14,13 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Nastran bulk-data geometry and real modal OP2 results via pyNastran.
+"""Nastran geometry, discovered OP2 results, card metadata, and original inputs.
 
-CTETRA4/10, PSOLID/MAT1, SPC/SPC1, MPC, and RBE2 are supported. Each
-deck yields one mesh per real eigenvector result table (usually a subcase).
-Quadratic tetrahedra are subdivided into eight linear tetrahedra, retaining
-all nodes and repeating parent element data. This is a piecewise linear
-approximation, not a quadratic finite-element representation.
+Raw result arrays retain their axes, IDs, precision, and component headers.
+Unambiguous GRID/element tables also become mesh fields. Original cells
+remain in global data alongside a native simplicial projection; source
+bytes provide recovery of content not interpreted by the backend.
 """
 
 from __future__ import annotations
@@ -35,6 +34,15 @@ from tensordict import TensorDict
 
 from physicsnemo_curator.core.base import Param, Source
 from physicsnemo_curator.core.logging import get_logger
+from physicsnemo_curator.domains.mesh.sources._nastran_geometry import _geometry_groups, _original_geometry
+from physicsnemo_curator.domains.mesh.sources._nastran_metadata import (
+    _deck_metadata,
+    _encode_json,
+    _source_files,
+    decode_nastran_json,
+    restore_nastran_sources,
+)
+from physicsnemo_curator.domains.mesh.sources._nastran_results import _discover_results, _project_result
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -42,11 +50,7 @@ if TYPE_CHECKING:
     from physicsnemo.mesh import Mesh
 
 _DECK_EXTENSIONS = {".bdf", ".dat", ".nas", ".deck", ".pch"}
-# Nastran CTETRA midside order: 12, 23, 31, 14, 24, 34.
-_TET10_CELLS = np.array(
-    [[0, 4, 6, 7], [4, 1, 5, 8], [6, 5, 2, 9], [7, 8, 9, 3], [4, 5, 6, 9], [4, 5, 8, 9], [4, 7, 8, 9], [4, 6, 7, 9]],
-    dtype=np.int64,
-)
+__all__ = ["NastranSource", "decode_nastran_json", "restore_nastran_sources"]
 
 
 def _read_deck(path: Path, encoding: str, punch: bool) -> Any:
@@ -69,84 +73,8 @@ def _read_deck(path: Path, encoding: str, punch: bool) -> Any:
     return model
 
 
-def _geometry(model: Any) -> tuple[torch.Tensor, torch.Tensor, TensorDict, TensorDict]:
-    """Extract ID-aligned geometry and repeat parent data on subdivided cells."""
-    node_ids = sorted(model.nodes)
-    if not node_ids or not model.elements:
-        raise ValueError("Nastran deck must contain GRID nodes and CTETRA elements")
-    node_index = {nid: i for i, nid in enumerate(node_ids)}
-    points = np.array([model.nodes[nid].get_position() for nid in node_ids], dtype=np.float64)
-    bases = {}
-    for cid in {model.nodes[nid].Cd() for nid in node_ids}:
-        coord = model.coords[cid]
-        if coord.type not in {"CORD1R", "CORD2R"}:
-            raise NotImplementedError(f"Output coordinate system {cid}: only rectangular CD is supported")
-        bases[cid] = coord.beta()
-    cells, element_ids, property_ids, material_ids, material_values = [], [], [], [], []
-    for eid, element in sorted(model.elements.items()):
-        if element.type != "CTETRA" or any(nid is None for nid in element.node_ids):
-            raise NotImplementedError(f"Element {eid}: only complete CTETRA4/10 elements are supported")
-        prop = element.pid_ref
-        if prop.type != "PSOLID":
-            raise NotImplementedError(f"Element {eid}: only PSOLID with MAT1 is supported")
-        material = prop.mid_ref
-        if material.type != "MAT1":
-            raise NotImplementedError(f"Element {eid}: only PSOLID with MAT1 is supported")
-        ids = np.array([node_index[nid] for nid in element.node_ids], dtype=np.int64)
-        if len(ids) == 4:
-            child_cells = ids.reshape(1, 4)
-        elif len(ids) == 10:
-            child_cells = ids[_TET10_CELLS]
-        else:
-            raise NotImplementedError(f"Element {eid}: expected 4 or 10 nodes")
-        cells.extend(child_cells)
-        count = len(child_cells)
-        element_ids.extend([eid] * count)
-        property_ids.extend([prop.pid] * count)
-        material_ids.extend([material.mid] * count)
-        material_values.extend([[material.E(), material.Nu(), material.Rho()]] * count)
-    connectivity = np.array(cells, dtype=np.int64)
-    vertices = points[connectivity]
-    signed_volume = np.linalg.det(vertices[:, 1:] - vertices[:, :1])
-    negative = signed_volume < 0
-    connectivity[negative, :2] = connectivity[negative, 1::-1]
-    if np.any(signed_volume == 0):
-        raise ValueError("Nastran mesh contains degenerate tetrahedra")
-    permanent_spc = np.zeros((len(node_ids), 6), dtype=bool)
-    for i, nid in enumerate(node_ids):
-        for component in str(model.nodes[nid].ps):
-            if component in "123456":
-                permanent_spc[i, int(component) - 1] = True
-    point_data = TensorDict(
-        {
-            "node_id": torch.tensor(node_ids),
-            "input_coordinate_id": torch.tensor([model.nodes[nid].Cp() for nid in node_ids]),
-            "output_coordinate_id": torch.tensor([model.nodes[nid].Cd() for nid in node_ids]),
-            "output_coordinate_basis": torch.from_numpy(np.array([bases[model.nodes[nid].Cd()] for nid in node_ids])),
-            "permanent_spc": torch.from_numpy(permanent_spc),
-        },
-        batch_size=[len(node_ids)],
-    )
-    values = torch.tensor(material_values, dtype=torch.float64)
-    cell_data = TensorDict(
-        {
-            "element_id": torch.tensor(element_ids),
-            "property_id": torch.tensor(property_ids),
-            "material_id": torch.tensor(material_ids),
-            "young_modulus": values[:, 0],
-            "poisson_ratio": values[:, 1],
-            "density": values[:, 2],
-        },
-        batch_size=[len(connectivity)],
-    )
-    return torch.from_numpy(points), torch.from_numpy(connectivity), point_data, cell_data
-
-
 def _constraints(model: Any) -> TensorDict:
     """Preserve constraint sets as numeric tables using original Nastran IDs."""
-    for name in ("suport", "suport1", "se_suport", "spcoffs"):
-        if getattr(model, name, None):
-            raise NotImplementedError(f"Unsupported constraints: {name}")
     spc_rows, spc_values = [], []
     for sid, cards in sorted(model.spcs.items()):
         for card in cards:
@@ -155,7 +83,7 @@ def _constraints(model: Any) -> TensorDict:
             elif card.type == "SPC":
                 terms = zip(card.node_ids, card.components, card.enforced, strict=True)
             else:
-                raise NotImplementedError(f"Unsupported constraint: {card.type}")
+                continue  # Complete definitions remain in the generic card archive.
             for nid, components, value in terms:
                 for component in str(components):
                     spc_rows.append([sid, nid, int(component)])
@@ -164,7 +92,7 @@ def _constraints(model: Any) -> TensorDict:
     for sid, cards in sorted(model.mpcs.items()):
         for card in cards:
             if card.type != "MPC":
-                raise NotImplementedError(f"Unsupported constraint: {card.type}")
+                continue
             mpc_sets.append(sid)
             for nid, component, coefficient in zip(card.node_ids, card.components, card.coefficients, strict=True):
                 mpc_terms.append([nid, int(component)])
@@ -173,7 +101,7 @@ def _constraints(model: Any) -> TensorDict:
     rbe2_rows, rbe2_alpha, rbe2_tref = [], [], []
     for eid, card in sorted(model.rigid_elements.items()):
         if card.type != "RBE2":
-            raise NotImplementedError(f"Unsupported rigid element: {card.type}")
+            continue
         for nid in card.Gmi:
             rbe2_rows.append([eid, card.gn, nid, int(card.cm)])
             rbe2_alpha.append(card.alpha)
@@ -239,7 +167,7 @@ def _modal_data(result: Any, model: Any, node_ids: list[int]) -> tuple[torch.Ten
 
 
 class NastranSource(Source["Mesh"]):
-    """Read Nastran tetrahedral decks and optional paired modal OP2 files.
+    """Read Nastran decks and optional OP2 files into meshes with a result archive.
 
     Parameters
     ----------
@@ -251,7 +179,14 @@ class NastranSource(Source["Mesh"]):
         OP2 filename template relative to each deck's directory, with ``{stem}``.
         Empty selects a same-stem OP2, then a unique sibling OP2. Ambiguity is an error.
     read_results : bool
-        Read real eigenmodes (default True); False yields geometry alone.
+        Read all paired OP2 tables exposed by pyNastran (default True).
+    result_patterns : str
+        Comma-separated table-family globs, default ``"*"``. Exclusions
+        remain explicit in the result catalog.
+    preserve_source_files : bool
+        Embed the original deck, INCLUDE files, and paired OP2 bytes
+        (default True). Disable to reduce storage at the cost of exact
+        recovery of uninterpreted content.
     encoding : str
         Deck encoding, default ``"latin1"`` (accepts arbitrary comment bytes).
     punch : bool
@@ -260,15 +195,26 @@ class NastranSource(Source["Mesh"]):
 
     Notes
     -----
-    Requires pyNastran. Units and modal normalization are retained from the
-    solver. Frequencies are cycles per model time unit. Only complete GRID
-    result tables and rectangular output coordinate systems are supported.
-    Unsupported structural elements, properties, materials, or constraints
-    raise an error rather than being silently discarded.
+    Yields one mesh per subcase and topological dimension (lines, surfaces,
+    volumes). Common rod/beam, triangle/quad, tetra/hex/wedge/pyramid cells
+    are supported. Unsupported topology raises explicitly. Native cells
+    are piecewise linear; original connectivity and higher-order types
+    are retained separately for VTK export.
+
+    Sparse floating results use NaN plus validity masks (integers use zero
+    placeholders with masks). Layered/integration-point
+    results stay in their original tables without averaging. Recognized
+    nodal vectors are rotated from rectangular CD frames; other frames
+    remain raw with a projection report. Units and solver normalization
+    are unchanged. Complete real modes additionally expose modal aliases.
+    Backend-unsupported content is recoverable from the embedded originals,
+    but is not claimed as an interpreted mesh field.
     """
 
     name: ClassVar[str] = "Nastran"
-    description: ClassVar[str] = "Nastran CTETRA decks and real modal OP2 results with materials and constraints"
+    description: ClassVar[str] = (
+        "Nastran geometry, discovered OP2 fields, complete card metadata, and source preservation"
+    )
 
     @classmethod
     def params(cls) -> list[Param]:
@@ -279,7 +225,14 @@ class NastranSource(Source["Mesh"]):
             Param(
                 name="op2_pattern", description="Relative OP2 template, e.g. Output_{stem}.op2", type=str, default=""
             ),
-            Param(name="read_results", description="Read paired OP2 eigenmodes", type=bool, default=True),
+            Param(name="read_results", description="Read paired OP2 result tables", type=bool, default=True),
+            Param(name="result_patterns", description="Comma-separated result family globs", type=str, default="*"),
+            Param(
+                name="preserve_source_files",
+                description="Embed original deck/INCLUDE/OP2 bytes",
+                type=bool,
+                default=True,
+            ),
             Param(name="encoding", description="Deck text encoding", type=str, default="latin1"),
             Param(name="punch", description="Bulk data only (no executive/case control)", type=bool, default=False),
         ]
@@ -292,6 +245,8 @@ class NastranSource(Source["Mesh"]):
         read_results: bool = True,
         encoding: str = "latin1",
         punch: bool = False,
+        result_patterns: str = "*",
+        preserve_source_files: bool = True,
     ) -> None:
         self._input_path = input_path
         self._file_pattern = file_pattern
@@ -299,6 +254,8 @@ class NastranSource(Source["Mesh"]):
         self._read_results = read_results
         self._encoding = encoding
         self._punch = punch
+        self._result_patterns = result_patterns
+        self._preserve_source_files = preserve_source_files
         path = Path(input_path).resolve()
         if not path.exists():
             raise FileNotFoundError(path)
@@ -341,28 +298,107 @@ class NastranSource(Source["Mesh"]):
         raise ValueError(f"Ambiguous OP2 pairing for {deck}; set op2_pattern explicitly")
 
     def __getitem__(self, index: int) -> Generator[Mesh]:
-        """Yield geometry alone or a mesh per real eigenvector table at this index."""
+        """Yield a mesh per subcase/topological dimension, with raw tables and original inputs."""
         from physicsnemo.mesh import Mesh
 
         deck = self._files[index]
         model = _read_deck(deck, self._encoding, self._punch)
-        points, cells, point_data, cell_data = _geometry(model)
-        global_data = TensorDict({"constraints": _constraints(model)}, batch_size=[])
-        if not self._read_results:
-            yield Mesh(points=points, cells=cells, point_data=point_data, cell_data=cell_data, global_data=global_data)
-            return
-        from pyNastran.op2.op2 import read_op2
+        points, point_data, geometry, element_data = _original_geometry(model)
+        groups = _geometry_groups(points, geometry, element_data)
+        deck_metadata = _deck_metadata(model)
+        base = TensorDict({"deck_metadata": _encode_json(deck_metadata)}, batch_size=[])
+        records, catalog = [], []
+        op2_path = self._op2_path(deck) if self._read_results else None
+        if op2_path is not None:
+            from pyNastran.op2.op2 import read_op2
 
-        op2 = read_op2(str(self._op2_path(deck)), include_results=["eigenvectors"], debug=None)
-        if not op2.eigenvectors:
-            raise ValueError(f"No modal eigenvectors found in OP2 paired with {deck}")
-        for result in op2.eigenvectors.values():
-            modes, modal_global = _modal_data(result, model, point_data["node_id"].tolist())
-            pd = point_data.clone()
-            pd["mode_shape"] = modes[:, :, :3]
-            pd["mode_rotation"] = modes[:, :, 3:]
-            gd = global_data.clone()
-            gd.update(modal_global)
-            yield Mesh(
-                points=points.clone(), cells=cells.clone(), point_data=pd, cell_data=cell_data.clone(), global_data=gd
+            op2 = read_op2(str(op2_path), debug=None)
+            records, catalog = _discover_results(op2, self._result_patterns)
+            if not records:
+                raise ValueError(f"No result tables matched {self._result_patterns!r} in {op2_path}")
+            base["op2_metadata"] = _encode_json(
+                {
+                    "table_names": getattr(op2, "table_names", []),
+                    "subcase_key": getattr(op2, "subcase_key", {}),
+                    "version": getattr(op2, "nastran_format", None),
+                }
             )
+        if self._preserve_source_files:
+            base["source_files"] = _source_files(model, deck, op2_path)
+        cases = sorted({r["subcase_id"] for r in records if r["subcase_id"] is not None}) or [0]
+        node_ids = point_data["node_id"].tolist()
+        for subcase_id in cases:
+            selected_records = [r for r in records if r["subcase_id"] in {None, subcase_id}]
+            for record in selected_records:
+                # Multiple result keys may share a family and subcase (e.g.
+                # superelements). Never overwrite one with another.
+                duplicates = sum(r["name"] == record["name"] for r in selected_records)
+                record["field_name"] = record["name"] + ("__" + record["id"] if duplicates > 1 else "")
+            for group in groups:
+                pd = point_data.clone()
+                parent_data = group["element_data"].clone()
+                report = []
+                for record in selected_records:
+                    location, fields, reason = _project_result(
+                        record, model, node_ids, parent_data["element_id"].tolist()
+                    )
+                    if location == "point":
+                        pd.update(fields)
+                    elif location == "element":
+                        parent_data.update(fields)
+                    report.append(
+                        {
+                            "id": record["id"],
+                            "table": record["name"],
+                            "association": location,
+                            "fields": list(fields),
+                            "description": reason,
+                        }
+                    )
+                # Retain the original public modal aliases for one real mode set.
+                modal = [
+                    r
+                    for r in selected_records
+                    if r["name"] == "eigenvectors"
+                    and getattr(r["result"], "analysis_code", None) == 2
+                    and not np.iscomplexobj(r["result"].data)
+                ]
+                gd = TensorDict(
+                    {"constraints": _constraints(model), "subcase_id": torch.tensor(subcase_id)}, batch_size=[]
+                )
+                if len(modal) == 1:
+                    try:
+                        modes, modal_global = _modal_data(modal[0]["result"], model, node_ids)
+                    except (ValueError, NotImplementedError) as error:
+                        report.append({"table": "eigenvectors", "modal_aliases": False, "reason": str(error)})
+                    else:
+                        pd["mode_shape"], pd["mode_rotation"] = modes[:, :, :3], modes[:, :, 3:]
+                        gd.update(modal_global)
+                nastran = base.clone(recurse=False)
+                nastran["geometry"] = group["geometry"].clone()
+                nastran["element_data"] = parent_data
+                nastran["results"] = TensorDict({r["id"]: r["archive"] for r in selected_records}, batch_size=[])
+                nastran["catalog"] = _encode_json(catalog)
+                nastran["projection"] = _encode_json(
+                    {
+                        "dimension": group["dimension"],
+                        "original_elements": len(parent_data),
+                        "simplicial_cells": len(group["cells"]),
+                        "results": report,
+                        "cell_result_semantics": (
+                            "Values refer to original parent elements; do not sum repeated children."
+                        ),
+                    }
+                )
+                nastran["parent_row"] = group["parent_row"].clone()
+                gd["nastran"] = nastran
+                # Repeated values remain explicitly parent-associated; no
+                # guessed integration, averaging, or energy redistribution.
+                cell_data = parent_data[group["parent_row"]].clone()
+                yield Mesh(
+                    points=points.clone(),
+                    cells=group["cells"].clone(),
+                    point_data=pd,
+                    cell_data=cell_data,
+                    global_data=gd,
+                )

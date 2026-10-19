@@ -163,7 +163,7 @@ source = DrivAerMLSource(mesh_type="boundary")
 
 {class}`~physicsnemo_curator.domains.mesh.sources.nastran.NastranSource` reads
 Nastran `.deck`, `.bdf`, `.dat`, `.nas`, and `.pch` models with optional paired
-`.op2` real normal-mode results. Install the additional reader dependencies
+`.op2` results, including modal, static, transient, and complex tables. Install the additional reader dependencies
 with Python 3.12 (pyNastran 1.4 requires NumPy 1.x):
 
 ```bash
@@ -184,15 +184,16 @@ paths = pipeline[0]
 
 Directory discovery is recursive and deterministic. A single deck file can
 also be passed directly. Each source index is one deck and yields one mesh
-per real eigenvector result table, usually one per subcase, with all modes
-stored together. For geometry alone use `read_results=False`.
+per subcase and topological dimension (lines, surfaces, volumes). For geometry alone use `read_results=False`.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `input_path` | required | Deck file or directory |
 | `file_pattern` | `"**/*"` | Deck discovery glob within a directory |
 | `op2_pattern` | `""` | Relative OP2 filename template with `{stem}` |
-| `read_results` | `True` | Require paired OP2 modal results |
+| `read_results` | `True` | Read paired OP2 results |
+| `result_patterns` | `"*"` | Comma-separated table-family globs, including `matrices.*` |
+| `preserve_source_files` | `True` | Embed original deck, INCLUDE, and OP2 bytes for exact recovery |
 | `encoding` | `"latin1"` | Deck text encoding; use `"cp932"` for Japanese text |
 | `punch` | `False` | Bulk-data-only input without executive/case control; automatic for `.pch` |
 
@@ -202,14 +203,22 @@ works directly. Multiple candidate OP2 files require an explicit template
 such as `op2_pattern="{stem}.op2"` or a relative filename. Missing results
 raise an error. `relative_path(index)` supports sink naming templates.
 
-**Geometry and fields:** CTETRA4 and CTETRA10 elements with PSOLID/MAT1 are
-supported. A 10-node tetrahedron becomes eight linear tetrahedra, retaining
-all midside nodes. This is a piecewise linear approximation of curved
-quadratic elements. Parent cell IDs and material fields are repeated on the
-eight children. Coordinates use the Nastran basic frame; translational and
-rotational modes are transformed from rectangular GRID CD frames to basic
-axes. Results are matched by GRID ID, independently of deck/OP2 ordering.
-Incomplete, duplicate, or mismatched GRID result tables raise an error.
+**Geometry and fields:** Common rods/beams (CROD, CONROD, CTUBE, CBAR,
+CBEAM), triangles/quads (CTRIA3/6, CQUAD4/8/R, CSHEAR), tetrahedra,
+hexahedra, wedges, and pyramids are supported. Original higher-order cell
+types, node order, and element IDs remain in `global_data["nastran",
+"geometry"]`. Native meshes use a piecewise linear simplicial projection;
+CTETRA10 becomes eight tetrahedra, retaining all midside nodes. Parent cell
+fields repeat on children. VTU/VTK exports use the original cells by default.
+Unsupported topology raises explicitly.
+
+Coordinates use the basic frame. Results align by GRID/element ID;
+sparse floating fields use NaN and `__valid` masks. Integer fields retain
+their precision and use zero placeholders with validity masks. Known displacement/force vector
+families rotate rectangular GRID CD axes to basic axes. Cylindrical and
+spherical vector results stay raw with an explicit report. Arbitrary
+custom components retain their native frame; no tensor-rank guess is made.
+Complete real modes provide the following convenience aliases:
 
 | Location | Fields | Shape |
 |----------|--------|-------|
@@ -228,8 +237,8 @@ Signed eigenvalues are retained, including slightly negative rigid-body
 modes. No extra normalization, deformation, or unit conversion is applied.
 
 **Constraints:** `global_data["constraints"]` holds numeric tables in
-original Nastran IDs. Definitions are retained separately from the selected
-subcase's `spc_id`/`mpc_id`; inactive sets are not merged into active ones.
+original Nastran IDs. Definitions are retained separately from modal
+subcase selections `spc_id`/`mpc_id`; inactive sets are not merged into active ones.
 
 | Key | Columns / meaning |
 |-----|-------------------|
@@ -250,13 +259,58 @@ its ID and basis are retained in `output_coordinate_id` and
 component code (e.g. `123456`). These tables preserve definitions; the
 reader does not solve or enforce the constraints.
 
-The initial reader supports tetrahedral real modal analysis. Other element
-and material families, RBE3, cylindrical/spherical output frames, complex
-modes, transient results, stress/strain, and element energies are outside
-this reader's scope. Unsupported mesh/constraint cards raise an error;
-only eigenvector tables are requested from OP2.
+**General result preservation:** The reader discovers every nonempty result
+table exposed by pyNastran. Each record under `global_data["nastran",
+"results", "table_<stable hash>"]` contains `arrays` (original numeric
+arrays, including complex values, IDs and axes) and `metadata` (UTF-8 JSON
+bytes with headers, table key/class and attributes). Table names are not a
+hardcoded allowlist. Dense matrices and sparse COO entries are retained.
 
-See `examples/cae/nastran/` for a command-line curation pipeline.
+| Nastran global key | Meaning |
+|--------------------|---------|
+| `deck_metadata` | Parsed card raw fields/comments, executive/case control, parameters and rejected content |
+| `op2_metadata` | Backend table inventory, subcase keys and format |
+| `geometry` | Original indexed connectivity, Nastran node order, offsets, VTK types, dimensions and IDs |
+| `element_data` | One row per original element, including material/property scalar fields and projected results |
+| `results` | Raw result arrays plus metadata per discovered table/key |
+| `catalog` | Table inventory, headers, array shapes/dtypes and explicit user exclusions |
+| `projection` | Per-table mesh association or reason it remains raw |
+| `parent_row` | Native simplex to original element row mapping |
+| `source_files` | Original file byte tensors and SHA-256/path manifest (default enabled) |
+
+GRID tables become point fields and unambiguous one-row-per-element tables
+become parent cell fields, named by table family. Multiple keys in a family
+receive stable suffixes. Headers and time/frequency/mode axes remain in the
+raw record. Layered, station, integration-point and SORT2 layouts stay raw;
+no averaging is performed. Sparse element IDs can vary by step. Missing
+rows have masks; padding/total rows remain in the original arrays. Repeated
+child strain energy is a parent value, not an apportioned child energy:
+use `nastran/element_data` for sums over original elements.
+
+All parsed material/property/load/constraint card fields are archived,
+including families without typed mesh adapters. The numeric constraint
+convenience tables above cover SPC/SPC1, MPC, RBE2 and combination sets.
+The archive does not imply that every card or result layout has an
+interpreted mesh representation. Backend-unsupported content remains
+recoverable from original bytes when `preserve_source_files=True`.
+Embedding inputs increases storage and repeats them across output meshes.
+Disabling this option sacrifices exact recovery of uninterpreted content.
+
+```python
+from physicsnemo_curator.domains.mesh.sources.nastran import (
+    decode_nastran_json,
+    restore_nastran_sources,
+)
+
+print(decode_nastran_json(mesh.global_data["nastran", "catalog"]))
+print(decode_nastran_json(mesh.global_data["nastran", "projection"]))
+restore_nastran_sources(mesh, "./recovered_inputs")  # new directory only
+```
+
+Restore validates checksums and relative paths before writing. It restores
+original bytes, without regenerating a deck from projected fields. Relative
+INCLUDE relationships are retained; absolute INCLUDE paths still refer to
+the original locations. See `examples/cae/nastran/` for the command line.
 
 ### MeanFilter
 
@@ -389,6 +443,7 @@ paths = pipeline[0]
 | `file_format` | `"vtu"` | `"vtu"`, `"vtk"`, or boundary-surface `"vtp"` |
 | `naming_template` | `"mesh_{index:04d}_{seq}"` | Supports index/seq and source relpath/stem |
 | `binary` | `True` | Use `False` for ASCII |
+| `use_original_geometry` | `True` | Prefer retained original Nastran cells and parent fields |
 
 Each mesh/subcase gets its own file. Nastran modes become separate
 three-component vectors such as `mode_shape_m0001`, `mode_rotation_m0001`,
@@ -398,7 +453,13 @@ time steps. Other tensor components are flattened into VTK arrays. Integer
 IDs and float64 precision are retained; bool and half-precision fields are
 stored as uint8 and float32, respectively.
 
-Global tensors, including constraint tables, are written to VTK Field Data.
+For Nastran sources, VTU/VTK retains original higher-order cells and parent
+fields. Set `use_original_geometry=False` to export native linear cells
+and transformed cell features. Changes to projected cell fields otherwise
+raise explicitly instead of being ignored. Complex values use real/imaginary
+array pairs; `read_vtk_data` reconstructs their original dtype and shape.
+
+Global tensors, including the full Nastran archive, are written to VTK Field Data.
 Nested paths use `/`, e.g. `constraints/mpc_terms` (`~` and `/` in individual
 keys are escaped as `~0` and `~1`). The JSON `physicsnemo_schema` field
 records original paths, shapes and dtypes, and describes empty arrays that
@@ -407,6 +468,18 @@ to the surface subset; global constraints still use the full model's
 original IDs. VTK readers do not automatically reconstruct these fields as
 a native TensorDict or apply the constraint equations. Use `.pmsh` for the
 native structured training representation.
+
+```python
+from physicsnemo_curator.domains.mesh.sinks.mesh_vtk import read_vtk_data
+
+fields = read_vtk_data("./vtk/model_0.vtu")
+restore_nastran_sources(fields["global_data"], "./recovered_from_vtk")
+```
+
+The same reader works with legacy VTK and VTP. VTP's displayed point/cell
+arrays are boundary subsets; raw result tables, original connectivity, and
+source files remain complete in Field Data. They require explicit access
+through the schema and are not interpreted automatically by ParaView.
 
 ### Transform filters
 

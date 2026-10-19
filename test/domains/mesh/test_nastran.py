@@ -30,7 +30,7 @@ from pyNastran.bdf.bdf import BDF, CaseControlDeck
 from pyNastran.op2.op2 import OP2
 from pyNastran.op2.tables.oug.oug_eigenvectors import RealEigenvectorArray
 
-from physicsnemo_curator.domains.mesh.sources.nastran import NastranSource
+from physicsnemo_curator.domains.mesh.sources.nastran import NastranSource, decode_nastran_json
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -176,18 +176,26 @@ def test_rectangular_output_coordinates(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("coordinate", ["c", "s"])
-def test_unsupported_output_coordinates_raise(tmp_path: Path, coordinate: str) -> None:
+def test_nonrectangular_output_coordinates_remain_raw(tmp_path: Path, coordinate: str) -> None:
     _deck(tmp_path / "model.bdf", coordinate=coordinate)
     _op2(tmp_path / "model.op2")
-    with pytest.raises(NotImplementedError, match="rectangular CD"):
-        next(NastranSource(str(tmp_path))[0])
+    mesh = next(NastranSource(str(tmp_path))[0])
+    assert "mode_shape" not in mesh.point_data
+    assert "eigenvectors" not in mesh.point_data
+    assert len(mesh.global_data["nastran", "results"].keys()) == 1
+    report = decode_nastran_json(mesh.global_data["nastran", "projection"])
+    assert "cylindrical/spherical" in report["results"][0]["description"]
 
 
 @pytest.mark.parametrize("ids", [_NIDS[:-1], _NIDS + [110], _NIDS[:-1] + [10]])
-def test_mismatched_or_duplicate_result_ids_raise(sample: Path, ids: list[int]) -> None:
+def test_mismatched_or_duplicate_result_ids_preserved(sample: Path, ids: list[int]) -> None:
     _op2(sample / "Output_model.op2", node_ids=ids)
-    with pytest.raises(ValueError, match="GRID IDs must match"):
-        next(NastranSource(str(sample))[0])
+    mesh = next(NastranSource(str(sample))[0])
+    assert "mode_shape" not in mesh.point_data
+    archive = next(iter(mesh.global_data["nastran", "results"].values()))
+    assert archive["arrays", "node_gridtype"][:, 0].tolist() == ids
+    if len(set(ids)) == len(ids):
+        assert mesh.point_data["eigenvectors__valid"].tolist() == [nid in ids for nid in _NIDS]
 
 
 def test_subcases_yield_independent_meshes(sample: Path) -> None:
@@ -269,10 +277,10 @@ def test_signed_eigenvalues_and_solver_cycles(sample: Path, monkeypatch: pytest.
     assert mesh.global_data["frequencies"][0].item() == pytest.approx(0.00015915494)
 
 
-def test_nonmodal_op2_raises(sample: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_empty_op2_raises(sample: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     model = OP2(debug=None, mode="msc")
     monkeypatch.setattr("pyNastran.op2.op2.read_op2", lambda *args, **kwargs: model)
-    with pytest.raises(ValueError, match="No modal eigenvectors"):
+    with pytest.raises(ValueError, match="No result tables"):
         next(NastranSource(str(sample))[0])
 
 
@@ -285,17 +293,18 @@ def test_degenerate_geometry_raises(tmp_path: Path) -> None:
         next(NastranSource(str(path), read_results=False)[0])
 
 
-def test_unsupported_support_constraint_raises(tmp_path: Path) -> None:
+def test_support_constraint_preserved(tmp_path: Path) -> None:
     path = tmp_path / "model.bdf"
     model = _deck(path)
     model.add_suport([10], ["123"])
     model.write_bdf(str(path))
-    with pytest.raises(NotImplementedError, match="suport"):
-        next(NastranSource(str(path), read_results=False)[0])
+    mesh = next(NastranSource(str(path), read_results=False)[0])
+    cards = decode_nastran_json(mesh.global_data["nastran", "deck_metadata"])["cards"]
+    assert cards["suport"][0]["type"] == "SUPORT"
 
 
 @pytest.mark.parametrize("card", ["element", "rigid"])
-def test_unsupported_cards_raise(tmp_path: Path, card: str) -> None:
+def test_shell_and_rbe3_preserved(tmp_path: Path, card: str) -> None:
     path = tmp_path / "model.bdf"
     model = _deck(path)
     if card == "element":
@@ -307,8 +316,13 @@ def test_unsupported_cards_raise(tmp_path: Path, card: str) -> None:
         model.rigid_elements.clear()
         model.add_rbe3(100, 10, "123", [1.0], ["123"], [[20, 30]])
     model.write_bdf(str(path))
-    with pytest.raises(NotImplementedError):
-        next(NastranSource(str(path), read_results=False)[0])
+    meshes = list(NastranSource(str(path), read_results=False)[0])
+    cards = decode_nastran_json(meshes[0].global_data["nastran", "deck_metadata"])["cards"]
+    if card == "element":
+        assert [m.n_manifold_dims for m in meshes] == [2, 3]
+        assert {c["type"] for c in cards["elements"]} == {"CTRIA3", "CTETRA"}
+    else:
+        assert cards["rigid_elements"][0]["type"] == "RBE3"
 
 
 def test_discovery_indices_and_registry(sample: Path) -> None:
@@ -330,6 +344,8 @@ def test_discovery_indices_and_registry(sample: Path) -> None:
         "encoding",
         "read_results",
         "punch",
+        "result_patterns",
+        "preserve_source_files",
     }
 
 
