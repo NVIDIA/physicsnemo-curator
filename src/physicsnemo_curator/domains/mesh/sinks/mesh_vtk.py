@@ -194,8 +194,8 @@ class MeshVTKSink(MeshVTUSink):
         Output stem template with index/seq and source-backed relpath/stem
         placeholders. Default ``"mesh_{index:04d}_{seq}"``.
     binary : bool
-        Write binary files by default; False writes ASCII. VTU/VTP ASCII
-        rejects negative infinity because VTK's reader loses its sign.
+        Write binary files by default; False writes ASCII. Legacy VTK ASCII
+        rejects NaN/infinity; VTU/VTP ASCII rejects negative infinity.
     use_original_geometry : bool
         Prefer retained Nastran cells (default True). False exports the
         native simplicial cells, including transformed cell fields. Original
@@ -343,13 +343,16 @@ class MeshVTKSink(MeshVTUSink):
             )
         if "physicsnemo_schema" in grid.field_data:
             raise ValueError("physicsnemo_schema is reserved for VTK export metadata")
-        if self._file_format in {"vtu", "vtp"} and not self._binary:
+        if not self._binary:
             arrays = (grid.points, *grid.point_data.values(), *grid.cell_data.values(), *grid.field_data.values())
-            if any(np.issubdtype(array.dtype, np.floating) and np.isneginf(array).any() for array in arrays):
-                raise ValueError(
-                    "VTK XML ASCII cannot preserve negative infinity; use binary=True or file_format='vtk' "
-                    "for legacy VTK ASCII"
-                )
+            floating = [array for array in arrays if np.issubdtype(array.dtype, np.floating)]
+            if self._file_format == "vtk":
+                # Legacy readers differ across platforms; Linux rejects these
+                # tokens and can stop before reading the remaining field data.
+                if any(not np.isfinite(array).all() for array in floating):
+                    raise ValueError("Legacy VTK ASCII cannot portably preserve NaN or infinity; use binary=True")
+            elif any(np.isneginf(array).any() for array in floating):
+                raise ValueError("VTK XML ASCII cannot preserve negative infinity; use binary=True")
         if self._file_format == "vtp":
             from vtkmodules.vtkFiltersGeometry import vtkDataSetSurfaceFilter
 

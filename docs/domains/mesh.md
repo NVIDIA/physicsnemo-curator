@@ -471,8 +471,10 @@ and transformed cell features. Changes to projected cell fields otherwise
 raise explicitly instead of being ignored. Removed, duplicated, or remeshed
 native cells also require projected export; point/cell permutations remain
 valid. XML ASCII (VTU/VTP with `binary=False`) rejects negative infinity because
-the VTK reader loses its sign; use binary output or legacy VTK ASCII for
-those values. Complex values use real/imaginary array pairs; `read_vtk_data` reconstructs their original dtype and shape.
+the VTK reader loses its sign. Legacy VTK ASCII rejects NaN and infinity
+because readers on some platforms stop parsing those values. Use binary
+output to preserve all nonfinite values. Complex values use real/imaginary
+array pairs; `read_vtk_data` reconstructs their original dtype and shape.
 
 Global tensors, including the full Nastran archive, are written to VTK Field Data.
 Nested paths use `/`, e.g. `constraints/mpc_terms` (`~` and `/` in individual

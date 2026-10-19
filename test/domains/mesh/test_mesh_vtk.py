@@ -232,8 +232,9 @@ def test_nonfinite_complex_components_roundtrip(
     modal_mesh.point_data["nonfinite"] = values
     modal_mesh.global_data["nonfinite"] = values
     sink = MeshVTKSink(str(tmp_path), file_format=file_format, binary=binary)
-    if negative_infinity and not binary and file_format in {"vtu", "vtp"}:
-        with pytest.raises(ValueError, match="negative infinity.*binary=True.*file_format='vtk'"):
+    if not binary and (file_format == "vtk" or negative_infinity):
+        reason = "NaN or infinity" if file_format == "vtk" else "negative infinity"
+        with pytest.raises(ValueError, match=rf"{reason}.*binary=True"):
             sink(iter([modal_mesh]), 0)
         assert not list(tmp_path.iterdir())
         return
@@ -248,14 +249,26 @@ def test_nonfinite_complex_components_roundtrip(
 
 
 @pytest.mark.parametrize("association", ["point_data", "cell_data", "global_data", "points"])
-def test_xml_ascii_rejects_negative_infinity_in_all_arrays(tmp_path: Path, modal_mesh: Mesh, association: str) -> None:
+@pytest.mark.parametrize(
+    "file_format,value",
+    [
+        ("vtu", float("-inf")),
+        ("vtp", float("-inf")),
+        ("vtk", float("-inf")),
+        ("vtk", float("inf")),
+        ("vtk", float("nan")),
+    ],
+)
+def test_ascii_rejects_unsupported_nonfinite_values_in_all_arrays(
+    tmp_path: Path, modal_mesh: Mesh, association: str, file_format: str, value: float
+) -> None:
     if association == "points":
-        modal_mesh.points[0, 0] = float("-inf")
+        modal_mesh.points[0, 0] = value
     else:
         count = {"point_data": modal_mesh.n_points, "cell_data": modal_mesh.n_cells, "global_data": 1}[association]
-        getattr(modal_mesh, association)["nonfinite"] = torch.full((count,), float("-inf"))
-    with pytest.raises(ValueError, match="negative infinity.*binary=True"):
-        MeshVTKSink(str(tmp_path), binary=False)(iter([modal_mesh]), 0)
+        getattr(modal_mesh, association)["nonfinite"] = torch.full((count,), value)
+    with pytest.raises(ValueError, match="infinity.*binary=True"):
+        MeshVTKSink(str(tmp_path), file_format=file_format, binary=False)(iter([modal_mesh]), 0)
     assert not list(tmp_path.iterdir())
 
 
