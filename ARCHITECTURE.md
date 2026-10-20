@@ -342,7 +342,7 @@ Currently three domains are implemented:
 | Domain | Purpose | Import Gate |
 |--------|---------|-------------|
 | `mesh` | Computational mesh processing (VTK, LS-DYNA, ANSYS, DrivAer) | `physicsnemo.mesh` |
-| `da` | Data assimilation (ERA5, GFS, HRRR reanalysis data) | `xarray` |
+| `da` | Data assimilation (ERA5, GFS, HRRR, OPERA gridded data) | `xarray` |
 | `atm` | Atomic/molecular chemistry (ASE LMDB, molecular properties) | `nvalchemi.data` |
 
 Domains are **isolated** — they only depend on `core` and their own external
