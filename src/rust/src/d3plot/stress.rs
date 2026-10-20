@@ -30,7 +30,7 @@
 pub fn von_mises_from_voigt(stress: &[f64], n_total: usize) -> Vec<f64> {
     let mut result = vec![0.0_f64; n_total];
 
-    for (i, chunk) in stress.chunks_exact(6).enumerate().take(n_total) {
+    for (i, chunk) in stress.as_chunks::<6>().0.iter().enumerate().take(n_total) {
         let sx = chunk[0];
         let sy = chunk[1];
         let sz = chunk[2];

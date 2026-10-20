@@ -18,11 +18,15 @@
 
 from physicsnemo_curator.domains.mesh.sinks.mesh_writer import MeshSink
 
-__all__ = ["GridSidecarSink", "MeshSink", "MeshVTUSink", "MeshZarrSink"]
+__all__ = ["GridSidecarSink", "MeshSink", "MeshVTKSink", "MeshVTUSink", "MeshZarrSink"]
 
 
 def __getattr__(name: str):
     """Lazy-load optional sinks to avoid import at module load."""
+    if name == "MeshVTKSink":
+        from physicsnemo_curator.domains.mesh.sinks.mesh_vtk import MeshVTKSink
+
+        return MeshVTKSink
     if name == "MeshZarrSink":
         from physicsnemo_curator.domains.mesh.sinks.mesh_zarr import MeshZarrSink
 
