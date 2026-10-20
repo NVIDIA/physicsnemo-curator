@@ -331,6 +331,22 @@ class TestD3PlotSourceLocal:
         with pytest.raises(IndexError):
             next(source[99])
 
+    @pytest.mark.parametrize("use_rust", [False, True])
+    @patch("lasso.dyna.D3plot")
+    def test_key_file_thickness(self, mock_d3plot_cls: MagicMock, tmp_path: pathlib.Path, use_rust: bool) -> None:
+        """Both backends propagate .key thickness into the output mesh."""
+        from physicsnemo_curator.domains.mesh.sources.d3plot import D3PlotSource
+
+        root = tmp_path / "key_runs"
+        _write_mock_d3plot_dir(root, n_runs=1, write_k_file=False)
+        (root / "Run000" / "output.key").write_text(
+            "*KEYWORD\n*PART\nPanel\n1 10 1\n*SECTION_SHELL\n10\n3.0375 3.0375 3.0375 3.0375 1 0 0 1600045\n*END\n"
+        )
+        mock_d3plot_cls.return_value = _make_mock_d3plot(n_points=4, n_cells=1)
+        source = D3PlotSource(input_dir=str(root), backend="rust" if use_rust else "python")
+        mesh = next(source[0])
+        torch.testing.assert_close(mesh.point_data["thickness"], torch.full((4,), 3.0375))
+
     @patch("lasso.dyna.D3plot")
     def test_no_k_file_gives_zero_thickness(self, mock_d3plot_cls: MagicMock, tmp_path: pathlib.Path) -> None:
         """Without a .k file, thickness should be all zeros."""
@@ -382,6 +398,49 @@ Part_2
         assert result[1] == pytest.approx(2.0)
         assert result[2] == pytest.approx(3.0)
 
+    @pytest.mark.parametrize(
+        ("thickness_card", "expected"),
+        [
+            ("3.0375 3.0375 3.0375 3.0375 1 0 0 1600045", 3.0375),
+            ("2.0 4.0 6.0 8.0 -1 100 1 1600045", 5.0),
+            ("2.0 0.0 0.0 0.0 1 0 0 1600045", 2.0),
+            ("0.0 0.0 0.0 0.0 1 0 0 1600045", 0.0),
+        ],
+    )
+    def test_parse_k_file_excludes_control_fields(
+        self, tmp_path: pathlib.Path, thickness_card: str, expected: float
+    ) -> None:
+        """Only T1 through T4 contribute to the average shell thickness."""
+        from physicsnemo_curator.domains.mesh.sources.d3plot import _parse_k_file
+
+        k_file = tmp_path / "test.k"
+        k_file.write_text(f"*KEYWORD\n*PART\nPanel\n1 10 1\n*SECTION_SHELL\n10 2 0.8333 5\n{thickness_card}\n*END\n")
+        assert _parse_k_file(k_file) == {1: pytest.approx(expected)}
+
+    @pytest.mark.parametrize("extension", [".k", ".key"])
+    def test_find_keyword_file(self, tmp_path: pathlib.Path, extension: str) -> None:
+        """Both common keyword file extensions are discovered."""
+        from physicsnemo_curator.domains.mesh.sources.d3plot import _find_k_file
+
+        keyword_file = tmp_path / f"output{extension}"
+        keyword_file.touch()
+        assert _find_k_file(tmp_path) == keyword_file
+
+    def test_find_keyword_file_prefers_k(self, tmp_path: pathlib.Path) -> None:
+        """An existing .k file keeps precedence when .key files are present."""
+        from physicsnemo_curator.domains.mesh.sources.d3plot import _find_k_file
+
+        (tmp_path / "output.key").touch()
+        k_file = tmp_path / "output.k"
+        k_file.touch()
+        assert _find_k_file(tmp_path) == k_file
+
+    def test_find_keyword_file_missing(self, tmp_path: pathlib.Path) -> None:
+        """Directories without keyword files retain the zero-thickness fallback."""
+        from physicsnemo_curator.domains.mesh.sources.d3plot import _find_k_file
+
+        assert _find_k_file(tmp_path) is None
+
     def test_von_mises_from_voigt(self) -> None:
         """_von_mises_from_voigt should compute correct stress."""
         from physicsnemo_curator.domains.mesh.sources.d3plot import _von_mises_from_voigt
@@ -431,14 +490,15 @@ class TestD3PlotRegistry:
 class TestD3PlotRustConsistency:
     """Verify Rust d3plot backend produces identical results to Python."""
 
-    def test_parse_k_file_consistency(self, tmp_path: pathlib.Path) -> None:
+    @pytest.mark.parametrize("control_fields", ["", " 1 0 0 1600045"])
+    def test_parse_k_file_consistency(self, tmp_path: pathlib.Path, control_fields: str) -> None:
         """Rust parse_k_file must match Python parse_k_file exactly."""
         from physicsnemo_curator.domains.mesh.sources.d3plot import (
             _parse_k_file,
             _parse_k_file_rust,
         )
 
-        k_content = """$
+        k_content = f"""$
 *KEYWORD
 *PART
 Part_1
@@ -451,9 +511,9 @@ Part_3
        3       1       3
 *SECTION_SHELL
        1
-     2.5     2.5     2.5     2.5
+     2.5     2.5     2.5     2.5{control_fields}
        2
-     4.0     4.0     4.0     4.0
+     4.0     4.0     4.0     4.0{control_fields}
 *END
 """
         k_file = tmp_path / "test.k"

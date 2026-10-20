@@ -81,6 +81,7 @@ pub fn parse_k_file(path: &Path) -> Result<HashMap<i64, f64>, std::io::Error> {
 
                     let thickness_values: Vec<f64> = thickness_line
                         .split_whitespace()
+                        .take(4)
                         .map(|tok| tok.parse::<f64>().unwrap_or(0.0))
                         .collect();
 
@@ -168,6 +169,26 @@ Part_2
         assert_eq!(result.len(), 2);
         assert!((result[&1] - 2.0).abs() < 1e-10);
         assert!((result[&2] - 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_parse_thickness_excludes_control_fields() {
+        let content = "*KEYWORD\n*PART\nPanel\n1 10 1\n*SECTION_SHELL\n10 2 0.8333 5\n3.0375 3.0375 3.0375 3.0375 1 0 0 1600045\n*END\n";
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+        let result = parse_k_file(f.path()).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!((result[&1] - 3.0375).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_parse_zero_thickness_with_control_fields() {
+        let content =
+            "*KEYWORD\n*PART\nPanel\n1 10 1\n*SECTION_SHELL\n10\n0 0 0 0 1 0 0 1600045\n*END\n";
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+        let result = parse_k_file(f.path()).unwrap();
+        assert_eq!(result[&1], 0.0);
     }
 
     #[test]

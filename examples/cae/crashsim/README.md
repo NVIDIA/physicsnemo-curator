@@ -36,7 +36,7 @@ pip install physicsnemo-curator[mesh] lasso-python
 ## Input Data
 
 This pipeline expects LS-DYNA crash simulation data organized as run
-directories, each containing `d3plot` binary files and a `.k` keyword file:
+directories, each containing `d3plot` binary files and an optional `.k` or `.key` keyword file:
 
 ```text
 input/crashsim/
@@ -66,14 +66,15 @@ LS-DYNA binary format containing:
 The base `d3plot` file contains the header and initial state. Continuation
 files (`d3plot01`, `d3plot02`, ...) store additional timestep data.
 
-### .k File (Optional)
+### Keyword File (Optional)
 
-LS-DYNA keyword format (e.g., `output.k`) containing:
+LS-DYNA keyword format (e.g., `output.k` or `output.key`) containing:
 
 - `*PART` definitions linking parts to sections
 - `*SECTION_SHELL` definitions with thickness values
 
-If no `.k` file is found, node thickness defaults to 0 for all nodes.
+The first `.k` file in filename order is used, falling back to the first
+`.key` file. If neither is found, node thickness defaults to 0 for all nodes.
 
 ### Obtaining Data
 

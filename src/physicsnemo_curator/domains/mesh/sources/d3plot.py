@@ -139,7 +139,7 @@ def _von_mises_from_voigt_rust(sig: np.ndarray) -> np.ndarray:
 
 
 def _find_k_file(run_dir: Path) -> Path | None:
-    """Find the first ``.k`` keyword file in a run directory.
+    """Find a ``.k`` or ``.key`` keyword file in a run directory.
 
     Parameters
     ----------
@@ -149,9 +149,9 @@ def _find_k_file(run_dir: Path) -> Path | None:
     Returns
     -------
     Path | None
-        Path to the ``.k`` file, or ``None`` if not found.
+        Path to the keyword file, preferring ``.k``, or ``None`` if not found.
     """
-    k_files = list(run_dir.glob("*.k"))
+    k_files = sorted(run_dir.glob("*.k")) or sorted(run_dir.glob("*.key"))
     return k_files[0] if k_files else None
 
 
@@ -204,7 +204,7 @@ def _parse_k_file(k_file_path: Path) -> dict[int, float]:
                             section_id = int(header_tokens[0])
 
                     thickness_values: list[float] = []
-                    for tok in thickness_line.split():
+                    for tok in thickness_line.split()[:4]:
                         try:
                             thickness_values.append(float(tok))
                         except ValueError:
