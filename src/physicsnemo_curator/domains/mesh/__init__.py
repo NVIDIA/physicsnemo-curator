@@ -43,6 +43,7 @@ from physicsnemo_curator.domains.mesh.sources.d3plot import D3PlotSource
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
 from physicsnemo_curator.domains.mesh.sources.nastran import NastranSource
 from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
+from physicsnemo_curator.domains.mesh.sources.plaid import PlaidSource
 from physicsnemo_curator.domains.mesh.sources.vtk import VTKSource
 
 # Register submodule and components with the global registry.
@@ -53,6 +54,7 @@ registry.register_source("mesh", VTKSource)
 registry.register_source("mesh", DrivAerMLSource)
 registry.register_source("mesh", AhmedMLSource)
 registry.register_source("mesh", NavierStokesCylinderSource)
+registry.register_source("mesh", PlaidSource)
 registry.register_source("mesh", NastranSource)
 registry.register_filter("mesh", FieldSelectFilter)
 registry.register_filter("mesh", MeanFilter)
@@ -79,6 +81,7 @@ __all__ = [
     "MeshVTKSink",
     "NastranSource",
     "NavierStokesCylinderSource",
+    "PlaidSource",
     "PrecisionFilter",
     "RandomPermutationFilter",
     "VTKSource",

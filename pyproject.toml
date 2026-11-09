@@ -52,6 +52,8 @@ mesh = [
     "huggingface_hub",
     "ansys-dpf-core>=0.12",
     "zarr>=3.0",
+    "pyplaid",
+    "datasets>=2.18",
 ]
 da = [
     "xarray>=2024.1",
@@ -157,6 +159,7 @@ provides-extras = ["torch"]
 nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo" }
 nvalchemi-toolkit = { git = "https://github.com/NVIDIA/nvalchemi-toolkit" }
 nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops" }
+pyplaid = { git = "https://github.com/PLAID-lib/plaid" }
 
 # ---------------------------------------------------------------------------
 # ty (type checking)
