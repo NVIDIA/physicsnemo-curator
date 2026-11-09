@@ -24,6 +24,7 @@ from physicsnemo_curator.domains.mesh.sources.ahmedml import AhmedMLSource
 from physicsnemo_curator.domains.mesh.sources.ansys_rst import AnsysRSTSource
 from physicsnemo_curator.domains.mesh.sources.d3plot import D3PlotSource
 from physicsnemo_curator.domains.mesh.sources.drivaerml import DrivAerMLSource
+from physicsnemo_curator.domains.mesh.sources.nastran import NastranSource
 from physicsnemo_curator.domains.mesh.sources.ns_cylinder import NavierStokesCylinderSource
 from physicsnemo_curator.domains.mesh.sources.openradioss import OpenRadiossSource
 from physicsnemo_curator.domains.mesh.sources.random import RandomMeshSource
@@ -34,6 +35,7 @@ __all__ = [
     "AnsysRSTSource",
     "D3PlotSource",
     "DrivAerMLSource",
+    "NastranSource",
     "NavierStokesCylinderSource",
     "OpenRadiossSource",
     "RandomMeshSource",
